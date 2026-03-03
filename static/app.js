@@ -779,6 +779,62 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// ── SSE client ────────────────────────────────────────────────────────────────
+// Maps SSE topic names → state key + render function.
+const sseTopicMap = {
+  'pool.query':     { key: 'pools',     render: renderPools },
+  'dataset.query':  { key: 'datasets',  render: renderDatasets },
+  'snapshot.query': { key: 'snapshots', render: renderSnapshots },
+  'iostat':         { key: 'iostat',    render: renderIOStat },
+};
+
+let _pollInterval = null;  // setInterval handle; null when SSE is active
+let _sseRetryTimer = null; // setTimeout handle for SSE reconnect attempts
+let _es = null;            // active EventSource instance
+
+function startPolling() {
+  if (_pollInterval) return;
+  _pollInterval = setInterval(loadAll, 30_000);
+}
+
+function stopPolling() {
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+}
+
+function startSSE() {
+  if (_es) { _es.close(); _es = null; }
+  const topics = Object.keys(sseTopicMap).join(',');
+  const es = new EventSource('/api/events?topics=' + encodeURIComponent(topics));
+  _es = es;
+
+  es.onopen = () => {
+    stopPolling();
+    if (_sseRetryTimer) { clearTimeout(_sseRetryTimer); _sseRetryTimer = null; }
+  };
+
+  for (const [topic, { key, render }] of Object.entries(sseTopicMap)) {
+    es.addEventListener(topic, e => {
+      try { state[key] = JSON.parse(e.data); render(); }
+      catch (err) { console.warn('[SSE] parse error', topic, err); }
+    });
+  }
+
+  es.onerror = () => {
+    // Only fall back to polling when the browser has given up (CLOSED).
+    // A transient CONNECTING state means the browser is already retrying.
+    if (es.readyState === EventSource.CLOSED) {
+      _es = null;
+      startPolling();
+      if (!_sseRetryTimer) {
+        _sseRetryTimer = setTimeout(() => { _sseRetryTimer = null; startSSE(); }, 5_000);
+      }
+    }
+  };
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
+// Perform an immediate REST load so the UI is populated on first paint,
+// then open the SSE stream. The SSE onopen handler cancels REST polling.
+// If SSE is unavailable, startPolling() is called from the onerror handler.
 loadAll();
-setInterval(loadAll, 30_000);
+startSSE();

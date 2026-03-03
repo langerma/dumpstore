@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"dumpstore/internal/ansible"
+	"dumpstore/internal/broker"
 	"dumpstore/internal/smart"
 	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
@@ -26,11 +28,13 @@ type apiError struct {
 type Handler struct {
 	runner  *ansible.Runner
 	version string
+	broker  *broker.Broker
 }
 
-// NewHandler creates a Handler with the given ansible Runner and app version string.
-func NewHandler(runner *ansible.Runner, version string) *Handler {
-	return &Handler{runner: runner, version: version}
+// NewHandler creates a Handler with the given ansible Runner, app version string,
+// and subscription broker (used by the SSE endpoint).
+func NewHandler(runner *ansible.Runner, version string, b *broker.Broker) *Handler {
+	return &Handler{runner: runner, version: version, broker: b}
 }
 
 // RegisterRoutes attaches all API routes to mux.
@@ -50,6 +54,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/iostat", h.getIOStat)
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
+	mux.HandleFunc("GET /api/events", h.getEvents)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -412,6 +417,93 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
+}
+
+// getEvents handles GET /api/events?topics=pool.query,dataset.query,...
+// It streams Server-Sent Events to the client until the connection is closed.
+func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("streaming not supported by this transport"), nil)
+		return
+	}
+
+	// Parse and validate requested topics; unknown names are silently ignored.
+	var topics []string
+	for _, t := range strings.Split(r.URL.Query().Get("topics"), ",") {
+		t = strings.TrimSpace(t)
+		if broker.ValidTopics[t] {
+			topics = append(topics, t)
+		}
+	}
+	if len(topics) == 0 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("no valid topics requested"), nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // tell Nginx not to buffer this stream
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	// Subscribe to each requested topic.
+	channels := make(map[string]chan []byte, len(topics))
+	for _, t := range topics {
+		channels[t] = h.broker.Subscribe(t)
+	}
+	defer func() {
+		for t, ch := range channels {
+			h.broker.Unsubscribe(t, ch)
+		}
+	}()
+
+	// Fan-in: one goroutine per topic forwards messages into a single merged channel.
+	// This avoids reflect.Select while keeping the main loop simple.
+	type sseEvent struct {
+		topic string
+		data  []byte
+	}
+	merged := make(chan sseEvent, 16)
+	var wg sync.WaitGroup
+	ctx := r.Context()
+
+	for topic, ch := range channels {
+		wg.Add(1)
+		go func(topic string, ch chan []byte) {
+			defer wg.Done()
+			for {
+				select {
+				case data, ok := <-ch:
+					if !ok {
+						return
+					}
+					select {
+					case merged <- sseEvent{topic, data}:
+					case <-ctx.Done():
+						return
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(topic, ch)
+	}
+	go func() { wg.Wait(); close(merged) }()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-merged:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.topic, ev.data)
+			flusher.Flush()
+		}
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

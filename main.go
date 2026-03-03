@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/api"
+	"dumpstore/internal/broker"
 )
 
 // version is overridden at build time via:
@@ -54,7 +58,13 @@ func main() {
 	}
 
 	runner := ansible.NewRunner(*baseDir)
-	apiHandler := api.NewHandler(runner, version)
+
+	b := broker.New()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	broker.StartPoller(ctx, b)
+
+	apiHandler := api.NewHandler(runner, version, b)
 
 	mux := http.NewServeMux()
 	apiHandler.RegisterRoutes(mux)
@@ -62,8 +72,19 @@ func main() {
 	staticDir := filepath.Join(*baseDir, "static")
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
+	srv := &http.Server{Addr: *addr, Handler: requestLogger(mux)}
+
+	// Shut down the HTTP server when the signal context is cancelled.
+	go func() {
+		<-ctx.Done()
+		slog.Info("dumpstore shutting down")
+		if err := srv.Shutdown(context.Background()); err != nil {
+			slog.Error("server shutdown error", "err", err)
+		}
+	}()
+
 	slog.Info("dumpstore starting", "addr", *addr, "base", *baseDir)
-	if err := http.ListenAndServe(*addr, requestLogger(mux)); err != nil {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)
 	}
@@ -101,6 +122,14 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Flush implements http.Flusher by forwarding to the underlying ResponseWriter
+// if it supports flushing. Required for SSE streaming to work through this middleware.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func checkDeps(baseDir string) error {
