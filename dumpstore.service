@@ -1,0 +1,28 @@
+[Unit]
+Description=dumpstore ZFS Web UI
+Documentation=https://github.com/yourorg/dumpstore
+After=network.target zfs-mount.service
+Wants=zfs-mount.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Adjust to your install path
+ExecStart=/usr/local/lib/dumpstore/dumpstore -addr :8080 -dir /usr/local/lib/dumpstore
+
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/tmp
+PrivateTmp=true
+
+# ZFS commands need access to /dev and /proc
+PrivateDevices=false
+
+[Install]
+WantedBy=multi-user.target

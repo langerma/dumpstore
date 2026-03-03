@@ -1,0 +1,25 @@
+---
+# Required extra vars:
+#   snapshot  - full snapshot name including @ (e.g. tank/data@backup)
+#   recursive - "true" or "false" (optional, default false)
+- name: Destroy ZFS snapshot
+  hosts: localhost
+  gather_facts: false
+  vars:
+    recursive: "false"
+  tasks:
+    - name: validate input
+      ansible.builtin.assert:
+        that:
+          - snapshot is defined and snapshot != ""
+          - snapshot is search("@")
+        fail_msg: "snapshot must be provided and must contain '@'"
+
+    - name: destroy snapshot
+      ansible.builtin.command:
+        cmd: >-
+          zfs destroy
+          {% if recursive | bool %}-r{% endif %}
+          {{ snapshot }}
+      register: destroy_result
+      changed_when: destroy_result.rc == 0

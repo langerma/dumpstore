@@ -1,0 +1,83 @@
+---
+# Required extra vars:
+#   name  - full dataset path (e.g. tank/data) — must NOT contain '@'
+# Optional (default "__skip__" = leave unchanged; "" = inherit/reset to default):
+#   compression  - lz4, zstd, gzip, on, off
+#   quota        - e.g. 50G, none
+#   mountpoint   - e.g. /mnt/data, none, legacy
+#   recordsize   - e.g. 16K, 128K (filesystem only)
+#   atime        - on, off
+#   exec         - on, off
+#   readonly     - on, off
+#   sync         - standard, always, disabled
+#   dedup        - on, off, verify
+#   copies       - 1, 2, 3
+#   xattr        - on, sa, off
+- name: Set ZFS dataset properties
+  hosts: localhost
+  gather_facts: false
+  vars:
+    compression: "__skip__"
+    quota: "__skip__"
+    mountpoint: "__skip__"
+    recordsize: "__skip__"
+    atime: "__skip__"
+    exec: "__skip__"
+    sync: "__skip__"
+    dedup: "__skip__"
+    copies: "__skip__"
+    xattr: "__skip__"
+    readonly: "__skip__"
+  tasks:
+    - name: validate input
+      ansible.builtin.assert:
+        that:
+          - name is defined and name != ""
+          - name is not search("@")
+        fail_msg: name is required and must not be a snapshot path
+
+    - name: build options
+      ansible.builtin.set_fact:
+        set_opts: >-
+          {{
+            (['compression=' + compression] if compression not in ['', '__skip__'] else []) +
+            (['quota='        + quota]       if quota        not in ['', '__skip__'] else []) +
+            (['mountpoint='   + mountpoint]  if mountpoint   not in ['', '__skip__'] else []) +
+            (['recordsize='   + recordsize]  if recordsize   not in ['', '__skip__'] else []) +
+            (['atime='        + atime]       if atime        not in ['', '__skip__'] else []) +
+            (['exec='         + exec]        if exec         not in ['', '__skip__'] else []) +
+            (['sync='         + sync]        if sync         not in ['', '__skip__'] else []) +
+            (['dedup='        + dedup]       if dedup        not in ['', '__skip__'] else []) +
+            (['copies='       + copies]      if copies       not in ['', '__skip__'] else []) +
+            (['xattr='        + xattr]       if xattr        not in ['', '__skip__'] else []) +
+            (['readonly='     + readonly]    if readonly     not in ['', '__skip__'] else [])
+          }}
+        inherit_list: >-
+          {{
+            (['compression'] if compression == '' else []) +
+            (['quota']       if quota        == '' else []) +
+            (['mountpoint']  if mountpoint   == '' else []) +
+            (['recordsize']  if recordsize   == '' else []) +
+            (['atime']       if atime        == '' else []) +
+            (['exec']        if exec         == '' else []) +
+            (['sync']        if sync         == '' else []) +
+            (['dedup']       if dedup        == '' else []) +
+            (['copies']      if copies       == '' else []) +
+            (['xattr']       if xattr        == '' else []) +
+            (['readonly']    if readonly     == '' else [])
+          }}
+
+    - name: set properties
+      ansible.builtin.command:
+        argv: "{{ ['zfs', 'set'] + set_opts + [name] }}"
+      when: set_opts | length > 0
+      register: set_result
+      changed_when: set_result.rc == 0
+
+    - name: inherit properties
+      ansible.builtin.command:
+        argv: ['zfs', 'inherit', '{{ item }}', '{{ name }}']
+      loop: "{{ inherit_list }}"
+      when: inherit_list | length > 0
+      register: inherit_result
+      changed_when: true

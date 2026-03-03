@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# PROVIDE: dumpstore
+# REQUIRE: LOGIN FILESYSTEMS zfs
+# KEYWORD: shutdown
+#
+# Add to /etc/rc.conf to enable:
+#   dumpstore_enable="YES"
+#
+# Optional rc.conf knobs (with defaults shown):
+#   dumpstore_addr=":8080"
+#   dumpstore_dir="/usr/local/lib/dumpstore"
+
+. /etc/rc.subr
+
+name="dumpstore"
+rcvar="${name}_enable"
+desc="ZFS web UI"
+
+load_rc_config ${name}
+
+: ${dumpstore_enable:="NO"}
+: ${dumpstore_addr:=":8080"}
+: ${dumpstore_dir:="/usr/local/lib/dumpstore"}
+
+_bin="${dumpstore_dir}/dumpstore"
+pidfile="/var/run/${name}.pid"
+
+# Use daemon(8) to background the process, write a pidfile, and auto-restart.
+# -P  write PID of the daemon wrapper to pidfile
+# -r  restart the child if it exits
+# -f  redirect stdin/stdout/stderr to /dev/null
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -f ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir}"
+
+run_rc_command "$1"

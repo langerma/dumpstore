@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Mock zpool CLI for local dev — returns static data so the UI can be tested on macOS.
+# Usage: same interface as real zpool; only 'list' and 'iostat' are needed.
+
+SUBCMD="${1:-}"
+
+case "$SUBCMD" in
+  list)
+    # Columns: name size alloc free health frag cap dedup
+    printf 'tank\t107374182400\t21474836480\t85899345920\tONLINE\t3%%\t20%%\t1.00x\n'
+    printf 'backup\t53687091200\t5368709120\t48318382080\tONLINE\t0%%\t10%%\t1.00x\n'
+    ;;
+
+  iostat)
+    # Columns: pool alloc free read_ops write_ops read_bw write_bw
+    printf 'tank\t21474836480\t85899345920\t150\t200\t1048576\t2097152\n'
+    printf 'backup\t5368709120\t48318382080\t12\t8\t131072\t65536\n'
+    ;;
+
+  *)
+    echo "mock-zpool: unhandled subcommand: $*" >&2
+    exit 0
+    ;;
+esac

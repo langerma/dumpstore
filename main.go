@@ -1,0 +1,119 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
+
+	"dumpstore/internal/ansible"
+	"dumpstore/internal/api"
+)
+
+// version is overridden at build time via:
+//
+//	go build -ldflags "-X main.version=v1.2.3"
+var version = "dev"
+
+func main() {
+	var (
+		addr        = flag.String("addr", ":8080", "Listen address")
+		baseDir     = flag.String("dir", "", "Base directory (contains playbooks/ and static/); defaults to executable location")
+		debug       = flag.Bool("debug", false, "Enable debug log level")
+		showVersion = flag.Bool("version", false, "Print version and exit")
+	)
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	level := slog.LevelInfo
+	if *debug {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+
+	if *baseDir == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			slog.Error("cannot resolve executable path", "err", err)
+			os.Exit(1)
+		}
+		*baseDir = filepath.Dir(exe)
+	}
+
+	if err := checkDeps(*baseDir); err != nil {
+		slog.Error("dependency check failed", "err", err)
+		os.Exit(1)
+	}
+
+	runner := ansible.NewRunner(*baseDir)
+	apiHandler := api.NewHandler(runner, version)
+
+	mux := http.NewServeMux()
+	apiHandler.RegisterRoutes(mux)
+
+	staticDir := filepath.Join(*baseDir, "static")
+	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+
+	slog.Info("dumpstore starting", "addr", *addr, "base", *baseDir)
+	if err := http.ListenAndServe(*addr, requestLogger(mux)); err != nil {
+		slog.Error("server stopped", "err", err)
+		os.Exit(1)
+	}
+}
+
+// requestLogger wraps a handler and emits one logfmt line per request.
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+
+		level := slog.LevelInfo
+		if rw.status >= 500 {
+			level = slog.LevelError
+		} else if rw.status >= 400 {
+			level = slog.LevelWarn
+		}
+		slog.Log(r.Context(), level, "request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"remote", r.RemoteAddr,
+		)
+	})
+}
+
+// statusRecorder captures the HTTP status code written by a handler.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func checkDeps(baseDir string) error {
+	if _, err := exec.LookPath("ansible-playbook"); err != nil {
+		return fmt.Errorf("ansible-playbook not found in PATH: %w", err)
+	}
+	pbDir := filepath.Join(baseDir, "playbooks")
+	if _, err := os.Stat(pbDir); err != nil {
+		return fmt.Errorf("playbooks directory not found at %s: %w", pbDir, err)
+	}
+	staticDir := filepath.Join(baseDir, "static")
+	if _, err := os.Stat(staticDir); err != nil {
+		return fmt.Errorf("static directory not found at %s: %w", staticDir, err)
+	}
+	return nil
+}

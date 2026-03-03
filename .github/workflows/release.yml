@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build and package
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          mkdir -p dist
+
+          build() {
+            local OS=$1 ARCH=$2
+            local NAME="dumpstore-${VERSION}-${OS}-${ARCH}"
+
+            GOOS=$OS GOARCH=$ARCH go build \
+              -ldflags="-s -w -X main.version=${VERSION}" \
+              -o dumpstore .
+
+            mkdir -p dist/${NAME}
+            cp dumpstore dist/${NAME}/
+            cp -r playbooks static README.md dist/${NAME}/
+
+            case "$OS" in
+              linux)   cp dumpstore.service dist/${NAME}/ ;;
+              freebsd) cp dumpstore.rc      dist/${NAME}/ ;;
+            esac
+
+            tar -czf dist/${NAME}.tar.gz -C dist ${NAME}
+            rm -rf dist/${NAME} dumpstore
+          }
+
+          build linux   amd64
+          build linux   arm64
+          build freebsd amd64
+          build freebsd arm64
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+          generate_release_notes: true

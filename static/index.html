@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dumpstore — ZFS Web UI</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <span class="logo">&#9632; dumpstore</span>
+      <nav>
+        <button class="tab-btn active" data-tab="pools">Sysinfo</button>
+        <button class="tab-btn" data-tab="datasets">Datasets</button>
+        <button class="tab-btn" data-tab="snapshots">Snapshots</button>
+      </nav>
+      <button class="refresh-btn" id="refreshBtn" title="Refresh">&#8635;</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- POOLS TAB -->
+    <section class="tab-pane active" id="tab-pools">
+      <div class="section-header">
+        <h2>Storage Pools</h2>
+        <span id="zfsVersionBar" class="zfs-version"></span>
+      </div>
+      <div id="sysinfo-wrap" style="margin-bottom:1.5rem"></div>
+      <div id="pools-grid" class="pool-grid">
+        <div class="loading">Loading pools…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
+        <h2>I/O Statistics</h2>
+      </div>
+      <div id="iostat-table-wrap">
+        <div class="loading">Loading I/O stats…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
+        <h2>Disk Health</h2>
+      </div>
+      <div id="smart-wrap">
+        <div class="loading">Loading disk health…</div>
+      </div>
+    </section>
+
+    <!-- DATASETS TAB -->
+    <section class="tab-pane" id="tab-datasets">
+      <div class="section-header">
+        <h2>Datasets</h2>
+        <label class="filter-wrap">
+          <input type="search" id="dataset-filter" placeholder="Filter…">
+        </label>
+        <button class="btn-primary" id="newDatasetBtn">+ New Dataset</button>
+      </div>
+      <div id="datasets-table-wrap">
+        <div class="loading">Loading datasets…</div>
+      </div>
+    </section>
+
+    <!-- SNAPSHOTS TAB -->
+    <section class="tab-pane" id="tab-snapshots">
+      <div class="section-header">
+        <h2>Snapshots</h2>
+        <label class="filter-wrap">
+          <input type="search" id="snap-filter" placeholder="Filter…">
+        </label>
+        <button class="btn-primary" id="newSnapBtn">+ New Snapshot</button>
+      </div>
+      <div id="snapshots-table-wrap">
+        <div class="loading">Loading snapshots…</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- NEW DATASET DIALOG -->
+  <dialog id="newDatasetDialog">
+    <form id="newDatasetForm" method="dialog">
+      <h3>Create Dataset</h3>
+
+      <fieldset class="form-section">
+        <legend>Identity</legend>
+        <label>Name
+          <input type="text" id="ds-name" name="name" placeholder="tank/newdata" required
+            pattern="[A-Za-z0-9._\-/]+"
+            title="Pool/path format, e.g. tank/mydata">
+        </label>
+        <label>Type
+          <select id="ds-type" name="type">
+            <option value="filesystem">Filesystem</option>
+            <option value="volume">Volume (zvol)</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <!-- Volume-only fields -->
+      <fieldset class="form-section ds-vol-only" id="ds-vol-section" style="display:none">
+        <legend>Volume</legend>
+        <label>Size <span class="required">*</span>
+          <input type="text" id="ds-volsize" name="volsize" placeholder="e.g. 10G, 500M">
+        </label>
+        <label>Block size
+          <select id="ds-volblocksize" name="volblocksize">
+            <option value="">— inherit —</option>
+            <option value="512">512 B</option>
+            <option value="4K">4 K</option>
+            <option value="8K">8 K</option>
+            <option value="16K">16 K (databases)</option>
+            <option value="32K">32 K</option>
+            <option value="64K">64 K</option>
+            <option value="128K">128 K</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="ds-sparse" name="sparse">
+          Thin provisioning (sparse)
+        </label>
+      </fieldset>
+
+      <!-- Filesystem-only fields -->
+      <fieldset class="form-section ds-fs-only" id="ds-fs-section">
+        <legend>Filesystem</legend>
+        <label>Record size
+          <select id="ds-recordsize" name="recordsize">
+            <option value="">— inherit (128K) —</option>
+            <option value="512">512 B</option>
+            <option value="4K">4 K</option>
+            <option value="8K">8 K (databases)</option>
+            <option value="16K">16 K</option>
+            <option value="32K">32 K</option>
+            <option value="64K">64 K</option>
+            <option value="128K">128 K (default)</option>
+            <option value="256K">256 K</option>
+            <option value="512K">512 K</option>
+            <option value="1M">1 M (media)</option>
+          </select>
+        </label>
+        <label>Quota
+          <input type="text" id="ds-quota" name="quota" placeholder="e.g. 50G (blank = none)">
+        </label>
+        <label>Mountpoint
+          <input type="text" id="ds-mountpoint" name="mountpoint" placeholder="e.g. /mnt/data (blank = inherit)">
+        </label>
+      </fieldset>
+
+      <!-- Common fields -->
+      <fieldset class="form-section">
+        <legend>Properties</legend>
+        <div class="form-grid">
+          <label>Compression
+            <select id="ds-compression" name="compression">
+              <option value="">— inherit —</option>
+              <option value="lz4" selected>lz4</option>
+              <option value="zstd">zstd</option>
+              <option value="gzip">gzip</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Sync
+            <select id="ds-sync" name="sync">
+              <option value="">— inherit —</option>
+              <option value="standard">standard</option>
+              <option value="always">always</option>
+              <option value="disabled">disabled</option>
+            </select>
+          </label>
+          <label>Access time
+            <select id="ds-atime" name="atime">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Exec
+            <select id="ds-exec" name="exec">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Copies
+            <select id="ds-copies" name="copies">
+              <option value="">— inherit —</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label>Extended attrs
+            <select id="ds-xattr" name="xattr">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="sa">sa (kernel)</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+        </div>
+        <label class="dedup-label">Dedup
+          <select id="ds-dedup" name="dedup">
+            <option value="">— inherit —</option>
+            <option value="off">off</option>
+            <option value="on">on</option>
+            <option value="verify">verify</option>
+          </select>
+          <span class="field-note">⚠ Dedup is memory-intensive. Requires ~5 GB RAM per TB.</span>
+        </label>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button type="button" id="datasetCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- NEW SNAPSHOT DIALOG -->
+  <dialog id="newSnapDialog">
+    <form id="newSnapForm" method="dialog">
+      <h3>Create Snapshot</h3>
+      <label>
+        Dataset
+        <input type="text" id="snap-dataset" name="dataset" placeholder="tank/data" required>
+      </label>
+      <label>
+        Snapshot label
+        <input type="text" id="snap-label" name="snapname"
+          placeholder="e.g. 2024-01-15_manual" required
+          pattern="[A-Za-z0-9._\-]+"
+          title="Letters, numbers, dots, dashes, underscores only">
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="snap-recursive" name="recursive"> Recursive
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="snapCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- EDIT DATASET DIALOG -->
+  <dialog id="editDatasetDialog">
+    <form id="editDatasetForm">
+      <h3 id="editDatasetTitle">Edit Dataset Properties</h3>
+
+      <fieldset class="form-section">
+        <legend>Properties</legend>
+        <div class="form-grid">
+          <label>Compression
+            <select id="edit-ds-compression">
+              <option value="">— inherit —</option>
+              <option value="lz4">lz4</option>
+              <option value="zstd">zstd</option>
+              <option value="gzip">gzip</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Sync
+            <select id="edit-ds-sync">
+              <option value="">— inherit —</option>
+              <option value="standard">standard</option>
+              <option value="always">always</option>
+              <option value="disabled">disabled</option>
+            </select>
+          </label>
+          <label>Access time
+            <select id="edit-ds-atime">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Exec
+            <select id="edit-ds-exec">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Copies
+            <select id="edit-ds-copies">
+              <option value="">— inherit —</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label>Extended attrs
+            <select id="edit-ds-xattr">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="sa">sa (kernel)</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+          <label>Read-only
+            <select id="edit-ds-readonly">
+              <option value="">— inherit —</option>
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+        </div>
+        <label class="dedup-label">Dedup
+          <select id="edit-ds-dedup">
+            <option value="">— inherit —</option>
+            <option value="off">off</option>
+            <option value="on">on</option>
+            <option value="verify">verify</option>
+          </select>
+          <span class="field-note">⚠ Dedup is memory-intensive. Requires ~5 GB RAM per TB.</span>
+        </label>
+      </fieldset>
+
+      <fieldset class="form-section" id="edit-ds-fs-section">
+        <legend>Filesystem</legend>
+        <label>Record size
+          <select id="edit-ds-recordsize">
+            <option value="">— inherit —</option>
+            <option value="512">512 B</option>
+            <option value="4K">4 K</option>
+            <option value="8K">8 K (databases)</option>
+            <option value="16K">16 K</option>
+            <option value="32K">32 K</option>
+            <option value="64K">64 K</option>
+            <option value="128K">128 K (default)</option>
+            <option value="256K">256 K</option>
+            <option value="512K">512 K</option>
+            <option value="1M">1 M (media)</option>
+          </select>
+        </label>
+        <label>Quota
+          <input type="text" id="edit-ds-quota" placeholder="e.g. 50G — blank to inherit">
+        </label>
+        <label>Mountpoint
+          <input type="text" id="edit-ds-mountpoint" placeholder="e.g. /mnt/data — blank to inherit">
+        </label>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button type="button" id="editDatasetCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- DELETE DATASET CONFIRMATION DIALOG -->
+  <dialog id="deleteDatasetDialog">
+    <h3>Delete Dataset</h3>
+    <div class="delete-warning">
+      <p>This will permanently destroy <strong id="deleteDatasetDisplayName"></strong> and all its data. This cannot be undone.</p>
+      <p id="deleteDatasetVolWarning" class="delete-vol-warning" style="display:none"></p>
+      <p id="deleteDatasetChildWarning" class="delete-child-warning" style="display:none">
+        &#9888; Recursive mode will also destroy all child datasets and snapshots.
+      </p>
+    </div>
+    <label class="checkbox-label" style="margin:0.75rem 0">
+      <input type="checkbox" id="deleteDatasetRecursive"> Recursive (also destroy all children)
+    </label>
+    <label class="confirm-label">
+      Type <code id="deleteDatasetConfirmHint"></code> to confirm
+      <input type="text" id="deleteDatasetConfirmInput" placeholder="type dataset name here" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" id="deleteDatasetCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="deleteDatasetConfirmBtn" class="btn-danger" disabled>Delete</button>
+    </div>
+  </dialog>
+
+  <!-- OPERATION LOG DIALOG -->
+  <dialog id="opLogDialog">
+    <h3 id="opLogTitle">Operation Result</h3>
+    <div id="opLogSteps" class="op-steps"></div>
+    <p id="opLogError" class="op-error" style="display:none"></p>
+    <div class="dialog-actions">
+      <button type="button" id="opLogClose" class="btn-primary">Close</button>
+    </div>
+  </dialog>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

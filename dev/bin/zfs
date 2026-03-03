@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Mock zfs CLI for local dev — returns static data so the UI can be tested on macOS.
+# Usage: same interface as real zfs; only 'list' and 'destroy' are needed.
+
+SUBCMD="${1:-}"
+
+case "$SUBCMD" in
+  list)
+    # Detect '-t snapshot' in args
+    IS_SNAP=0
+    for arg in "$@"; do
+      [[ "$arg" == "snapshot" ]] && IS_SNAP=1
+    done
+
+    if [[ $IS_SNAP -eq 1 ]]; then
+      # Columns: name used refer creation(epoch) clones
+      printf 'tank/data@2024-01-15_manual\t1048576\t536870912\t1705276800\t-\n'
+      printf 'tank/data@2024-02-01_backup\t2097152\t536870912\t1706745600\t-\n'
+      printf 'tank/vol1@snap1\t524288\t107374182\t1706832000\ttank/vol1_clone\n'
+    else
+      # Columns: name used avail refer mountpoint type compressratio compression quota reservation
+      printf 'tank\t21474836480\t85899345920\t96\tnone\tfilesystem\t1.00x\toff\t0\t0\n'
+      printf 'tank/data\t536870912\t85899345920\t536870912\t/mnt/data\tfilesystem\t1.50x\tlz4\t0\t0\n'
+      printf 'tank/data/subdir\t104857600\t85899345920\t104857600\t/mnt/data/subdir\tfilesystem\t1.20x\tlz4\t0\t0\n'
+      printf 'tank/vol1\t107374182\t85899345920\t107374182\t-\tvolume\t1.00x\tlz4\t0\t0\n'
+      printf 'backup\t5368709120\t48318382080\t96\tnone\tfilesystem\t1.00x\toff\t0\t0\n'
+      printf 'backup/archive\t5368709120\t48318382080\t5368709120\t/mnt/backup\tfilesystem\t2.10x\tzstd\t0\t0\n'
+    fi
+    ;;
+
+  destroy)
+    # Silently succeed — the UI will reload state from 'zfs list' which is static,
+    # so the item will reappear on next refresh (acceptable in dev mode).
+    exit 0
+    ;;
+
+  *)
+    echo "mock-zfs: unhandled subcommand: $*" >&2
+    exit 0
+    ;;
+esac

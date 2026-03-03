@@ -1,0 +1,92 @@
+---
+# Required extra vars:
+#   name  - full dataset path (e.g. tank/data)
+#   type  - "filesystem" or "volume"
+# Optional (empty string = inherit/default):
+#   volsize      - required when type=volume (e.g. 10G)
+#   volblocksize - volume block size (e.g. 8K, 16K, 128K)
+#   sparse       - "true" for thin provisioning (vol only)
+#   compression  - lz4, gzip, zstd, off
+#   quota        - e.g. 50G, none
+#   mountpoint   - e.g. /mnt/data, none, legacy
+#   recordsize   - e.g. 16K, 128K (filesystem only)
+#   atime        - on, off
+#   exec         - on, off
+#   sync         - standard, always, disabled
+#   dedup        - on, off, verify
+#   copies       - 1, 2, 3
+#   xattr        - on, off, sa
+- name: Create ZFS dataset
+  hosts: localhost
+  gather_facts: false
+  vars:
+    compression: ""
+    quota: ""
+    mountpoint: ""
+    volsize: ""
+    volblocksize: ""
+    sparse: "false"
+    recordsize: ""
+    atime: ""
+    exec: ""
+    sync: ""
+    dedup: ""
+    copies: ""
+    xattr: ""
+  tasks:
+    - name: validate inputs
+      ansible.builtin.assert:
+        that:
+          - name is defined and name != ""
+          - type is defined and type in ["filesystem", "volume"]
+          - name is not search("@")
+          - type != "volume" or (volsize is defined and volsize != "")
+        fail_msg: >-
+          name and type are required; type must be filesystem or volume;
+          volsize is required for volumes
+
+    - name: build filesystem options
+      ansible.builtin.set_fact:
+        fs_opts: >-
+          {{
+            (['-o', 'compression='  + compression]  if compression  != '' else []) +
+            (['-o', 'quota='        + quota]         if quota        != '' else []) +
+            (['-o', 'mountpoint='   + mountpoint]    if mountpoint   != '' else []) +
+            (['-o', 'recordsize='   + recordsize]    if recordsize   != '' else []) +
+            (['-o', 'atime='        + atime]         if atime        != '' else []) +
+            (['-o', 'exec='         + exec]          if exec         != '' else []) +
+            (['-o', 'sync='         + sync]          if sync         != '' else []) +
+            (['-o', 'dedup='        + dedup]         if dedup        != '' else []) +
+            (['-o', 'copies='       + copies]        if copies       != '' else []) +
+            (['-o', 'xattr='        + xattr]         if xattr        != '' else [])
+          }}
+      when: type == "filesystem"
+
+    - name: build volume options
+      ansible.builtin.set_fact:
+        vol_opts: >-
+          {{
+            (['-s']                                              if sparse | bool          else []) +
+            (['-b', volblocksize]                               if volblocksize   != ''   else []) +
+            (['-o', 'compression='  + compression]             if compression    != ''   else []) +
+            (['-o', 'atime='        + atime]                   if atime          != ''   else []) +
+            (['-o', 'sync='         + sync]                    if sync           != ''   else []) +
+            (['-o', 'dedup='        + dedup]                   if dedup          != ''   else []) +
+            (['-o', 'copies='       + copies]                  if copies         != ''   else []) +
+            (['-o', 'xattr='        + xattr]                   if xattr          != ''   else [])
+          }}
+      when: type == "volume"
+
+    - name: create filesystem
+      ansible.builtin.command:
+        argv: "{{ ['zfs', 'create'] + fs_opts + [name] }}"
+      when: type == "filesystem"
+      register: create_fs
+      changed_when: create_fs.rc == 0
+
+    - name: create volume
+      ansible.builtin.command:
+        argv: "{{ ['zfs', 'create', '-V', volsize] + vol_opts + [name] }}"
+      when: type == "volume"
+      register: create_vol
+      changed_when: create_vol.rc == 0

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Mock ansible-playbook for local dev — returns ANSIBLE_STDOUT_CALLBACK=json-shaped output.
+# The runner extracts the first '{' in stdout and parses the JSON, so any leading text is fine.
+
+# Identify which playbook is being run (the *.yml argument)
+PLAYBOOK=""
+for arg in "$@"; do
+  [[ "$arg" == *.yml ]] && PLAYBOOK=$(basename "$arg" .yml)
+done
+
+ok_task() {
+  # $1 = task name, $2 = msg
+  printf '{"task":{"name":"%s","id":"aaa1"},"hosts":{"localhost":{"changed":false,"failed":false,"msg":"%s","rc":0,"stdout":"","stderr":"","stdout_lines":[]}}}'  "$1" "$2"
+}
+
+changed_task() {
+  # $1 = task name
+  printf '{"task":{"name":"%s","id":"aaa2"},"hosts":{"localhost":{"changed":true,"failed":false,"msg":"","rc":0,"stdout":"","stderr":"","stdout_lines":[]}}}'  "$1"
+}
+
+case "$PLAYBOOK" in
+  zfs_dataset_create)
+    TASKS="$(ok_task "validate input" "All assertions passed"),$(changed_task "create dataset")"
+    ;;
+  zfs_dataset_destroy)
+    TASKS="$(ok_task "validate input" "All assertions passed"),$(changed_task "destroy dataset")"
+    ;;
+  zfs_snapshot_create)
+    TASKS="$(ok_task "validate input" "All assertions passed"),$(changed_task "create snapshot")"
+    ;;
+  zfs_snapshot_destroy)
+    TASKS="$(ok_task "validate input" "All assertions passed"),$(changed_task "destroy snapshot")"
+    ;;
+  *)
+    TASKS="$(changed_task "run")"
+    ;;
+esac
+
+printf '{"plays":[{"play":{"name":"mock","id":"bbb1"},"tasks":[%s]}],"stats":{"localhost":{"failures":0,"unreachable":0,"ok":2,"changed":1,"skipped":0,"rescued":0,"ignored":0}}}\n' "$TASKS"

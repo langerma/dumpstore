@@ -1,0 +1,10 @@
+# compiled binary
+dumpstore
+
+# release archives
+dist/
+*.tar.gz
+*.zip
+
+# macOS
+.DS_Store

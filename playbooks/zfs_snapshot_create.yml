@@ -1,0 +1,28 @@
+---
+# Required extra vars:
+#   dataset   - the ZFS dataset (e.g. tank/data)
+#   snapname  - snapshot label (e.g. 2024-01-15_backup)
+#   recursive - "true" or "false" (optional, default false)
+- name: Create ZFS snapshot
+  hosts: localhost
+  gather_facts: false
+  vars:
+    recursive: "false"
+  tasks:
+    - name: validate inputs
+      ansible.builtin.assert:
+        that:
+          - dataset is defined and dataset != ""
+          - snapname is defined and snapname != ""
+          - dataset is not search("@")
+          - snapname is not search("@")
+        fail_msg: "dataset and snapname must be provided and must not contain '@'"
+
+    - name: create snapshot
+      ansible.builtin.command:
+        cmd: >-
+          zfs snapshot
+          {% if recursive | bool %}-r{% endif %}
+          {{ dataset }}@{{ snapname }}
+      register: create_result
+      changed_when: create_result.rc == 0
