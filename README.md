@@ -1,6 +1,11 @@
-# dumpstore
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
+    <img src="logo-light.png" width="520" alt="dumpstore">
+  </picture>
+</p>
 
-A lightweight NAS management UI written in Go — built for Linux and FreeBSD, designed to stay out of the way of a vanilla system.
+<p align="center">A lightweight NAS management UI written in Go — built for Linux and FreeBSD, designed to stay out of the way of a vanilla system.</p>
 
 ## Why this exists
 
