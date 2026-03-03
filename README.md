@@ -28,6 +28,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots
+- **Live updates** — Server-Sent Events push pool, dataset, snapshot and I/O changes every 10 s; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
 ## Screenshots
@@ -48,58 +49,79 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 ### High-level overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  Browser  (vanilla JS SPA)              │
-│  state object → render functions → fetch → api()        │
-└────────────────────────────┬────────────────────────────┘
-                             │ HTTP :8080
-                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                       main.go                           │
-│  • flag: -addr  -dir  -debug                            │
-│  • startup: checks ansible-playbook in PATH,            │
-│             playbooks/ and static/ dirs exist           │
-│  • requestLogger middleware (method/path/status/ms)     │
-│  • GET /      → http.FileServer  (static/)              │
-│  • /api/*     → api.Handler                             │
-└────────────────────────────┬────────────────────────────┘
-                             │
-               ┌─────────────┴──────────────┐
-               │                            │
-          READ requests               WRITE requests
-   pools, datasets, snapshots,    create / edit / destroy
-   iostat, status, props,         datasets and snapshots
-   sysinfo, SMART, metrics
-               │                            │
-               ▼                            ▼
-  ┌────────────────────────┐   ┌────────────────────────────┐
-  │   internal/zfs/zfs.go  │   │ internal/ansible/runner.go │
-  │   internal/system/     │   │                            │
-  │   internal/smart/      │   │  Run(playbook, extraVars)  │
-  │                        │   │                            │
-  │  ListPools()           │   │  exec: ansible-playbook    │
-  │  ListDatasets()        │   │    -i inventory/localhost  │
-  │  ListSnapshots()       │   │    --extra-vars '{...}'    │
-  │  IOStats()             │   │  env: ANSIBLE_STDOUT_      │
-  │  GetDatasetProps()     │   │    CALLBACK=json           │
-  │  PoolStatuses()        │   │                            │
-  │  Version()             │   │  parse JSON output         │
-  │  system.Get()          │   │  → []TaskStep              │
-  │  smart.Collect()       │   │                            │
-  │                        │   │                            │
-  │  exec: zpool / zfs /   │   │                            │
-  │  smartctl / sysctl     │   │                            │
-  │  (no Python startup)   │   │                            │
-  └───────────┬────────────┘   └────────────┬───────────────┘
-              │                             │
-              ▼                             ▼
-        ZFS kernel                  playbooks/*.yml
-        subsystem                   ┌──────────────────────┐
-                                    │  targets: localhost  │
-                                    │  gather_facts: false │
-                                    │  1. assert vars      │
-                                    │  2. zfs/zpool cmd    │
-                                    └──────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Browser  (vanilla JS SPA)                       │
+│  state object → render functions → api() helper                     │
+│                                                                     │
+│  ┌─ boot ──────────────────────────────────────────────────────┐   │
+│  │  loadAll() → 8 parallel REST fetches (initial paint)        │   │
+│  │  startSSE() → EventSource /api/events?topics=…              │   │
+│  │    on message: state[key] = data; render()                  │   │
+│  │    on close:   fallback to setInterval(loadAll, 30 000)     │   │
+│  │                + retry SSE after 5 s                        │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ HTTP :8080  (REST + SSE)
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          main.go                                    │
+│  • flag: -addr  -dir  -debug                                        │
+│  • startup: checks ansible-playbook in PATH,                        │
+│             playbooks/ and static/ dirs exist                       │
+│  • signal.NotifyContext → graceful shutdown on SIGTERM/SIGINT       │
+│  • requestLogger middleware (method/path/status/ms)                 │
+│  • GET /      → http.FileServer  (static/)                         │
+│  • /api/*     → api.Handler                                         │
+└───────────────────┬─────────────────────────────────────────────────┘
+                    │
+      ┌─────────────┼───────────────────────────────┐
+      │             │                               │
+      │     ┌───────┴──────────────────┐            │
+      │     │  internal/broker         │            │
+      │     │                          │            │
+      │     │  Broker — pub/sub core   │◄── StartPoller() goroutine
+      │     │    Subscribe(topic)      │    polls ZFS every 10 s
+      │     │    Publish(topic, data)  │    publishes only on change
+      │     │    Unsubscribe(topic,ch) │    (JSON equality check)
+      │     │                          │
+      │     │  GET /api/events         │──► streams SSE to browsers
+      │     │    ?topics=pool.query,…  │    fan-in per-topic channels
+      │     └──────────────────────────┘
+      │
+      ├─── READ requests                    WRITE requests ───────────┐
+      │  pools, datasets, snapshots,      create / edit / destroy     │
+      │  iostat, status, props,           datasets and snapshots      │
+      │  sysinfo, SMART, metrics                                      │
+      │                                                               │
+      ▼                                                               ▼
+┌───────────────────────┐                        ┌────────────────────────────┐
+│  internal/zfs/zfs.go  │                        │ internal/ansible/runner.go │
+│  internal/system/     │                        │                            │
+│  internal/smart/      │                        │  Run(playbook, extraVars)  │
+│                       │                        │                            │
+│  ListPools()          │                        │  exec: ansible-playbook    │
+│  ListDatasets()       │                        │    -i inventory/localhost  │
+│  ListSnapshots()      │                        │    --extra-vars '{...}'    │
+│  IOStats()            │                        │  env: ANSIBLE_STDOUT_      │
+│  GetDatasetProps()    │                        │    CALLBACK=json           │
+│  PoolStatuses()       │                        │                            │
+│  Version()            │                        │  parse JSON output         │
+│  system.Get()         │                        │  → []TaskStep              │
+│  smart.Collect()      │                        │                            │
+│                       │                        │                            │
+│  exec: zpool / zfs /  │                        │                            │
+│  smartctl / sysctl    │                        │                            │
+│  (no Python startup)  │                        │                            │
+└──────────┬────────────┘                        └────────────┬───────────────┘
+           │                                                  │
+           ▼                                                  ▼
+     ZFS kernel                                       playbooks/*.yml
+     subsystem                                        ┌──────────────────────┐
+                                                      │  targets: localhost  │
+                                                      │  gather_facts: false │
+                                                      │  1. assert vars      │
+                                                      │  2. zfs/zpool cmd    │
+                                                      └──────────────────────┘
 ```
 
 ### Why the read/write split?
@@ -150,6 +172,7 @@ GET  /api/snapshots           → zfs list -t snap    (direct)
 GET  /api/iostat              → zpool iostat        (direct)
 GET  /api/smart               → smartctl            (direct)
 GET  /metrics                 → Prometheus text     (direct)
+GET  /api/events              → SSE stream          (broker)
 
 POST   /api/datasets          → zfs_dataset_create.yml    (ansible)
 PATCH  /api/datasets/{n}      → zfs_dataset_set.yml       (ansible)
@@ -249,6 +272,8 @@ sudo make uninstall
 │   ├── zfs/zfs.go                   # Direct zpool/zfs command execution (reads)
 │   ├── ansible/runner.go            # Ansible playbook execution + JSON output parsing
 │   ├── api/handlers.go              # REST API handlers + input validation
+│   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
+│   ├── broker/poller.go             # Background ZFS poller → publishes changes to broker
 │   ├── system/system.go             # Host + process info (/proc, sysctl)
 │   └── smart/smart.go              # S.M.A.R.T. data via smartctl
 ├── playbooks/
@@ -280,6 +305,7 @@ sudo make uninstall
 | GET | `/api/snapshots` | List all snapshots |
 | GET | `/api/iostat` | Pool I/O statistics (1-second sample) |
 | GET | `/api/smart` | S.M.A.R.T. health per disk |
+| GET | `/api/events` | Server-Sent Events stream (see below) |
 | GET | `/metrics` | Prometheus text exposition |
 | POST | `/api/datasets` | Create a dataset or volume |
 | PATCH | `/api/datasets/{name}` | Update dataset properties |
@@ -341,3 +367,36 @@ Pool roots (e.g. `tank`) cannot be deleted via this endpoint — use `zpool dest
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
 Append `?recursive=true` to also destroy clones.
+
+### GET /api/events
+
+Server-Sent Events stream. The server pushes named events whenever data changes, eliminating the need for the client to poll.
+
+**Query parameter:** `topics` — comma-separated list of topic names to subscribe to.
+
+**Available topics:**
+
+| Topic | Data | Source |
+|-------|------|--------|
+| `pool.query` | Same JSON as `GET /api/pools` | Pushed every 10 s on change |
+| `dataset.query` | Same JSON as `GET /api/datasets` | Pushed every 10 s on change |
+| `snapshot.query` | Same JSON as `GET /api/snapshots` | Pushed every 10 s on change |
+| `iostat` | Same JSON as `GET /api/iostat` | Pushed every 10 s always |
+
+Each event follows the SSE wire format:
+
+```
+event: pool.query
+data: [{"name":"tank","health":"ONLINE",...}]
+
+event: iostat
+data: [{"pool":"tank","read_ops":0,"write_ops":443,...}]
+```
+
+Example — watch pool health and I/O live:
+
+```bash
+curl -N 'http://localhost:8080/api/events?topics=pool.query,iostat'
+```
+
+The browser UI uses `EventSource` to subscribe to all four topics and falls back to 30 s REST polling automatically if the SSE connection is lost.
