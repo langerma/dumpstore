@@ -53,13 +53,13 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │                     Browser  (vanilla JS SPA)                       │
 │  state object → render functions → api() helper                     │
 │                                                                     │
-│  ┌─ boot ──────────────────────────────────────────────────────┐   │
-│  │  loadAll() → 8 parallel REST fetches (initial paint)        │   │
-│  │  startSSE() → EventSource /api/events?topics=…              │   │
-│  │    on message: state[key] = data; render()                  │   │
-│  │    on close:   fallback to setInterval(loadAll, 30 000)     │   │
-│  │                + retry SSE after 5 s                        │   │
-│  └─────────────────────────────────────────────────────────────┘   │
+│  ┌─ boot ──────────────────────────────────────────────────────┐    │
+│  │  loadAll() → 8 parallel REST fetches (initial paint)        │    │
+│  │  startSSE() → EventSource /api/events?topics=…              │    │
+│  │    on message: state[key] = data; render()                  │    │
+│  │    on close:   fallback to setInterval(loadAll, 30 000)     │    │
+│  │                + retry SSE after 5 s                        │    │
+│  └─────────────────────────────────────────────────────────────┘    │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ HTTP :8080  (REST + SSE)
                            ▼
@@ -70,7 +70,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │             playbooks/ and static/ dirs exist                       │
 │  • signal.NotifyContext → graceful shutdown on SIGTERM/SIGINT       │
 │  • requestLogger middleware (method/path/status/ms)                 │
-│  • GET /      → http.FileServer  (static/)                         │
+│  • GET /      → http.FileServer  (static/)                          │
 │  • /api/*     → api.Handler                                         │
 └───────────────────┬─────────────────────────────────────────────────┘
                     │
@@ -126,13 +126,13 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 ### Why the read/write split?
 
-| Concern | Reads | Writes |
-|---|---|---|
-| **Mechanism** | `exec.Command(zpool/zfs/smartctl)` | `exec.Command(ansible-playbook)` |
-| **Latency** | Fast — no Python startup | ~1-2 s — acceptable for mutations |
-| **Output** | Parsed from tab-separated stdout | Parsed from structured JSON callback |
-| **Audit trail** | None needed | Task names + changed/failed per step |
-| **Idempotency** | N/A | Enforced by playbook assert tasks |
+| Concern         | Reads                              | Writes                               |
+|-----------------|------------------------------------|--------------------------------------|
+| **Mechanism**   | `exec.Command(zpool/zfs/smartctl)` | `exec.Command(ansible-playbook)`.    |
+| **Latency**     | Fast — no Python startup           | ~1-2 s — acceptable for mutations    |
+| **Output**      | Parsed from tab-separated stdout   | Parsed from structured JSON callback |
+| **Audit trail** | None needed                        | Task names + changed/failed per step |
+| **Idempotency** | N/A                                | Enforced by playbook assert tasks    |
 
 ### Request flow for a write operation
 
@@ -183,13 +183,13 @@ DELETE /api/snapshots/{n}     → zfs_snapshot_destroy.yml  (ansible)
 
 ## Requirements
 
-| | Linux | FreeBSD |
-|---|---|---|
-| ZFS | `zfsutils-linux` or equivalent | built-in (`zfsutils` pkg for older releases) |
-| Ansible | `ansible` package (Python 3) | `py311-ansible` or equivalent |
-| Service manager | systemd | rc.d (via `daemon(8)`) |
-| S.M.A.R.T. (optional) | `smartmontools` | `smartmontools` pkg |
-| Build | Go 1.22+ | Go 1.22+ |
+|                       | Linux                          | FreeBSD                                      |
+|-----------------------|--------------------------------|----------------------------------------------|
+| ZFS                   | `zfsutils-linux` or equivalent | built-in (`zfsutils` pkg for older releases) |
+| Ansible               | `ansible` package (Python 3)   | `py311-ansible` or equivalent                |
+| Service manager       | systemd                        | rc.d (via `daemon(8)`)                       |
+| S.M.A.R.T. (optional) | `smartmontools`                | `smartmontools` pkg                          |
+| Build                 | Go 1.22+                       | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
 
@@ -198,10 +198,10 @@ Go and Ansible are the only hard requirements. ZFS must be available on the targ
 Releases are tagged with semver (`v0.1.0`, `v0.2.0`, …). The version is injected at build time via ldflags from `git describe`:
 
 ```
-v0.1.0               ← exact tag
-v0.1.0-3-gabcdef     ← 3 commits after tag
+v0.1.0                 ← exact tag
+v0.1.0-3-gabcdef       ← 3 commits after tag
 v0.1.0-3-gabcdef-dirty ← uncommitted changes present
-dev                  ← built outside git (no tags)
+dev                    ← built outside git (no tags)
 ```
 
 The version is exposed in:
@@ -297,23 +297,23 @@ sudo make uninstall
 ## API
 
 | Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/sysinfo` | Host and process info |
-| GET | `/api/version` | OpenZFS version string |
-| GET | `/api/pools` | List all pools with usage stats |
-| GET | `/api/poolstatus` | Detailed pool status with vdev tree |
-| GET | `/api/datasets` | List all datasets and volumes |
-| GET | `/api/dataset-props/{name}` | Editable properties for a dataset |
-| GET | `/api/snapshots` | List all snapshots |
-| GET | `/api/iostat` | Pool I/O statistics (1-second sample) |
-| GET | `/api/smart` | S.M.A.R.T. health per disk |
-| GET | `/api/events` | Server-Sent Events stream (see below) |
-| GET | `/metrics` | Prometheus text exposition |
-| POST | `/api/datasets` | Create a dataset or volume |
-| PATCH | `/api/datasets/{name}` | Update dataset properties |
-| DELETE | `/api/datasets/{name}` | Destroy a dataset or volume |
-| POST | `/api/snapshots` | Create a snapshot |
-| DELETE | `/api/snapshots/{name}` | Destroy a snapshot |
+|--------|-----------------------------|---------------------------------------|
+| GET    | `/api/sysinfo`              | Host and process info                 |
+| GET    | `/api/version`              | OpenZFS version string                |
+| GET    | `/api/pools`                | List all pools with usage stats       |
+| GET    | `/api/poolstatus`           | Detailed pool status with vdev tree   |
+| GET    | `/api/datasets`             | List all datasets and volumes         |
+| GET    | `/api/dataset-props/{name}` | Editable properties for a dataset     |
+| GET    | `/api/snapshots`            | List all snapshots                    |
+| GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
+| GET    | `/api/smart`                | S.M.A.R.T. health per disk            |
+| GET    | `/api/events`               | Server-Sent Events stream (see below) |
+| GET    | `/metrics`                  | Prometheus text exposition            |
+| POST   | `/api/datasets`             | Create a dataset or volume            |
+| PATCH  | `/api/datasets/{name}`      | Update dataset properties             |
+| DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume           |
+| POST   | `/api/snapshots`            | Create a snapshot                     |
+| DELETE | `/api/snapshots/{name}`     | Destroy a snapshot                    |
 
 ### POST /api/datasets
 
@@ -378,12 +378,12 @@ Server-Sent Events stream. The server pushes named events whenever data changes,
 
 **Available topics:**
 
-| Topic | Data | Source |
-|-------|------|--------|
-| `pool.query` | Same JSON as `GET /api/pools` | Pushed every 10 s on change |
-| `dataset.query` | Same JSON as `GET /api/datasets` | Pushed every 10 s on change |
+| Topic            | Data                              | Source                      |
+|------------------|-----------------------------------|-----------------------------|
+| `pool.query`     | Same JSON as `GET /api/pools`     | Pushed every 10 s on change |
+| `dataset.query`  | Same JSON as `GET /api/datasets`  | Pushed every 10 s on change |
 | `snapshot.query` | Same JSON as `GET /api/snapshots` | Pushed every 10 s on change |
-| `iostat` | Same JSON as `GET /api/iostat` | Pushed every 10 s always |
+| `iostat`         | Same JSON as `GET /api/iostat`    | Pushed every 10 s always    |
 
 Each event follows the SSE wire format:
 
