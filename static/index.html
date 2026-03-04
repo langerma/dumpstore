@@ -436,6 +436,44 @@
     </form>
   </dialog>
 
+  <!-- EDIT USER DIALOG -->
+  <dialog id="editUserDialog">
+    <form id="editUserForm" method="dialog">
+      <h3>Edit User: <span id="editUserDisplayName"></span></h3>
+      <fieldset class="form-section">
+        <legend>Identity</legend>
+        <label>Shell
+          <select id="edit-user-shell">
+            <option value="/bin/bash">/bin/bash</option>
+            <option value="/bin/sh">/bin/sh</option>
+            <option value="/sbin/nologin">/sbin/nologin</option>
+            <option value="/usr/sbin/nologin">/usr/sbin/nologin</option>
+          </select>
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Groups</legend>
+        <label>Primary group
+          <input type="text" id="edit-user-group" placeholder="e.g. storage"
+            pattern="[A-Za-z0-9._\-]*">
+        </label>
+        <label>Additional groups <span class="field-note">(comma-separated)</span>
+          <input type="text" id="edit-user-groups" placeholder="e.g. wheel,backup">
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Password</legend>
+        <label>New password <span class="field-note">(leave blank to keep current)</span>
+          <input type="password" id="edit-user-password" autocomplete="new-password">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="editUserCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- DELETE USER DIALOG -->
   <dialog id="deleteUserDialog">
     <h3>Delete User</h3>
@@ -466,6 +504,27 @@
       <div class="dialog-actions">
         <button type="button" id="groupCancelBtn" class="btn-secondary">Cancel</button>
         <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- EDIT GROUP DIALOG -->
+  <dialog id="editGroupDialog">
+    <form id="editGroupForm" method="dialog">
+      <h3>Edit Group: <span id="editGroupDisplayName"></span></h3>
+      <label>Name
+        <input type="text" id="edit-group-name" required pattern="[A-Za-z0-9._\-]+"
+          title="Letters, numbers, dots, dashes, underscores only">
+      </label>
+      <label>GID <span class="field-note">(leave blank to keep current)</span>
+        <input type="number" id="edit-group-gid" min="1000" placeholder="unchanged">
+      </label>
+      <label>Members <span class="field-note">(comma-separated usernames)</span>
+        <input type="text" id="edit-group-members" placeholder="e.g. alice,bob">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="editGroupCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
       </div>
     </form>
   </dialog>

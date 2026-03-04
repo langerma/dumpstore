@@ -13,6 +13,8 @@ var ValidTopics = map[string]bool{
 	"dataset.query":  true,
 	"snapshot.query": true,
 	"iostat":         true,
+	"user.query":     true,
+	"group.query":    true,
 }
 
 // Broker is a thread-safe, topic-based pub/sub message broker.

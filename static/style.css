@@ -438,7 +438,9 @@ dialog label {
   font-size: 12px;
   color: var(--text-muted);
 }
-dialog label input[type=text] {
+dialog label input[type=text],
+dialog label input[type=number],
+dialog label input[type=password] {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -451,7 +453,9 @@ dialog label input[type=text] {
   font-size: 13px;
   outline: none;
 }
-dialog label input[type=text]:focus { border-color: var(--accent); }
+dialog label input[type=text]:focus,
+dialog label input[type=number]:focus,
+dialog label input[type=password]:focus { border-color: var(--accent); }
 dialog label select {
   display: block;
   width: 100%;

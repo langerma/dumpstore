@@ -30,4 +30,7 @@
         gid: "{{ gid | default(omit) if gid != '' else omit }}"
         state: present
       register: group_result
+      retries: 5
+      delay: 2
+      until: group_result is not failed
       changed_when: group_result.changed

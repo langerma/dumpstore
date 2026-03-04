@@ -778,6 +778,10 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
   }
 });
 
+// ── Protected account denylists (must match handlers.go) ─────────────────────
+const PROTECTED_USERS  = new Set(['nobody', 'nfsnobody']);
+const PROTECTED_GROUPS = new Set(['nogroup', 'nobody', 'nfsnobody']);
+
 // ── Render: Users ─────────────────────────────────────────────────────────────
 function renderUsers() {
   const wrap = document.getElementById('users-table-wrap');
@@ -786,7 +790,7 @@ function renderUsers() {
     return;
   }
   const rows = state.users.map(u => {
-    const isSystem = u.uid < 1000;
+    const isSystem = u.uid < 1000 || PROTECTED_USERS.has(u.username);
     return `
       <tr class="${isSystem ? 'row-muted' : ''}">
         <td class="mono">${esc(u.username)}</td>
@@ -795,6 +799,7 @@ function renderUsers() {
         <td class="muted">${esc(u.shell)}</td>
         <td class="muted">${esc(u.home)}</td>
         <td>
+          ${!isSystem ? `<button class="btn-edit" data-user="${esc(u.username)}">Edit</button>` : ''}
           ${!isSystem ? `<button class="btn-del" data-user="${esc(u.username)}">Delete</button>` : ''}
         </td>
       </tr>`;
@@ -808,6 +813,9 @@ function renderUsers() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  wrap.querySelectorAll('.btn-edit[data-user]').forEach(btn => {
+    btn.addEventListener('click', () => openEditUserDialog(btn.dataset.user));
+  });
   wrap.querySelectorAll('.btn-del[data-user]').forEach(btn => {
     btn.addEventListener('click', () => openDeleteUserDialog(btn.dataset.user));
   });
@@ -821,13 +829,14 @@ function renderGroups() {
     return;
   }
   const rows = state.groups.map(g => {
-    const isSystem = g.gid < 1000;
+    const isSystem = g.gid < 1000 || PROTECTED_GROUPS.has(g.name);
     return `
       <tr class="${isSystem ? 'row-muted' : ''}">
         <td class="mono">${esc(g.name)}</td>
         <td>${g.gid}</td>
         <td class="muted">${(g.members || []).map(esc).join(', ') || '—'}</td>
         <td>
+          ${!isSystem ? `<button class="btn-edit" data-group="${esc(g.name)}">Edit</button>` : ''}
           ${!isSystem ? `<button class="btn-del" data-group="${esc(g.name)}">Delete</button>` : ''}
         </td>
       </tr>`;
@@ -841,6 +850,9 @@ function renderGroups() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  wrap.querySelectorAll('.btn-edit[data-group]').forEach(btn => {
+    btn.addEventListener('click', () => openEditGroupDialog(btn.dataset.group));
+  });
   wrap.querySelectorAll('.btn-del[data-group]').forEach(btn => {
     btn.addEventListener('click', () => openDeleteGroupDialog(btn.dataset.group));
   });
@@ -974,6 +986,102 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
   }
 });
 
+// ── Edit User dialog ──────────────────────────────────────────────────────────
+const editUserDialog = document.getElementById('editUserDialog');
+let _editUserTarget = '';
+
+function openEditUserDialog(username) {
+  const user = state.users.find(u => u.username === username);
+  if (!user) return;
+  _editUserTarget = username;
+  document.getElementById('editUserDisplayName').textContent = username;
+
+  const shellSel = document.getElementById('edit-user-shell');
+  shellSel.value = user.shell;
+  // If shell isn't in the list, add it as a temporary option
+  if (shellSel.value !== user.shell) {
+    const opt = document.createElement('option');
+    opt.value = user.shell;
+    opt.textContent = user.shell;
+    shellSel.appendChild(opt);
+    shellSel.value = user.shell;
+  }
+
+  // Primary group: find group whose gid matches user's gid
+  const primaryGroup = state.groups.find(g => g.gid === user.gid);
+  document.getElementById('edit-user-group').value = primaryGroup ? primaryGroup.name : '';
+
+  // Supplementary groups: groups where user is in members, excluding primary
+  const suppGroups = state.groups
+    .filter(g => g.gid !== user.gid && (g.members || []).includes(username))
+    .map(g => g.name)
+    .join(',');
+  document.getElementById('edit-user-groups').value = suppGroups;
+
+  document.getElementById('edit-user-password').value = '';
+  editUserDialog.showModal();
+}
+
+document.getElementById('editUserCancelBtn').addEventListener('click', () => editUserDialog.close());
+
+document.getElementById('editUserForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username   = _editUserTarget;
+  const shell      = document.getElementById('edit-user-shell').value;
+  const group      = document.getElementById('edit-user-group').value.trim();
+  const user_groups = document.getElementById('edit-user-groups').value.trim();
+  const password   = document.getElementById('edit-user-password').value;
+  editUserDialog.close();
+  try {
+    const result = await api('PUT', '/api/users/' + encodeURIComponent(username), { shell, group, user_groups, password });
+    showOpLog(`User updated: ${username}`, result.tasks, null);
+    const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
+    state.users = users || [];
+    state.groups = groups || [];
+    renderUsers();
+    renderGroups();
+  } catch (err) {
+    showOpLog(`Failed to update user: ${username}`, err.tasks, err.message);
+  }
+});
+
+// ── Edit Group dialog ─────────────────────────────────────────────────────────
+const editGroupDialog = document.getElementById('editGroupDialog');
+let _editGroupTarget = '';
+
+function openEditGroupDialog(groupname) {
+  const group = state.groups.find(g => g.name === groupname);
+  if (!group) return;
+  _editGroupTarget = groupname;
+  document.getElementById('editGroupDisplayName').textContent = groupname;
+  document.getElementById('edit-group-name').value = groupname;
+  document.getElementById('edit-group-gid').value = '';
+  document.getElementById('edit-group-members').value = (group.members || []).join(',');
+  editGroupDialog.showModal();
+}
+
+document.getElementById('editGroupCancelBtn').addEventListener('click', () => editGroupDialog.close());
+
+document.getElementById('editGroupForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const groupname = _editGroupTarget;
+  const new_name  = document.getElementById('edit-group-name').value.trim();
+  const gid       = document.getElementById('edit-group-gid').value.trim();
+  const members   = document.getElementById('edit-group-members').value.trim();
+  editGroupDialog.close();
+  try {
+    const result = await api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
+    showOpLog(`Group updated: ${result.groupname}`, result.tasks, null);
+    const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
+    state.users = users || [];
+    state.groups = groups || [];
+    renderUsers();
+    renderGroups();
+  } catch (err) {
+    showOpLog(`Failed to update group: ${groupname}`, err.tasks, err.message);
+  }
+});
+
 // ── XSS helper ────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s ?? '')
@@ -990,6 +1098,8 @@ const sseTopicMap = {
   'dataset.query':  { key: 'datasets',  render: renderDatasets },
   'snapshot.query': { key: 'snapshots', render: renderSnapshots },
   'iostat':         { key: 'iostat',    render: renderIOStat },
+  'user.query':     { key: 'users',     render: renderUsers },
+  'group.query':    { key: 'groups',    render: renderGroups },
 };
 
 let _pollInterval = null;  // setInterval handle; null when SSE is active

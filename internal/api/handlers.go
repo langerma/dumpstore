@@ -29,6 +29,7 @@ type Handler struct {
 	runner  *ansible.Runner
 	version string
 	broker  *broker.Broker
+	userMu  sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
 }
 
 // NewHandler creates a Handler with the given ansible Runner, app version string,
@@ -57,9 +58,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", h.getEvents)
 	mux.HandleFunc("GET /api/users", h.getUsers)
 	mux.HandleFunc("POST /api/users", h.createUser)
+	mux.HandleFunc("PUT /api/users/{name}", h.modifyUser)
 	mux.HandleFunc("DELETE /api/users/{name}", h.deleteUser)
 	mux.HandleFunc("GET /api/groups", h.getGroups)
 	mux.HandleFunc("POST /api/groups", h.createGroup)
+	mux.HandleFunc("PUT /api/groups/{name}", h.modifyGroup)
 	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
 }
 
@@ -533,7 +536,7 @@ func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 // createUser handles POST /api/users
-// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","groups":"wheel,backup","password":"$6$...","create_group":true}
+// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","user_groups":"wheel,backup","password":"$6$...","create_group":true}
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string `json:"username"`
@@ -564,12 +567,14 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	if req.CreateGroup {
 		createGroup = "true"
 	}
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
 	vars := map[string]string{
 		"username":     req.Username,
 		"shell":        req.Shell,
 		"uid":          req.UID,
 		"group":        req.Group,
-		"groups":       req.Groups,
+		"user_groups":  req.Groups,
 		"password":     req.Password,
 		"create_group": createGroup,
 	}
@@ -582,6 +587,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err, steps)
 		return
 	}
+	h.publishUserGroup()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"username": req.Username, "tasks": out.Steps()})
@@ -631,6 +637,8 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
 	out, err := h.runner.Run("user_delete.yml", map[string]string{
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
@@ -643,6 +651,81 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err, steps)
 		return
 	}
+	h.publishUserGroup()
+	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+}
+
+// modifyUser handles PUT /api/users/{name}
+// Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"$6$..."}
+func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+		return
+	}
+	var req struct {
+		Shell      string `json:"shell"`
+		Group      string `json:"group"`
+		UserGroups string `json:"user_groups"`
+		Password   string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if strings.ContainsAny(req.Shell+req.Group+req.UserGroups, ";|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+		return
+	}
+
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.User
+	for i := range users {
+		if users[i].Username == name {
+			target = &users[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	if protectedUsers[name] {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name), nil)
+		return
+	}
+	if target.UID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
+		return
+	}
+
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	out, err := h.runner.Run("user_modify.yml", map[string]string{
+		"username":      name,
+		"uid":           fmt.Sprintf("%d", target.UID),
+		"shell":         req.Shell,
+		"primary_group": req.Group,
+		"user_groups":   req.UserGroups,
+		"password":      req.Password,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	h.publishUserGroup()
 	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
 }
 
@@ -666,6 +749,8 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
 	out, err := h.runner.Run("group_create.yml", map[string]string{
 		"groupname": req.Groupname,
 		"gid":       req.GID,
@@ -680,6 +765,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	h.publishUserGroup()
 	_ = json.NewEncoder(w).Encode(map[string]any{"groupname": req.Groupname, "tasks": out.Steps()})
 }
 
@@ -721,6 +807,8 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
 	out, err := h.runner.Run("group_delete.yml", map[string]string{
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
@@ -733,7 +821,98 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err, steps)
 		return
 	}
+	h.publishUserGroup()
 	writeJSON(w, map[string]any{"groupname": name, "tasks": out.Steps()})
+}
+
+// modifyGroup handles PUT /api/groups/{name}
+// Body: {"new_name":"newgrp","gid":"1501","members":"alice,bob"}
+func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+		return
+	}
+	var req struct {
+		NewName string `json:"new_name"`
+		GID     string `json:"gid"`
+		Members string `json:"members"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if strings.ContainsAny(req.NewName+req.Members, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+		return
+	}
+
+	groups, err := system.ListGroups()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.Group
+	for i := range groups {
+		if groups[i].Name == name {
+			target = &groups[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
+		return
+	}
+	if protectedGroups[name] {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify protected group %q", name), nil)
+		return
+	}
+	if target.GID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
+		return
+	}
+
+	resultName := name
+	if req.NewName != "" {
+		resultName = req.NewName
+	}
+
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	out, err := h.runner.Run("group_modify.yml", map[string]string{
+		"groupname":      name,
+		"gid":            fmt.Sprintf("%d", target.GID),
+		"new_name":       req.NewName,
+		"new_gid":        req.GID,
+		"members":        req.Members,
+		"update_members": "true",
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	h.publishUserGroup()
+	writeJSON(w, map[string]any{"groupname": resultName, "tasks": out.Steps()})
+}
+
+// publishUserGroup re-reads /etc/passwd and /etc/group and immediately pushes
+// both topics to all SSE subscribers. Called after every successful user/group
+// write so clients see the change without waiting for the next poller tick.
+func (h *Handler) publishUserGroup() {
+	if users, err := system.ListUsers(); err == nil {
+		h.broker.Publish("user.query", users)
+	}
+	if groups, err := system.ListGroups(); err == nil {
+		h.broker.Publish("group.query", groups)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

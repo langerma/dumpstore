@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
 )
 
@@ -87,5 +88,17 @@ func pollOnce(publish func(string, any)) {
 		publish("iostat", stats)
 	} else {
 		slog.Warn("poller: IOStats failed", "err", err)
+	}
+
+	if users, err := system.ListUsers(); err == nil {
+		publish("user.query", users)
+	} else {
+		slog.Warn("poller: ListUsers failed", "err", err)
+	}
+
+	if groups, err := system.ListGroups(); err == nil {
+		publish("group.query", groups)
+	} else {
+		slog.Warn("poller: ListGroups failed", "err", err)
 	}
 }

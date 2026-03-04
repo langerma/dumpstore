@@ -1,0 +1,63 @@
+---
+# Required extra vars:
+#   groupname - current name of the group to modify
+#   gid       - current GID (must be >= 1000, validated in Go before calling)
+# Optional extra vars:
+#   new_name       - rename the group to this name
+#   new_gid        - change the GID to this value (must be >= 1000)
+#   members        - comma-separated list of members to set (replaces existing)
+#   update_members - "true" to apply the members list
+
+- name: Modify local group
+  hosts: localhost
+  gather_facts: false
+  vars:
+    new_name: ""
+    new_gid: ""
+    members: ""
+    update_members: "false"
+  tasks:
+    - name: Assert required vars and safety
+      ansible.builtin.assert:
+        that:
+          - groupname is defined and groupname != ""
+          - gid is defined
+          - gid | int >= 1000
+          - groupname not in ['nogroup', 'nobody', 'nfsnobody']
+        fail_msg: "groupname is required, gid must be >= 1000, and protected groups cannot be modified"
+
+    - name: Assert new_gid is safe if provided
+      ansible.builtin.assert:
+        that:
+          - new_gid | int >= 1000
+        fail_msg: "new_gid must be >= 1000 (system GIDs are reserved)"
+      when: new_gid != ""
+
+    - name: Change GID
+      ansible.builtin.group:
+        name: "{{ groupname }}"
+        gid: "{{ new_gid }}"
+        state: present
+      when: new_gid != "" and new_gid != gid
+      register: gid_result
+      retries: 5
+      delay: 2
+      until: gid_result is not failed
+
+    - name: Set members
+      ansible.builtin.shell: "gpasswd -M '{{ members }}' '{{ groupname }}'"
+      when: update_members == "true"
+      register: members_result
+      retries: 5
+      delay: 2
+      until: members_result is not failed
+      changed_when: true
+
+    - name: Rename group
+      ansible.builtin.shell: "groupmod -n '{{ new_name }}' '{{ groupname }}'"
+      when: new_name != "" and new_name != groupname
+      register: rename_result
+      retries: 5
+      delay: 2
+      until: rename_result is not failed
+      changed_when: true

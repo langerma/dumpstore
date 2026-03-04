@@ -15,7 +15,7 @@
   vars:
     uid: ""
     group: ""
-    groups: ""
+    user_groups: ""
     password: ""
     create_group: "false"
   tasks:
@@ -39,12 +39,20 @@
         name: "{{ username }}"
         state: present
       when: create_group == "true"
+      register: _grp1
+      retries: 5
+      delay: 2
+      until: _grp1 is not failed
 
     - name: Ensure named primary group exists
       ansible.builtin.group:
         name: "{{ group }}"
         state: present
       when: group != ""
+      register: _grp2
+      retries: 5
+      delay: 2
+      until: _grp2 is not failed
 
     - name: Create user
       ansible.builtin.user:
@@ -52,9 +60,12 @@
         shell: "{{ shell }}"
         uid: "{{ uid | default(omit) if uid != '' else omit }}"
         group: "{{ group if group != '' else (username if create_group == 'true' else omit) }}"
-        groups: "{{ groups if groups != '' else omit }}"
+        groups: "{{ user_groups if user_groups != '' else omit }}"
         password: "{{ password if password != '' else omit }}"
         create_home: true
         state: present
       register: user_result
+      retries: 5
+      delay: 2
+      until: user_result is not failed
       changed_when: user_result.changed
