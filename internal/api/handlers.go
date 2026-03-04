@@ -55,6 +55,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)
+	mux.HandleFunc("GET /api/users", h.getUsers)
+	mux.HandleFunc("POST /api/users", h.createUser)
+	mux.HandleFunc("DELETE /api/users/{name}", h.deleteUser)
+	mux.HandleFunc("GET /api/groups", h.getGroups)
+	mux.HandleFunc("POST /api/groups", h.createGroup)
+	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -504,6 +510,216 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// getUsers handles GET /api/users
+func (h *Handler) getUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, users)
+}
+
+// getGroups handles GET /api/groups
+func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
+	groups, err := system.ListGroups()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, groups)
+}
+
+// createUser handles POST /api/users
+// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","groups":"wheel,backup","password":"$6$...","create_group":true}
+func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username    string `json:"username"`
+		Shell       string `json:"shell"`
+		UID         string `json:"uid"`
+		Group       string `json:"group"`
+		Groups      string `json:"groups"`
+		Password    string `json:"password"`
+		CreateGroup bool   `json:"create_group"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Username == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("username is required"), nil)
+		return
+	}
+	if req.Shell == "" {
+		req.Shell = "/bin/bash"
+	}
+	if strings.ContainsAny(req.Username+req.Shell+req.Group+req.Groups, ";|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+		return
+	}
+
+	createGroup := "false"
+	if req.CreateGroup {
+		createGroup = "true"
+	}
+	vars := map[string]string{
+		"username":     req.Username,
+		"shell":        req.Shell,
+		"uid":          req.UID,
+		"group":        req.Group,
+		"groups":       req.Groups,
+		"password":     req.Password,
+		"create_group": createGroup,
+	}
+	out, err := h.runner.Run("user_create.yml", vars)
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"username": req.Username, "tasks": out.Steps()})
+}
+
+// deleteUser handles DELETE /api/users/{name}
+// Looks up the user's UID and rejects system users (uid < UIDMin).
+func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+		return
+	}
+
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.User
+	for i := range users {
+		if users[i].Username == name {
+			target = &users[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	if target.UID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
+		return
+	}
+
+	out, err := h.runner.Run("user_delete.yml", map[string]string{
+		"username": name,
+		"uid":      fmt.Sprintf("%d", target.UID),
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+}
+
+// createGroup handles POST /api/groups
+// Body: {"groupname":"storage","gid":"1500"}
+func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Groupname string `json:"groupname"`
+		GID       string `json:"gid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Groupname == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname is required"), nil)
+		return
+	}
+	if strings.ContainsAny(req.Groupname, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+		return
+	}
+
+	out, err := h.runner.Run("group_create.yml", map[string]string{
+		"groupname": req.Groupname,
+		"gid":       req.GID,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"groupname": req.Groupname, "tasks": out.Steps()})
+}
+
+// deleteGroup handles DELETE /api/groups/{name}
+// Looks up the group's GID and rejects system groups (gid < UIDMin).
+func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+		return
+	}
+
+	groups, err := system.ListGroups()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.Group
+	for i := range groups {
+		if groups[i].Name == name {
+			target = &groups[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
+		return
+	}
+	if target.GID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
+		return
+	}
+
+	out, err := h.runner.Run("group_delete.yml", map[string]string{
+		"groupname": name,
+		"gid":       fmt.Sprintf("%d", target.GID),
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"groupname": name, "tasks": out.Steps()})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

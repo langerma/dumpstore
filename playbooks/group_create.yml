@@ -1,0 +1,33 @@
+---
+# Required extra vars:
+#   groupname - name of the group to create
+# Optional extra vars:
+#   gid       - explicit GID (omit for auto-assignment)
+
+- name: Create local group
+  hosts: localhost
+  gather_facts: false
+  vars:
+    gid: ""
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - groupname is defined and groupname != ""
+          - groupname is not search('[;|&$`]')
+        fail_msg: "groupname is required and must not contain special characters"
+
+    - name: Assert gid is safe if provided
+      ansible.builtin.assert:
+        that:
+          - gid | int >= 1000
+        fail_msg: "gid must be >= 1000 (system GIDs are reserved)"
+      when: gid != ""
+
+    - name: Create group
+      ansible.builtin.group:
+        name: "{{ groupname }}"
+        gid: "{{ gid | default(omit) if gid != '' else omit }}"
+        state: present
+      register: group_result
+      changed_when: group_result.changed

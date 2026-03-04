@@ -10,6 +10,8 @@ const state = {
   snapshots: [],
   iostat: [],
   smart: null,
+  users: [],
+  groups: [],
   activeTab: 'pools',
   collapsedDatasets: new Set(),
 };
@@ -107,7 +109,7 @@ function setRefreshing(v) {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, iostat, smart] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, iostat, smart, users, groups] = await Promise.all([
       api('GET', '/api/pools'),
       api('GET', '/api/poolstatus'),
       api('GET', '/api/version'),
@@ -116,6 +118,8 @@ async function loadAll() {
       api('GET', '/api/snapshots'),
       api('GET', '/api/iostat'),
       api('GET', '/api/smart'),
+      api('GET', '/api/users'),
+      api('GET', '/api/groups'),
     ]);
     state.pools = pools || [];
     state.poolStatuses = poolStatuses || [];
@@ -125,12 +129,16 @@ async function loadAll() {
     state.snapshots = snapshots || [];
     state.iostat = iostat || [];
     state.smart = smart || null;
+    state.users = users || [];
+    state.groups = groups || [];
     renderPools();
     renderSysInfo();
     renderDatasets();
     renderSnapshots();
     renderIOStat();
     renderSMART();
+    renderUsers();
+    renderGroups();
   } catch (e) {
     toast('Load failed: ' + e.message, 'err');
     console.error(e);
@@ -767,6 +775,202 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
     renderDatasets();
   } catch (e) {
     showOpLog(`Failed to update ${_editDatasetName}`, e.tasks, e.message);
+  }
+});
+
+// ── Render: Users ─────────────────────────────────────────────────────────────
+function renderUsers() {
+  const wrap = document.getElementById('users-table-wrap');
+  if (!state.users.length) {
+    wrap.innerHTML = '<div class="loading">No users found.</div>';
+    return;
+  }
+  const rows = state.users.map(u => {
+    const isSystem = u.uid < 1000;
+    return `
+      <tr class="${isSystem ? 'row-muted' : ''}">
+        <td class="mono">${esc(u.username)}</td>
+        <td>${u.uid}</td>
+        <td>${u.gid}</td>
+        <td class="muted">${esc(u.shell)}</td>
+        <td class="muted">${esc(u.home)}</td>
+        <td>
+          ${!isSystem ? `<button class="btn-del" data-user="${esc(u.username)}">Delete</button>` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Username</th><th>UID</th><th>GID</th><th>Shell</th><th>Home</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  wrap.querySelectorAll('.btn-del[data-user]').forEach(btn => {
+    btn.addEventListener('click', () => openDeleteUserDialog(btn.dataset.user));
+  });
+}
+
+// ── Render: Groups ────────────────────────────────────────────────────────────
+function renderGroups() {
+  const wrap = document.getElementById('groups-table-wrap');
+  if (!state.groups.length) {
+    wrap.innerHTML = '<div class="loading">No groups found.</div>';
+    return;
+  }
+  const rows = state.groups.map(g => {
+    const isSystem = g.gid < 1000;
+    return `
+      <tr class="${isSystem ? 'row-muted' : ''}">
+        <td class="mono">${esc(g.name)}</td>
+        <td>${g.gid}</td>
+        <td class="muted">${(g.members || []).map(esc).join(', ') || '—'}</td>
+        <td>
+          ${!isSystem ? `<button class="btn-del" data-group="${esc(g.name)}">Delete</button>` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Group</th><th>GID</th><th>Members</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  wrap.querySelectorAll('.btn-del[data-group]').forEach(btn => {
+    btn.addEventListener('click', () => openDeleteGroupDialog(btn.dataset.group));
+  });
+}
+
+// ── New User dialog ───────────────────────────────────────────────────────────
+const newUserDialog = document.getElementById('newUserDialog');
+document.getElementById('newUserBtn').addEventListener('click', () => {
+  document.getElementById('newUserForm').reset();
+  document.getElementById('user-create-group').checked = true;
+  newUserDialog.showModal();
+});
+document.getElementById('userCancelBtn').addEventListener('click', () => newUserDialog.close());
+
+document.getElementById('newUserForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = document.getElementById('user-name').value.trim();
+  const shell    = document.getElementById('user-shell').value;
+  const uid      = document.getElementById('user-uid').value.trim();
+  const group    = document.getElementById('user-group').value.trim();
+  const groups   = document.getElementById('user-groups').value.trim();
+  const password = document.getElementById('user-password').value;
+  const createGroup = document.getElementById('user-create-group').checked;
+  newUserDialog.close();
+  try {
+    const result = await api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup });
+    showOpLog(`User created: ${username}`, result.tasks, null);
+    const users = await api('GET', '/api/users');
+    state.users = users || [];
+    renderUsers();
+  } catch (e) {
+    showOpLog('User creation failed', e.tasks, e.message);
+  }
+});
+
+// ── Delete User dialog ────────────────────────────────────────────────────────
+const deleteUserDialog = document.getElementById('deleteUserDialog');
+const deleteUserConfirmInput = document.getElementById('deleteUserConfirmInput');
+const deleteUserConfirmBtn   = document.getElementById('deleteUserConfirmBtn');
+let _deleteUserTarget = '';
+
+function openDeleteUserDialog(username) {
+  _deleteUserTarget = username;
+  document.getElementById('deleteUserDisplayName').textContent = username;
+  document.getElementById('deleteUserConfirmHint').textContent = username;
+  deleteUserConfirmInput.value = '';
+  deleteUserConfirmBtn.disabled = true;
+  deleteUserDialog.showModal();
+  deleteUserConfirmInput.focus();
+}
+
+deleteUserConfirmInput.addEventListener('input', () => {
+  deleteUserConfirmBtn.disabled = deleteUserConfirmInput.value !== _deleteUserTarget;
+});
+
+document.getElementById('deleteUserCancelBtn').addEventListener('click', () => deleteUserDialog.close());
+
+deleteUserConfirmBtn.addEventListener('click', async () => {
+  if (deleteUserConfirmInput.value !== _deleteUserTarget) return;
+  const username = _deleteUserTarget;
+  deleteUserDialog.close();
+  try {
+    const result = await api('DELETE', '/api/users/' + encodeURIComponent(username));
+    showOpLog(`Deleted user: ${username}`, result.tasks, null);
+    const users = await api('GET', '/api/users');
+    state.users = users || [];
+    renderUsers();
+  } catch (e) {
+    showOpLog(`Failed to delete user: ${username}`, e.tasks, e.message);
+  }
+});
+
+// ── New Group dialog ──────────────────────────────────────────────────────────
+const newGroupDialog = document.getElementById('newGroupDialog');
+document.getElementById('newGroupBtn').addEventListener('click', () => {
+  document.getElementById('newGroupForm').reset();
+  newGroupDialog.showModal();
+});
+document.getElementById('groupCancelBtn').addEventListener('click', () => newGroupDialog.close());
+
+document.getElementById('newGroupForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const groupname = document.getElementById('group-name').value.trim();
+  const gid       = document.getElementById('group-gid').value.trim();
+  newGroupDialog.close();
+  try {
+    const result = await api('POST', '/api/groups', { groupname, gid });
+    showOpLog(`Group created: ${groupname}`, result.tasks, null);
+    const groups = await api('GET', '/api/groups');
+    state.groups = groups || [];
+    renderGroups();
+  } catch (e) {
+    showOpLog('Group creation failed', e.tasks, e.message);
+  }
+});
+
+// ── Delete Group dialog ───────────────────────────────────────────────────────
+const deleteGroupDialog = document.getElementById('deleteGroupDialog');
+const deleteGroupConfirmInput = document.getElementById('deleteGroupConfirmInput');
+const deleteGroupConfirmBtn   = document.getElementById('deleteGroupConfirmBtn');
+let _deleteGroupTarget = '';
+
+function openDeleteGroupDialog(groupname) {
+  _deleteGroupTarget = groupname;
+  document.getElementById('deleteGroupDisplayName').textContent = groupname;
+  document.getElementById('deleteGroupConfirmHint').textContent = groupname;
+  deleteGroupConfirmInput.value = '';
+  deleteGroupConfirmBtn.disabled = true;
+  deleteGroupDialog.showModal();
+  deleteGroupConfirmInput.focus();
+}
+
+deleteGroupConfirmInput.addEventListener('input', () => {
+  deleteGroupConfirmBtn.disabled = deleteGroupConfirmInput.value !== _deleteGroupTarget;
+});
+
+document.getElementById('deleteGroupCancelBtn').addEventListener('click', () => deleteGroupDialog.close());
+
+deleteGroupConfirmBtn.addEventListener('click', async () => {
+  if (deleteGroupConfirmInput.value !== _deleteGroupTarget) return;
+  const groupname = _deleteGroupTarget;
+  deleteGroupDialog.close();
+  try {
+    const result = await api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
+    showOpLog(`Deleted group: ${groupname}`, result.tasks, null);
+    const groups = await api('GET', '/api/groups');
+    state.groups = groups || [];
+    renderGroups();
+  } catch (e) {
+    showOpLog(`Failed to delete group: ${groupname}`, e.tasks, e.message);
   }
 });
 

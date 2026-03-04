@@ -305,6 +305,7 @@ td {
 }
 td.muted { color: var(--text-muted); }
 td.mono { font-family: var(--font); }
+tr.row-muted td { color: var(--text-muted); opacity: 0.6; }
 
 .type-badge {
   font-size: 10px;

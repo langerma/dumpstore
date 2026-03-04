@@ -13,6 +13,99 @@ import (
 
 var startTime = time.Now()
 
+// User represents a local user from /etc/passwd.
+type User struct {
+	Username string `json:"username"`
+	UID      int    `json:"uid"`
+	GID      int    `json:"gid"`
+	Home     string `json:"home"`
+	Shell    string `json:"shell"`
+}
+
+// Group represents a local group from /etc/group.
+type Group struct {
+	Name    string   `json:"name"`
+	GID     int      `json:"gid"`
+	Members []string `json:"members"`
+}
+
+// ListUsers parses /etc/passwd and returns all local users.
+func ListUsers() ([]User, error) {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return nil, err
+	}
+	var users []User
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		f := strings.SplitN(line, ":", 7)
+		if len(f) < 7 {
+			continue
+		}
+		uid, _ := strconv.Atoi(f[2])
+		gid, _ := strconv.Atoi(f[3])
+		users = append(users, User{
+			Username: f[0],
+			UID:      uid,
+			GID:      gid,
+			Home:     f[5],
+			Shell:    strings.TrimSpace(f[6]),
+		})
+	}
+	return users, nil
+}
+
+// ListGroups parses /etc/group and returns all local groups.
+func ListGroups() ([]Group, error) {
+	data, err := os.ReadFile("/etc/group")
+	if err != nil {
+		return nil, err
+	}
+	var groups []Group
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		f := strings.SplitN(line, ":", 4)
+		if len(f) < 4 {
+			continue
+		}
+		gid, _ := strconv.Atoi(f[2])
+		var members []string
+		if f[3] != "" {
+			for _, m := range strings.Split(strings.TrimSpace(f[3]), ",") {
+				if m != "" {
+					members = append(members, m)
+				}
+			}
+		}
+		groups = append(groups, Group{Name: f[0], GID: gid, Members: members})
+	}
+	return groups, nil
+}
+
+// UIDMin returns the minimum UID for regular users from /etc/login.defs (default 1000).
+func UIDMin() int {
+	data, err := os.ReadFile("/etc/login.defs")
+	if err != nil {
+		return 1000
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "UID_MIN") && !strings.HasPrefix(line, "#") {
+			f := strings.Fields(line)
+			if len(f) == 2 {
+				if v, err := strconv.Atoi(f[1]); err == nil {
+					return v
+				}
+			}
+		}
+	}
+	return 1000
+}
+
 // Info holds a snapshot of host and process statistics.
 type Info struct {
 	// Host

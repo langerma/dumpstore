@@ -28,6 +28,8 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots
+- **User management** — list, create, and delete local users; system users (uid < 1000) are visible but protected
+- **Group management** — list, create, and delete local groups; system groups (gid < 1000) are protected
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot and I/O changes every 10 s; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
@@ -179,6 +181,14 @@ PATCH  /api/datasets/{n}      → zfs_dataset_set.yml       (ansible)
 DELETE /api/datasets/{n}      → zfs_dataset_destroy.yml   (ansible)
 POST   /api/snapshots         → zfs_snapshot_create.yml   (ansible)
 DELETE /api/snapshots/{n}     → zfs_snapshot_destroy.yml  (ansible)
+
+GET    /api/users             → /etc/passwd               (direct)
+POST   /api/users             → user_create.yml           (ansible)
+DELETE /api/users/{name}      → user_delete.yml           (ansible)
+
+GET    /api/groups            → /etc/group                (direct)
+POST   /api/groups            → group_create.yml          (ansible)
+DELETE /api/groups/{name}     → group_delete.yml          (ansible)
 ```
 
 ## Requirements

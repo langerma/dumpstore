@@ -1,0 +1,25 @@
+---
+# Required extra vars:
+#   username - login name of the user to delete
+#   uid      - UID of the user (must be >= 1000, validated in Go before calling)
+
+- name: Delete local user
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars and safety
+      ansible.builtin.assert:
+        that:
+          - username is defined and username != ""
+          - uid is defined
+          - uid | int >= 1000
+        fail_msg: "username is required and uid must be >= 1000 (refusing to delete system users)"
+
+    - name: Delete user and home directory
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: absent
+        remove: true
+        force: true
+      register: delete_result
+      changed_when: delete_result.changed

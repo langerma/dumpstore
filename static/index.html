@@ -15,6 +15,7 @@
         <button class="tab-btn active" data-tab="pools">Sysinfo</button>
         <button class="tab-btn" data-tab="datasets">Datasets</button>
         <button class="tab-btn" data-tab="snapshots">Snapshots</button>
+        <button class="tab-btn" data-tab="users">Users &amp; Groups</button>
       </nav>
       <button class="refresh-btn" id="refreshBtn" title="Refresh">&#8635;</button>
     </div>
@@ -70,6 +71,23 @@
       </div>
       <div id="snapshots-table-wrap">
         <div class="loading">Loading snapshots…</div>
+      </div>
+    </section>
+    <!-- USERS & GROUPS TAB -->
+    <section class="tab-pane" id="tab-users">
+      <div class="section-header">
+        <h2>Local Users</h2>
+        <button class="btn-primary" id="newUserBtn">+ New User</button>
+      </div>
+      <div id="users-table-wrap">
+        <div class="loading">Loading users…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
+        <h2>Local Groups</h2>
+        <button class="btn-primary" id="newGroupBtn">+ New Group</button>
+      </div>
+      <div id="groups-table-wrap">
+        <div class="loading">Loading groups…</div>
       </div>
     </section>
   </main>
@@ -366,6 +384,105 @@
     <div class="dialog-actions">
       <button type="button" id="deleteDatasetCancelBtn" class="btn-secondary">Cancel</button>
       <button type="button" id="deleteDatasetConfirmBtn" class="btn-danger" disabled>Delete</button>
+    </div>
+  </dialog>
+
+  <!-- NEW USER DIALOG -->
+  <dialog id="newUserDialog">
+    <form id="newUserForm" method="dialog">
+      <h3>Create User</h3>
+      <fieldset class="form-section">
+        <legend>Identity</legend>
+        <label>Username <span class="required">*</span>
+          <input type="text" id="user-name" required pattern="[A-Za-z0-9._\-]+"
+            title="Letters, numbers, dots, dashes, underscores only">
+        </label>
+        <label>Shell
+          <select id="user-shell">
+            <option value="/bin/bash">/bin/bash</option>
+            <option value="/bin/sh">/bin/sh</option>
+            <option value="/sbin/nologin">/sbin/nologin</option>
+            <option value="/usr/sbin/nologin">/usr/sbin/nologin</option>
+          </select>
+        </label>
+        <label>UID <span class="field-note">(leave blank to auto-assign)</span>
+          <input type="number" id="user-uid" min="1000" placeholder="auto">
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Groups</legend>
+        <label>Primary group <span class="field-note">(leave blank to use username)</span>
+          <input type="text" id="user-group" placeholder="e.g. storage"
+            pattern="[A-Za-z0-9._\-]*">
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="user-create-group" checked>
+          Create primary group if it does not exist
+        </label>
+        <label>Additional groups <span class="field-note">(comma-separated)</span>
+          <input type="text" id="user-groups" placeholder="e.g. wheel,backup">
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Password</legend>
+        <label>Password <span class="field-note">(leave blank to lock account)</span>
+          <input type="password" id="user-password" autocomplete="new-password">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="userCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- DELETE USER DIALOG -->
+  <dialog id="deleteUserDialog">
+    <h3>Delete User</h3>
+    <div class="delete-warning">
+      <p>This will permanently delete user <strong id="deleteUserDisplayName"></strong> and their home directory. This cannot be undone.</p>
+    </div>
+    <label class="confirm-label">
+      Type <code id="deleteUserConfirmHint"></code> to confirm
+      <input type="text" id="deleteUserConfirmInput" placeholder="type username here" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" id="deleteUserCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="deleteUserConfirmBtn" class="btn-danger" disabled>Delete</button>
+    </div>
+  </dialog>
+
+  <!-- NEW GROUP DIALOG -->
+  <dialog id="newGroupDialog">
+    <form id="newGroupForm" method="dialog">
+      <h3>Create Group</h3>
+      <label>Group name <span class="required">*</span>
+        <input type="text" id="group-name" required pattern="[A-Za-z0-9._\-]+"
+          title="Letters, numbers, dots, dashes, underscores only">
+      </label>
+      <label>GID <span class="field-note">(leave blank to auto-assign)</span>
+        <input type="number" id="group-gid" min="1000" placeholder="auto">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="groupCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- DELETE GROUP DIALOG -->
+  <dialog id="deleteGroupDialog">
+    <h3>Delete Group</h3>
+    <div class="delete-warning">
+      <p>This will permanently delete group <strong id="deleteGroupDisplayName"></strong>. This cannot be undone.</p>
+    </div>
+    <label class="confirm-label">
+      Type <code id="deleteGroupConfirmHint"></code> to confirm
+      <input type="text" id="deleteGroupConfirmInput" placeholder="type group name here" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" id="deleteGroupCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="deleteGroupConfirmBtn" class="btn-danger" disabled>Delete</button>
     </div>
   </dialog>
 

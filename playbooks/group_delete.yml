@@ -1,0 +1,23 @@
+---
+# Required extra vars:
+#   groupname - name of the group to delete
+#   gid       - GID of the group (must be >= 1000, validated in Go before calling)
+
+- name: Delete local group
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars and safety
+      ansible.builtin.assert:
+        that:
+          - groupname is defined and groupname != ""
+          - gid is defined
+          - gid | int >= 1000
+        fail_msg: "groupname is required and gid must be >= 1000 (refusing to delete system groups)"
+
+    - name: Delete group
+      ansible.builtin.group:
+        name: "{{ groupname }}"
+        state: absent
+      register: delete_result
+      changed_when: delete_result.changed
