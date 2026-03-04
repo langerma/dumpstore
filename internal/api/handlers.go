@@ -504,6 +504,9 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() { wg.Wait(); close(merged) }()
 
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -513,6 +516,9 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.topic, ev.data)
+			flusher.Flush()
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()
 		}
 	}
