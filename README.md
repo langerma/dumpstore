@@ -30,7 +30,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
-- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
+- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
@@ -209,9 +209,24 @@ DELETE /api/acl/{dataset}     → acl_remove_posix.yml      (ansible)
 | Ansible               | `ansible` package (Python 3)   | `py311-ansible` or equivalent                |
 | Service manager       | systemd                        | rc.d (via `daemon(8)`)                       |
 | S.M.A.R.T. (optional) | `smartmontools`                | `smartmontools` pkg                          |
+| POSIX ACLs (optional) | `acl` pkg (`getfacl`/`setfacl`) | `py311-pylibacl` or `acl` port             |
+| NFSv4 ACLs (optional) | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`) | `nfs4-acl-tools` port       |
 | Build                 | Go 1.22+                       | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
+
+The ACL tools are optional — the ACL dialog will show an error if the required tool is not installed on the target host. Install only what you need:
+
+```bash
+# Debian/Ubuntu — POSIX ACLs
+apt install acl
+
+# Debian/Ubuntu — NFSv4 ACLs
+apt install nfs4-acl-tools
+
+# RHEL/Fedora
+dnf install acl nfs4-acl-tools
+```
 
 ## Versioning
 
