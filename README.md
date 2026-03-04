@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
-    <img src="logo-light.png" width="520" alt="dumpstore">
+    <source media="(prefers-color-scheme: dark)" srcset="images/dumpstore-blue-dark-lockup.svg">
+    <img src="images/dumpstore-blue-light-lockup.svg" width="480" alt="dumpstore">
   </picture>
 </p>
 
@@ -283,10 +283,12 @@ sudo make uninstall
 │   ├── zfs_dataset_destroy.yml      # Destroy dataset or volume
 │   ├── zfs_snapshot_create.yml      # Create snapshot
 │   └── zfs_snapshot_destroy.yml     # Destroy snapshot
+├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
 │   ├── app.js                       # Vanilla JS frontend, no dependencies
-│   └── style.css                    # Dark monospace theme
+│   ├── style.css                    # Dark monospace theme
+│   └── images/                      # Logos served by the HTTP file server
 ├── dumpstore.service                # systemd unit file (Linux)
 ├── dumpstore.rc                     # rc.d script (FreeBSD)
 └── Makefile                         # OS-aware build / install / uninstall

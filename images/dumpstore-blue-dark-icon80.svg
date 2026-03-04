@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 110" width="80" height="88">
+  <g>
+    
+      <!-- Dumpster body -->
+      <path fill="none" stroke="#60a5fa" d="M12,38 L18,98 L82,98 L88,38 Z" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <rect fill="none" stroke="#60a5fa" x="8" y="30" width="84" height="10" rx="2" stroke-width="2.5"/>
+      <path fill="none" stroke="#60a5fa" d="M8,30 L2,12 L46,8 L50,30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path fill="none" stroke="#60a5fa" d="M92,30 L98,12 L54,8 L50,30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle fill="none" stroke="#60a5fa" cx="24" cy="100" r="5" stroke-width="2"/>
+      <circle fill="none" stroke="#60a5fa" cx="76" cy="100" r="5" stroke-width="2"/>
+      <line fill="none" stroke="#60a5fa" x1="24" y1="100" x2="76" y2="100" stroke-width="1.5" opacity="0.3"/>
+      <line fill="none" stroke="#60a5fa" x1="35" y1="40" x2="33" y2="96" stroke-width="1" opacity="0.4"/>
+      <line fill="none" stroke="#60a5fa" x1="50" y1="40" x2="50" y2="96" stroke-width="1" opacity="0.4"/>
+      <line fill="none" stroke="#60a5fa" x1="65" y1="40" x2="67" y2="96" stroke-width="1" opacity="0.4"/>
+      <!-- HDD -->
+      <g transform="translate(14,-4) rotate(-12,30,55)">
+        <rect fill="none" stroke="#60a5fa" x="16" y="14" width="28" height="44" rx="2" stroke-width="2"/>
+        <circle fill="none" stroke="#60a5fa" cx="30" cy="36" r="9" stroke-width="1.2" opacity="0.5"/>
+        <circle fill="#60a5fa" cx="30" cy="36" r="2" opacity="0.4"/>
+        <rect fill="#60a5fa" opacity="0.18" x="16" y="52" width="28" height="6" rx="1"/>
+        <rect fill="#60a5fa" x="20" y="56" width="5" height="3" rx="0.5" opacity="0.5"/>
+        <rect fill="#60a5fa" x="27" y="56" width="8" height="3" rx="0.5" opacity="0.5"/>
+        <text x="23" y="30" font-family="DM Mono, monospace" font-size="5" fill="#60a5fa" opacity="0.5" font-weight="500">HDD</text>
+      </g>
+      <!-- SSD -->
+      <g transform="translate(30,-18)">
+        <rect fill="none" stroke="#60a5fa" x="16" y="14" width="22" height="36" rx="2" stroke-width="2"/>
+        <line fill="none" stroke="#60a5fa" x1="19" y1="20" x2="35" y2="20" stroke-width="1" opacity="0.3"/>
+        <line fill="none" stroke="#60a5fa" x1="19" y1="24" x2="35" y2="24" stroke-width="1" opacity="0.3"/>
+        <rect fill="#60a5fa" opacity="0.18" x="19" y="27" width="8"  height="6" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="29" y="27" width="5"  height="6" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="19" y="35" width="5"  height="5" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="26" y="35" width="8"  height="5" rx="1"/>
+        <rect fill="#60a5fa" x="22" y="47" width="10" height="3" rx="0.5" opacity="0.4"/>
+        <text x="19" y="19" font-family="DM Mono, monospace" font-size="4.5" fill="#60a5fa" opacity="0.5" font-weight="500">SSD</text>
+      </g>
+      <!-- NVMe -->
+      <g transform="translate(48,-10) rotate(10,18,50)">
+        <rect fill="none" stroke="#60a5fa" x="12" y="10" width="12" height="52" rx="2" stroke-width="2"/>
+        <rect fill="#60a5fa" opacity="0.18" x="14" y="14" width="8" height="6" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="14" y="22" width="8" height="5" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="14" y="29" width="8" height="5" rx="1"/>
+        <rect fill="#60a5fa" opacity="0.18" x="14" y="36" width="8" height="4" rx="1"/>
+        <rect fill="#60a5fa" x="12" y="57" width="12" height="5" rx="1" opacity="0.35"/>
+        <rect fill="#0f172a" x="16.5" y="57" width="2" height="3"/>
+        <text x="13" y="13" font-family="DM Mono, monospace" font-size="4" fill="#60a5fa" opacity="0.5" font-weight="500">M.2</text>
+      </g>
+  </g>
+</svg>

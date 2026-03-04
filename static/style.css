@@ -43,11 +43,9 @@ header {
   gap: 1.5rem;
 }
 .logo {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.5px;
-  white-space: nowrap;
+  height: 28px;
+  width: auto;
+  display: block;
 }
 
 nav { display: flex; gap: 4px; }
