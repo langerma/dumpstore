@@ -1,9 +1,9 @@
-<p align="center">
+<div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="images/dumpstore-blue-dark-lockup.svg">
-    <img src="images/dumpstore-blue-light-lockup.svg" width="480" alt="dumpstore">
+    <img src="images/dumpstore-blue-light-lockup.svg" width="480" alt="dumpstore" style="display:block;margin:0 auto;">
   </picture>
-</p>
+</div>
 
 <p align="center">A lightweight NAS management UI written in Go — built for Linux and FreeBSD, designed to stay out of the way of a vanilla system.</p>
 
