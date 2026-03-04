@@ -31,14 +31,14 @@
     readonly: "__skip__"
     acltype: "__skip__"
   tasks:
-    - name: validate input
+    - name: Validate input
       ansible.builtin.assert:
         that:
           - name is defined and name != ""
           - name is not search("@")
         fail_msg: name is required and must not be a snapshot path
 
-    - name: build options
+    - name: Build options
       ansible.builtin.set_fact:
         set_opts: >-
           {{
@@ -71,14 +71,14 @@
             (['acltype']     if acltype      == '' else [])
           }}
 
-    - name: set properties
+    - name: Set properties
       ansible.builtin.command:
         argv: "{{ ['zfs', 'set'] + set_opts + [name] }}"
       when: set_opts | length > 0
       register: set_result
       changed_when: set_result.rc == 0
 
-    - name: inherit properties
+    - name: Inherit properties
       ansible.builtin.command:
         argv: ['zfs', 'inherit', '{{ item }}', '{{ name }}']
       loop: "{{ inherit_list }}"

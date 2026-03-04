@@ -34,7 +34,7 @@
     copies: ""
     xattr: ""
   tasks:
-    - name: validate inputs
+    - name: Validate inputs
       ansible.builtin.assert:
         that:
           - name is defined and name != ""
@@ -45,7 +45,7 @@
           name and type are required; type must be filesystem or volume;
           volsize is required for volumes
 
-    - name: build filesystem options
+    - name: Build filesystem options
       ansible.builtin.set_fact:
         fs_opts: >-
           {{
@@ -62,7 +62,7 @@
           }}
       when: type == "filesystem"
 
-    - name: build volume options
+    - name: Build volume options
       ansible.builtin.set_fact:
         vol_opts: >-
           {{
@@ -77,14 +77,14 @@
           }}
       when: type == "volume"
 
-    - name: create filesystem
+    - name: Create filesystem
       ansible.builtin.command:
         argv: "{{ ['zfs', 'create'] + fs_opts + [name] }}"
       when: type == "filesystem"
       register: create_fs
       changed_when: create_fs.rc == 0
 
-    - name: create volume
+    - name: Create volume
       ansible.builtin.command:
         argv: "{{ ['zfs', 'create', '-V', volsize] + vol_opts + [name] }}"
       when: type == "volume"

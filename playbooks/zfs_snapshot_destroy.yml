@@ -8,14 +8,14 @@
   vars:
     recursive: "false"
   tasks:
-    - name: validate input
+    - name: Validate input
       ansible.builtin.assert:
         that:
           - snapshot is defined and snapshot != ""
           - snapshot is search("@")
         fail_msg: "snapshot must be provided and must contain '@'"
 
-    - name: destroy snapshot
+    - name: Destroy snapshot
       ansible.builtin.command:
         cmd: >-
           zfs destroy
