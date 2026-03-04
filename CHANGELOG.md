@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.6] — 2026-03-04
+
+### Fixed
+- **SSE initial state** — new subscribers now receive the current state immediately on connect instead of waiting for the next data-change poll cycle; the broker caches the last published payload per topic and delivers it synchronously in `Subscribe()`, under the same mutex as the subscriber-list update to prevent a race with concurrent `Publish()` calls
+- **SSE connection stability** — a 30-second keepalive comment (`: keepalive`) is sent on idle streams so proxies and NAT devices do not drop connections to topics where data rarely changes (e.g. `user.query`, `group.query`)
+
 ## [v0.0.5] — 2026-03-04
 
 ### Added
