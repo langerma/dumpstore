@@ -19,6 +19,12 @@
           name is required, must not contain '@' (use snapshot destroy for snapshots),
           and must include a pool prefix (refusing to destroy a pool root)
 
+    - name: unmount dataset
+      ansible.builtin.command:
+        argv: "{{ ['zfs', 'unmount'] + (['-r'] if recursive | bool else []) + [name] }}"
+      failed_when: false
+      changed_when: false
+
     - name: destroy dataset
       ansible.builtin.command:
         argv: "{{ ['zfs', 'destroy'] + (['-r'] if recursive | bool else []) + [name] }}"
