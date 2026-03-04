@@ -9,7 +9,7 @@
   vars:
     recursive: "false"
   tasks:
-    - name: validate input
+    - name: Validate input
       ansible.builtin.assert:
         that:
           - name is defined and name != ""
@@ -19,8 +19,8 @@
           name is required, must not contain '@' (use snapshot destroy for snapshots),
           and must include a pool prefix (refusing to destroy a pool root)
 
-    - name: destroy dataset
+    - name: Destroy dataset
       ansible.builtin.command:
-        argv: "{{ ['zfs', 'destroy'] + (['-r'] if recursive | bool else []) + [name] }}"
+        argv: "{{ ['zfs', 'destroy', '-f'] + (['-r'] if recursive | bool else []) + [name] }}"
       register: destroy_result
       changed_when: destroy_result.rc == 0

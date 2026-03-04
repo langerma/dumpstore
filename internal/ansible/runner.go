@@ -186,9 +186,13 @@ func firstFailure(out *PlaybookOutput) error {
 				if !result.Failed {
 					continue
 				}
-				msg := result.Msg
-				if msg == "" {
-					msg = strings.TrimSpace(result.Stderr + "\n" + result.Stdout)
+				msg := strings.TrimSpace(result.Msg)
+				if detail := strings.TrimSpace(result.Stderr + "\n" + result.Stdout); detail != "" {
+					if msg == "" {
+						msg = detail
+					} else {
+						msg = msg + ": " + detail
+					}
 				}
 				if msg == "" {
 					msg = fmt.Sprintf("exit code %d", result.RC)

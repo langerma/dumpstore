@@ -217,7 +217,7 @@ type DatasetProp struct {
 // returns a map of property name → DatasetProp.
 func GetDatasetProps(name string) (map[string]DatasetProp, error) {
 	out, err := run("zfs", "get", "-H",
-		"compression,quota,mountpoint,recordsize,atime,exec,sync,dedup,copies,xattr,readonly",
+		"compression,quota,mountpoint,recordsize,atime,exec,sync,dedup,copies,xattr,readonly,acltype",
 		name)
 	if err != nil {
 		return nil, err

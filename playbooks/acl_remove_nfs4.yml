@@ -1,0 +1,26 @@
+---
+# Remove an NFSv4 ACL entry from a dataset mountpoint.
+#
+# Required extra vars:
+#   mountpoint  - absolute path of the dataset mountpoint (e.g. /tank/data)
+#   ace         - full NFSv4 ACE string to remove (e.g. "A::alice@localdomain:rwaDxtTnNcCoy")
+#                 Format: type:flags:principal:perms
+
+- name: Remove NFSv4 ACL entry
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - mountpoint is defined and mountpoint != ""
+          - ace is defined and ace != ""
+          - mountpoint is not search('[;|&$`]')
+          - ace is not search('[;|&$`]')
+        fail_msg: "mountpoint and ace are required and must not contain shell-special characters"
+
+    - name: Remove NFSv4 ACL entry
+      ansible.builtin.command:
+        argv: ["nfs4_setfacl", "-x", "{{ ace }}", "{{ mountpoint }}"]
+      register: acl_result
+      changed_when: acl_result.rc == 0

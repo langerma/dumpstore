@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.5] — 2026-03-04
+
+### Added
+- **POSIX ACL management** — view, add, and remove POSIX ACL entries on mounted datasets via `GET/POST/DELETE /api/acl/{dataset}`; uses `getfacl` / `setfacl`
+- **NFSv4 ACL management** — same API, uses `nfs4_getfacl` / `nfs4_setfacl`; `acl` and `nfs4-acl-tools` are optional runtime dependencies
+- `acltype` property editable via `PATCH /api/datasets/{name}` (`off`, `posix`, `nfsv4`)
+- ACL tab in dataset row: shows current entries, add-entry form, enable/disable controls
+- "Disable ACLs" button in ACL dialog (uses `<dialog>` pattern, not `confirm()`)
+- Mandatory POSIX base entries (`user::`, `group::`, `other::`) shown without a delete button to prevent invalid ACL state
+
+### Fixed
+- **systemd mount namespace** — removed `PrivateTmp=true` and `ProtectSystem=strict/full` from the service unit; both options create an isolated mount namespace with slave propagation, causing `zfs create` to not auto-mount and `zfs destroy` to see datasets as busy
+- `zfs destroy` now uses `-f` (force unmount) to reliably remove mounted datasets when invoked from the service
+- Ansible task failure messages now include `stderr`/`stdout` in addition to the generic `msg` field, making ZFS errors visible in logs and the op-log dialog
+
+### Changed
+- All Ansible task names capitalised to satisfy `ansible-lint` name-casing rule
+
 ## [v0.0.4] — 2026-03-04
 
 ### Added

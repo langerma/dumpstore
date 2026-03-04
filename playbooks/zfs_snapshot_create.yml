@@ -9,7 +9,7 @@
   vars:
     recursive: "false"
   tasks:
-    - name: validate inputs
+    - name: Validate inputs
       ansible.builtin.assert:
         that:
           - dataset is defined and dataset != ""
@@ -18,7 +18,7 @@
           - snapname is not search("@")
         fail_msg: "dataset and snapname must be provided and must not contain '@'"
 
-    - name: create snapshot
+    - name: Create snapshot
       ansible.builtin.command:
         cmd: >-
           zfs snapshot

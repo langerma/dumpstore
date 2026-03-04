@@ -56,6 +56,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)
+	mux.HandleFunc("GET /api/acl/{dataset...}", h.getDatasetACL)
+	mux.HandleFunc("POST /api/acl/{dataset...}", h.setACLEntry)
+	mux.HandleFunc("DELETE /api/acl/{dataset...}", h.removeACLEntry)
 	mux.HandleFunc("GET /api/users", h.getUsers)
 	mux.HandleFunc("POST /api/users", h.createUser)
 	mux.HandleFunc("PUT /api/users/{name}", h.modifyUser)
@@ -160,7 +163,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly"}
+	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype"}
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, p := range allowed {
 		allowedSet[p] = true
@@ -913,6 +916,189 @@ func (h *Handler) publishUserGroup() {
 	if groups, err := system.ListGroups(); err == nil {
 		h.broker.Publish("group.query", groups)
 	}
+}
+
+// aclSafeRe matches strings that are safe to pass as ACE specs to setfacl / nfs4_setfacl.
+// Allows letters, digits, and the small set of punctuation found in valid ACE specs:
+//   - POSIX: "user:alice:rwx", "default:group:storage:r-x"
+//   - NFSv4: "A::OWNER@:rwaDxtTnNcCoy", "A:fd:alice@localdomain:rwx"
+var aclSafeRe = func() func(string) bool {
+	return func(s string) bool {
+		for _, c := range s {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+				c == ':' || c == '@' || c == '-' || c == '_' || c == '.' || c == '=' || c == '/') {
+				return false
+			}
+		}
+		return len(s) > 0
+	}
+}()
+
+// getDatasetACL handles GET /api/acl/{dataset...}
+func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("dataset")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+	acl, err := zfs.GetDatasetACL(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, acl)
+}
+
+// setACLEntry handles POST /api/acl/{dataset...}
+// Body: {"ace":"user:alice:rwx","recursive":false}  (POSIX)
+//
+//	{"ace":"A::alice@localdomain:rwaDxtTnNcCoy"}       (NFSv4)
+func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("dataset")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+
+	var req struct {
+		ACE       string `json:"ace"`
+		Recursive bool   `json:"recursive"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.ACE == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("ace is required"), nil)
+		return
+	}
+	if !aclSafeRe(req.ACE) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("ace contains invalid characters"), nil)
+		return
+	}
+
+	acl, err := zfs.GetDatasetACL(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if acl.ACLType == "off" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name), nil)
+		return
+	}
+	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		return
+	}
+
+	recursive := "false"
+	if req.Recursive {
+		recursive = "true"
+	}
+
+	var playbook string
+	vars := map[string]string{
+		"mountpoint": acl.Mountpoint,
+		"ace":        req.ACE,
+		"recursive":  recursive,
+	}
+	switch acl.ACLType {
+	case "posix":
+		playbook = "acl_set_posix.yml"
+	case "nfsv4":
+		playbook = "acl_set_nfs4.yml"
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
+		return
+	}
+
+	out, err := h.runner.Run(playbook, vars)
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
+}
+
+// removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
+// For POSIX: entry is the removal spec (e.g. "user:alice", "default:group:storage")
+// For NFSv4: entry is the full ACE string to remove
+func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("dataset")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+
+	entry := r.URL.Query().Get("entry")
+	if entry == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("entry query parameter required"), nil)
+		return
+	}
+	if !aclSafeRe(entry) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"), nil)
+		return
+	}
+
+	recursive := r.URL.Query().Get("recursive") == "true"
+
+	acl, err := zfs.GetDatasetACL(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		return
+	}
+
+	recursiveStr := "false"
+	if recursive {
+		recursiveStr = "true"
+	}
+
+	var playbook string
+	vars := map[string]string{
+		"mountpoint": acl.Mountpoint,
+		"ace":        entry,
+		"recursive":  recursiveStr,
+	}
+	switch acl.ACLType {
+	case "posix":
+		playbook = "acl_remove_posix.yml"
+	case "nfsv4":
+		playbook = "acl_remove_nfs4.yml"
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
+		return
+	}
+
+	out, err := h.runner.Run(playbook, vars)
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"dataset": name, "entry": entry, "tasks": out.Steps()})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

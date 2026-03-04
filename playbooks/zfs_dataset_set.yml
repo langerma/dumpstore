@@ -13,6 +13,7 @@
 #   dedup        - on, off, verify
 #   copies       - 1, 2, 3
 #   xattr        - on, sa, off
+#   acltype      - off, posix, nfsv4
 - name: Set ZFS dataset properties
   hosts: localhost
   gather_facts: false
@@ -28,15 +29,16 @@
     copies: "__skip__"
     xattr: "__skip__"
     readonly: "__skip__"
+    acltype: "__skip__"
   tasks:
-    - name: validate input
+    - name: Validate input
       ansible.builtin.assert:
         that:
           - name is defined and name != ""
           - name is not search("@")
         fail_msg: name is required and must not be a snapshot path
 
-    - name: build options
+    - name: Build options
       ansible.builtin.set_fact:
         set_opts: >-
           {{
@@ -50,7 +52,8 @@
             (['dedup='        + dedup]       if dedup        not in ['', '__skip__'] else []) +
             (['copies='       + copies]      if copies       not in ['', '__skip__'] else []) +
             (['xattr='        + xattr]       if xattr        not in ['', '__skip__'] else []) +
-            (['readonly='     + readonly]    if readonly     not in ['', '__skip__'] else [])
+            (['readonly='     + readonly]    if readonly     not in ['', '__skip__'] else []) +
+            (['acltype='      + acltype]     if acltype      not in ['', '__skip__'] else [])
           }}
         inherit_list: >-
           {{
@@ -64,17 +67,18 @@
             (['dedup']       if dedup        == '' else []) +
             (['copies']      if copies       == '' else []) +
             (['xattr']       if xattr        == '' else []) +
-            (['readonly']    if readonly     == '' else [])
+            (['readonly']    if readonly     == '' else []) +
+            (['acltype']     if acltype      == '' else [])
           }}
 
-    - name: set properties
+    - name: Set properties
       ansible.builtin.command:
         argv: "{{ ['zfs', 'set'] + set_opts + [name] }}"
       when: set_opts | length > 0
       register: set_result
       changed_when: set_result.rc == 0
 
-    - name: inherit properties
+    - name: Inherit properties
       ansible.builtin.command:
         argv: ['zfs', 'inherit', '{{ item }}', '{{ name }}']
       loop: "{{ inherit_list }}"

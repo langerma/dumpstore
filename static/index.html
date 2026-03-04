@@ -545,6 +545,30 @@
     </div>
   </dialog>
 
+  <!-- DISABLE ACL CONFIRM DIALOG -->
+  <dialog id="disableACLDialog">
+    <h3>Disable ACLs</h3>
+    <div class="delete-warning">
+      <p>Disable ACLs on <strong id="disableACLDatasetName"></strong>?</p>
+      <p class="delete-child-warning">Existing ACL entries will be lost.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="disableACLCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="disableACLConfirmBtn" class="btn-danger">Disable ACLs</button>
+    </div>
+  </dialog>
+
+  <!-- ACL DIALOG -->
+  <dialog id="aclDialog">
+    <h3 id="aclDialogTitle">ACL</h3>
+    <div id="aclDialogMeta"></div>
+    <div id="aclDialogEntries"></div>
+    <div id="aclDialogAddForm"></div>
+    <div class="dialog-actions">
+      <button type="button" id="aclDialogClose" class="btn-secondary">Close</button>
+    </div>
+  </dialog>
+
   <!-- OPERATION LOG DIALOG -->
   <dialog id="opLogDialog">
     <h3 id="opLogTitle">Operation Result</h3>

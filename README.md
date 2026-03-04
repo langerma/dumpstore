@@ -13,7 +13,7 @@ I run a [Kobol Helios64](https://wiki.kobol.io/helios64/intro/) as my home NAS �
 
 What I wanted was simple: observe and manage my storage from a browser, on a machine that stays as close to a vanilla Linux or FreeBSD installation as possible. No agents, no daemons-within-daemons, no frameworks that outlive their welcome. Just a single compiled binary, some Ansible playbooks, and a handful of static files.
 
-dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, fine-grained permissions, and eventually ACL support. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
+dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, fine-grained permissions, and ZFS send/receive. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
 
 If you run a Helios64, an old server, or any ZFS box where you care about what is actually installed on it, this might be the tool for you.
 
@@ -30,6 +30,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
+- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
@@ -106,6 +107,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  ListSnapshots()      │                        │    --extra-vars '{...}'    │
 │  IOStats()            │                        │  env: ANSIBLE_STDOUT_      │
 │  GetDatasetProps()    │                        │    CALLBACK=json           │
+│  GetDatasetACL()      │                        │                            │
 │  PoolStatuses()       │                        │                            │
 │  Version()            │                        │  parse JSON output         │
 │  system.Get()         │                        │  → []TaskStep              │
@@ -191,6 +193,12 @@ GET    /api/groups            → /etc/group                (direct)
 POST   /api/groups            → group_create.yml          (ansible)
 PUT    /api/groups/{name}     → group_modify.yml          (ansible)
 DELETE /api/groups/{name}     → group_delete.yml          (ansible)
+
+GET    /api/acl/{dataset}     → getfacl / nfs4_getfacl    (direct)
+POST   /api/acl/{dataset}     → acl_set_posix.yml         (ansible)
+                                acl_set_nfs4.yml
+DELETE /api/acl/{dataset}     → acl_remove_posix.yml      (ansible)
+                                acl_remove_nfs4.yml
 ```
 
 ## Requirements
@@ -201,9 +209,24 @@ DELETE /api/groups/{name}     → group_delete.yml          (ansible)
 | Ansible               | `ansible` package (Python 3)   | `py311-ansible` or equivalent                |
 | Service manager       | systemd                        | rc.d (via `daemon(8)`)                       |
 | S.M.A.R.T. (optional) | `smartmontools`                | `smartmontools` pkg                          |
+| POSIX ACLs (optional) | `acl` pkg (`getfacl`/`setfacl`) | `py311-pylibacl` or `acl` port             |
+| NFSv4 ACLs (optional) | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`) | `nfs4-acl-tools` port       |
 | Build                 | Go 1.22+                       | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
+
+The ACL tools are optional — the ACL dialog will show an error if the required tool is not installed on the target host. Install only what you need:
+
+```bash
+# Debian/Ubuntu — POSIX ACLs
+apt install acl
+
+# Debian/Ubuntu — NFSv4 ACLs
+apt install nfs4-acl-tools
+
+# RHEL/Fedora
+dnf install acl nfs4-acl-tools
+```
 
 ## Versioning
 
@@ -282,6 +305,7 @@ sudo make uninstall
 ├── go.mod
 ├── internal/
 │   ├── zfs/zfs.go                   # Direct zpool/zfs command execution (reads)
+│   ├── zfs/acl.go                   # GetDatasetACL — getfacl/nfs4_getfacl parsing
 │   ├── ansible/runner.go            # Ansible playbook execution + JSON output parsing
 │   ├── api/handlers.go              # REST API handlers + input validation
 │   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
@@ -300,7 +324,11 @@ sudo make uninstall
 │   ├── user_delete.yml              # Delete user and home directory
 │   ├── group_create.yml             # Create local group
 │   ├── group_modify.yml             # Modify group (name, GID, members)
-│   └── group_delete.yml             # Delete local group
+│   ├── group_delete.yml             # Delete local group
+│   ├── acl_set_posix.yml            # Add/modify POSIX ACL entry (setfacl -m)
+│   ├── acl_remove_posix.yml         # Remove POSIX ACL entry (setfacl -x)
+│   ├── acl_set_nfs4.yml             # Add NFSv4 ACL entry (nfs4_setfacl -a)
+│   └── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
@@ -340,6 +368,9 @@ sudo make uninstall
 | POST   | `/api/groups`               | Create a local group                  |
 | PUT    | `/api/groups/{name}`        | Edit group (name, GID, members)       |
 | DELETE | `/api/groups/{name}`        | Delete a local group                  |
+| GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset         |
+| POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry            |
+| DELETE | `/api/acl/{dataset}`        | Remove an ACL entry                   |
 
 ### POST /api/datasets
 
@@ -374,7 +405,7 @@ Body is a JSON object with any subset of editable properties. An empty string va
 }
 ```
 
-Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`.
+Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`.
 
 ### DELETE /api/datasets/{name}
 
@@ -395,6 +426,54 @@ Pool roots (e.g. `tank`) cannot be deleted via this endpoint — use `zpool dest
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
 Append `?recursive=true` to also destroy clones.
+
+### GET /api/acl/{dataset}
+
+Returns the ACL type and entries for the dataset's mountpoint.
+
+```json
+{
+  "dataset": "tank/data",
+  "mountpoint": "/mnt/data",
+  "acl_type": "posix",
+  "entries": [
+    { "tag": "user",  "qualifier": "",      "perms": "rwx", "default": false },
+    { "tag": "user",  "qualifier": "alice", "perms": "r-x", "default": false },
+    { "tag": "group", "qualifier": "",      "perms": "r-x", "default": false },
+    { "tag": "mask",  "qualifier": "",      "perms": "rwx", "default": false },
+    { "tag": "other", "qualifier": "",      "perms": "---", "default": false }
+  ]
+}
+```
+
+`acl_type` is one of `"posix"`, `"nfsv4"`, or `"off"`. Entries are empty when `acl_type` is `"off"` or the dataset has no mountpoint.
+
+For NFSv4 datasets each entry has the form:
+```json
+{ "tag": "A", "flags": "fd", "qualifier": "OWNER@", "perms": "rwaDxtTnNcCoy" }
+```
+
+### POST /api/acl/{dataset}
+
+Add or modify an ACL entry. The `ace` string format depends on the dataset's `acltype`:
+
+- **POSIX**: `setfacl -m` spec — `"user:alice:rwx"`, `"group:storage:r-x"`, `"default:user:alice:rwx"`
+- **NFSv4**: full ACE string — `"A::alice@localdomain:rwaDxtTnNcCoy"`, `"A:fd:GROUP@:rxtncoy"`
+
+```json
+{ "ace": "user:alice:rwx", "recursive": false }
+```
+
+`recursive` (POSIX only) applies `setfacl -R` to all files inside the mountpoint. Returns Ansible task steps.
+
+### DELETE /api/acl/{dataset}?entry=\<spec\>
+
+Remove an ACL entry. The `entry` query parameter is:
+
+- **POSIX**: removal spec without perms — `user:alice`, `default:group:storage`
+- **NFSv4**: full ACE string to match and remove
+
+Append `&recursive=true` (POSIX only) to remove recursively.
 
 ### GET /api/events
 
@@ -437,6 +516,5 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 |--------------------------|--------------------------------------------------------------|
 | SMB/NFS share management | Create and manage Samba and NFS exports                      |
 | File browser             | Browse dataset contents, set permissions                     |
-| ACL support              | Fine-grained POSIX and NFSv4 ACL editing                     |
 | ZFS send/receive         | Pool replication and off-site backup                         |
 | Alerts                   | Configurable thresholds for pool health, disk temp, capacity |

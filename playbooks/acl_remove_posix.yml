@@ -1,0 +1,38 @@
+---
+# Remove a POSIX ACL entry from a dataset mountpoint.
+#
+# Required extra vars:
+#   mountpoint  - absolute path of the dataset mountpoint (e.g. /tank/data)
+#   ace         - setfacl removal spec (e.g. "user:alice", "default:group:storage")
+#                 Note: perms are NOT included in the removal spec
+# Optional:
+#   recursive   - "true" to remove recursively from all files inside mountpoint (default "false")
+
+- name: Remove POSIX ACL entry
+  hosts: localhost
+  gather_facts: false
+  vars:
+    recursive: "false"
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - mountpoint is defined and mountpoint != ""
+          - ace is defined and ace != ""
+          - mountpoint is not search('[;|&$`]')
+          - ace is not search('[;|&$`]')
+        fail_msg: "mountpoint and ace are required and must not contain shell-special characters"
+
+    - name: Remove POSIX ACL entry (non-recursive)
+      ansible.builtin.command:
+        argv: ["setfacl", "-x", "{{ ace }}", "{{ mountpoint }}"]
+      when: recursive != "true"
+      register: acl_result
+      changed_when: acl_result.rc == 0
+
+    - name: Remove POSIX ACL entry (recursive)
+      ansible.builtin.command:
+        argv: ["setfacl", "-R", "-x", "{{ ace }}", "{{ mountpoint }}"]
+      when: recursive == "true"
+      register: acl_result_r
+      changed_when: acl_result_r.rc == 0

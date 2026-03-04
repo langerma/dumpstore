@@ -17,9 +17,6 @@ RestartSec=5
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths=/tmp /etc /home
-PrivateTmp=true
 
 # ZFS commands need access to /dev and /proc
 PrivateDevices=false

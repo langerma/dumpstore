@@ -14,6 +14,8 @@ const state = {
   groups: [],
   activeTab: 'pools',
   collapsedDatasets: new Set(),
+  aclDataset: '',
+  aclData: null,
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -449,6 +451,7 @@ function renderDatasets() {
         <td>
           <div class="row-actions">
             <button class="btn-edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
+            ${d.type !== 'volume' ? `<button class="btn-acl btn-small" data-ds="${esc(d.name)}">ACL</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -484,6 +487,10 @@ function renderDatasets() {
 
   wrap.querySelectorAll('.btn-del[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openDeleteDatasetDialog(btn.dataset.ds, btn.dataset.type));
+  });
+
+  wrap.querySelectorAll('.btn-acl[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openACLDialog(btn.dataset.ds));
   });
 }
 
@@ -1081,6 +1088,327 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
     showOpLog(`Failed to update group: ${groupname}`, err.tasks, err.message);
   }
 });
+
+// ── ACL dialog ────────────────────────────────────────────────────────────────
+const aclDialog = document.getElementById('aclDialog');
+document.getElementById('aclDialogClose').addEventListener('click', () => aclDialog.close());
+
+async function openACLDialog(dataset) {
+  state.aclDataset = dataset;
+  state.aclData = null;
+  document.getElementById('aclDialogTitle').textContent = `ACL — ${dataset}`;
+  document.getElementById('aclDialogMeta').innerHTML = '<span class="muted">Loading…</span>';
+  document.getElementById('aclDialogEntries').innerHTML = '';
+  document.getElementById('aclDialogAddForm').innerHTML = '';
+  aclDialog.showModal();
+  try {
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    document.getElementById('aclDialogMeta').innerHTML =
+      `<p class="op-error">Failed to load ACL: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderACLDialog() {
+  const d = state.aclData;
+  if (!d) return;
+
+  const typeBadgeACL = t => `<span class="type-badge type-${esc(t)}">${esc(t)}</span>`;
+  const disableBtn = d.acl_type !== 'off'
+    ? `<button class="btn-danger btn-small" id="aclDisable">Disable ACLs</button>`
+    : '';
+  document.getElementById('aclDialogMeta').innerHTML =
+    `<p class="acl-meta">Mountpoint: <code>${esc(d.mountpoint || '—')}</code> &nbsp; Type: ${typeBadgeACL(d.acl_type || 'off')} ${disableBtn}</p>`;
+  if (disableBtn) {
+    document.getElementById('aclDisable').addEventListener('click', () => disableACLs(d.dataset));
+  }
+
+  if (d.acl_type === 'off') {
+    document.getElementById('aclDialogEntries').innerHTML = `
+      <div class="acl-off">
+        <p class="muted">ACLs are not enabled on this dataset.</p>
+        <div class="row-actions">
+          <button class="btn-primary" id="aclEnablePosix">Enable POSIX ACLs</button>
+          <button class="btn-secondary" id="aclEnableNfs4">Enable NFSv4 ACLs</button>
+        </div>
+      </div>`;
+    document.getElementById('aclDialogAddForm').innerHTML = '';
+    document.getElementById('aclEnablePosix').addEventListener('click', () => enableACLs(d.dataset, 'posix'));
+    document.getElementById('aclEnableNfs4').addEventListener('click', () => enableACLs(d.dataset, 'nfsv4'));
+    return;
+  }
+
+  if (d.acl_type === 'posix') {
+    renderPOSIXACLEntries(d);
+    renderPOSIXAddForm(d);
+  } else if (d.acl_type === 'nfsv4') {
+    renderNFSv4ACLEntries(d);
+    renderNFSv4AddForm(d);
+  }
+}
+
+function renderPOSIXACLEntries(d) {
+  const entries = d.entries || [];
+  if (!entries.length) {
+    document.getElementById('aclDialogEntries').innerHTML = '<p class="muted">No ACL entries.</p>';
+    return;
+  }
+  const mandatoryTags = new Set(['user', 'group', 'other']);
+  const rows = entries.map(e => {
+    const removal = (e.default ? 'default:' : '') + e.tag + (e.qualifier ? ':' + e.qualifier : '');
+    const perms = e.perms || '---';
+    const mandatory = !e.default && !e.qualifier && mandatoryTags.has(e.tag);
+    const delBtn = mandatory ? '' : `<button class="btn-del btn-small" data-entry="${esc(removal)}">✕</button>`;
+    return `<tr>
+      <td>${e.default ? '<span class="type-badge type-volume">default</span> ' : ''}${esc(e.tag)}</td>
+      <td>${esc(e.qualifier) || '<span class="muted">—</span>'}</td>
+      <td class="acl-perms"><code>${esc(perms.replace(/-/g,'·'))}</code></td>
+      <td>${delBtn}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('aclDialogEntries').innerHTML = `
+    <table class="acl-table">
+      <thead><tr><th>Tag</th><th>Qualifier</th><th>Perms</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('aclDialogEntries').querySelectorAll('.btn-del[data-entry]').forEach(btn => {
+    btn.addEventListener('click', () => removeACLEntry(btn.dataset.entry, false));
+  });
+}
+
+function renderNFSv4ACLEntries(d) {
+  const entries = d.entries || [];
+  if (!entries.length) {
+    document.getElementById('aclDialogEntries').innerHTML = '<p class="muted">No ACL entries.</p>';
+    return;
+  }
+  const typeLabel = { A: 'Allow', D: 'Deny', U: 'Audit', L: 'Alarm' };
+  const rows = entries.map(e => {
+    const ace = `${e.tag}:${e.flags}:${e.qualifier}:${e.perms}`;
+    return `<tr>
+      <td>${esc(typeLabel[e.tag] || e.tag)}</td>
+      <td class="muted">${esc(e.flags) || '—'}</td>
+      <td>${esc(e.qualifier)}</td>
+      <td><code class="acl-perms">${esc(e.perms)}</code></td>
+      <td><button class="btn-del btn-small" data-entry="${esc(ace)}">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('aclDialogEntries').innerHTML = `
+    <table class="acl-table">
+      <thead><tr><th>Type</th><th>Flags</th><th>Principal</th><th>Perms</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('aclDialogEntries').querySelectorAll('.btn-del[data-entry]').forEach(btn => {
+    btn.addEventListener('click', () => removeACLEntry(btn.dataset.entry, false));
+  });
+}
+
+function renderPOSIXAddForm(d) {
+  const userList = state.users.map(u => `<option value="${esc(u.username)}">`).join('');
+  const groupList = state.groups.map(g => `<option value="${esc(g.name)}">`).join('');
+
+  document.getElementById('aclDialogAddForm').innerHTML = `
+    <fieldset class="form-section acl-add-form">
+      <legend>Add Entry</legend>
+      <datalist id="aclUserList">${userList}</datalist>
+      <datalist id="aclGroupList">${groupList}</datalist>
+      <div class="form-grid">
+        <label>Tag
+          <select id="aclTag">
+            <option value="user">user</option>
+            <option value="group">group</option>
+            <option value="mask">mask</option>
+            <option value="other">other</option>
+          </select>
+        </label>
+        <label id="aclQualifierLabel">Qualifier
+          <input type="text" id="aclQualifier" list="aclUserList" placeholder="username or groupname" autocomplete="off">
+        </label>
+      </div>
+      <div class="acl-perms-row">
+        <label class="checkbox-label"><input type="checkbox" id="aclPermR" checked> read (r)</label>
+        <label class="checkbox-label"><input type="checkbox" id="aclPermW"> write (w)</label>
+        <label class="checkbox-label"><input type="checkbox" id="aclPermX"> execute (x)</label>
+        <label class="checkbox-label"><input type="checkbox" id="aclDefault"> default</label>
+        <label class="checkbox-label"><input type="checkbox" id="aclRecursive"> recursive</label>
+      </div>
+      <div class="dialog-actions" style="margin-top:0.5rem;padding-top:0">
+        <button type="button" class="btn-primary" id="aclAddBtn">Add Entry</button>
+      </div>
+    </fieldset>`;
+
+  const tagSel = document.getElementById('aclTag');
+  const qualLabel = document.getElementById('aclQualifierLabel');
+  const qualInput = document.getElementById('aclQualifier');
+  const listEl = document.getElementById('aclUserList');
+
+  tagSel.addEventListener('change', () => {
+    const t = tagSel.value;
+    const hasQualifier = t === 'user' || t === 'group';
+    qualLabel.style.display = hasQualifier ? '' : 'none';
+    if (t === 'group') {
+      qualInput.setAttribute('list', 'aclGroupList');
+    } else {
+      qualInput.setAttribute('list', 'aclUserList');
+    }
+  });
+
+  document.getElementById('aclAddBtn').addEventListener('click', async () => {
+    const tag = tagSel.value;
+    const qualifier = qualInput.value.trim();
+    const r = document.getElementById('aclPermR').checked ? 'r' : '-';
+    const w = document.getElementById('aclPermW').checked ? 'w' : '-';
+    const x = document.getElementById('aclPermX').checked ? 'x' : '-';
+    const isDefault = document.getElementById('aclDefault').checked;
+    const recursive = document.getElementById('aclRecursive').checked;
+
+    let spec = tag;
+    if (tag === 'user' || tag === 'group') spec += ':' + qualifier;
+    else spec += ':';
+    spec += ':' + r + w + x;
+    if (isDefault) spec = 'default:' + spec;
+
+    await addACLEntry(spec, recursive);
+  });
+}
+
+function renderNFSv4AddForm(d) {
+  document.getElementById('aclDialogAddForm').innerHTML = `
+    <fieldset class="form-section acl-add-form">
+      <legend>Add Entry</legend>
+      <div class="form-grid">
+        <label>Type
+          <select id="aclNfs4Type">
+            <option value="A">Allow (A)</option>
+            <option value="D">Deny (D)</option>
+          </select>
+        </label>
+        <label>Principal
+          <input type="text" id="aclNfs4Principal" placeholder="OWNER@, GROUP@, EVERYONE@, user@domain" list="aclNfs4Principals" autocomplete="off">
+          <datalist id="aclNfs4Principals">
+            <option value="OWNER@">
+            <option value="GROUP@">
+            <option value="EVERYONE@">
+            ${state.users.map(u => `<option value="${esc(u.username)}@localdomain">`).join('')}
+          </datalist>
+        </label>
+      </div>
+      <div class="acl-perms-row">
+        <span class="field-note">Flags:</span>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4FlagF"> file-inherit (f)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4FlagD"> dir-inherit (d)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4FlagI"> inherit-only (i)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4FlagN"> no-propagate (n)</label>
+      </div>
+      <div class="acl-perms-row">
+        <span class="field-note">Perms:</span>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4R" checked> read (r)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4W"> write (w)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4X"> execute (x)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4A"> append (a)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4Del"> delete (d)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4DelC"> del-child (D)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4C"> read-ACL (c)</label>
+        <label class="checkbox-label"><input type="checkbox" id="nfs4BigC"> write-ACL (C)</label>
+      </div>
+      <div class="dialog-actions" style="margin-top:0.5rem;padding-top:0">
+        <button type="button" class="btn-primary" id="aclNfs4AddBtn">Add Entry</button>
+      </div>
+    </fieldset>`;
+
+  document.getElementById('aclNfs4AddBtn').addEventListener('click', async () => {
+    const type = document.getElementById('aclNfs4Type').value;
+    const principal = document.getElementById('aclNfs4Principal').value.trim();
+    if (!principal) { toast('Principal is required', 'error'); return; }
+
+    const flags = [
+      document.getElementById('nfs4FlagF').checked ? 'f' : '',
+      document.getElementById('nfs4FlagD').checked ? 'd' : '',
+      document.getElementById('nfs4FlagI').checked ? 'i' : '',
+      document.getElementById('nfs4FlagN').checked ? 'n' : '',
+    ].join('');
+
+    const perms = [
+      document.getElementById('nfs4R').checked    ? 'r' : '',
+      document.getElementById('nfs4W').checked    ? 'w' : '',
+      document.getElementById('nfs4X').checked    ? 'x' : '',
+      document.getElementById('nfs4A').checked    ? 'a' : '',
+      document.getElementById('nfs4Del').checked  ? 'd' : '',
+      document.getElementById('nfs4DelC').checked ? 'D' : '',
+      document.getElementById('nfs4C').checked    ? 'c' : '',
+      document.getElementById('nfs4BigC').checked ? 'C' : '',
+    ].join('');
+
+    if (!perms) { toast('Select at least one permission', 'error'); return; }
+
+    const ace = `${type}:${flags}:${principal}:${perms}`;
+    await addACLEntry(ace, false);
+  });
+}
+
+async function addACLEntry(ace, recursive) {
+  const dataset = state.aclDataset;
+  try {
+    const res = await api('POST', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+      { ace, recursive });
+    showOpLog(`ACL entry added — ${dataset}`, res.tasks, null);
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    showOpLog(`Failed to add ACL entry`, err.tasks, err.message);
+  }
+}
+
+async function removeACLEntry(entry, recursive) {
+  const dataset = state.aclDataset;
+  try {
+    const qs = `entry=${encodeURIComponent(entry)}${recursive ? '&recursive=true' : ''}`;
+    const res = await api('DELETE', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}?${qs}`);
+    showOpLog(`ACL entry removed — ${dataset}`, res.tasks, null);
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    showOpLog(`Failed to remove ACL entry`, err.tasks, err.message);
+  }
+}
+
+async function enableACLs(dataset, acltype) {
+  try {
+    const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+      { acltype });
+    showOpLog(`Enabled ${acltype} ACLs — ${dataset}`, res.tasks, null);
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    showOpLog(`Failed to enable ACLs`, err.tasks, err.message);
+  }
+}
+
+const disableACLDialog = document.getElementById('disableACLDialog');
+document.getElementById('disableACLCancelBtn').addEventListener('click', () => disableACLDialog.close());
+document.getElementById('disableACLConfirmBtn').addEventListener('click', async () => {
+  const dataset = state.aclDataset;
+  disableACLDialog.close();
+  try {
+    const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+      { acltype: 'off' });
+    showOpLog(`Disabled ACLs — ${dataset}`, res.tasks, null);
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    showOpLog(`Failed to disable ACLs`, err.tasks, err.message);
+  }
+});
+
+function disableACLs(dataset) {
+  document.getElementById('disableACLDatasetName').textContent = dataset;
+  disableACLDialog.showModal();
+}
 
 // ── XSS helper ────────────────────────────────────────────────────────────────
 function esc(s) {
