@@ -689,3 +689,5 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-small { font-size: 11px; padding: 2px 7px; }
 .btn-acl { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
 .btn-acl:hover { background: var(--surface); color: var(--text); }
+.btn-chown { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.btn-chown:hover { background: var(--surface); color: var(--text); }
