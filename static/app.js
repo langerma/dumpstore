@@ -173,7 +173,7 @@ function renderSysInfo() {
 
   // Header version badge
   const verBadge = document.getElementById('appVersion');
-  if (verBadge && s.app_version) verBadge.textContent = `v${s.app_version}`;
+  if (verBadge && s.app_version) verBadge.textContent = s.app_version;
 
   wrap.innerHTML = `
     <div class="sysinfo-card">
