@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.7] — 2026-03-05
+
+### Added
+- **Software inventory** — `/api/sysinfo` now probes and returns versions of all external tools used at runtime: ZFS, Ansible, Python, smartctl, nfs4-acl-tools, setfacl, and the system package manager; missing tools are reported as N/A
+- **Installed Software section** — dedicated table on the Sysinfo tab, displayed directly below the Host info card
+- **Dataset mountpoint ownership management** — `GET/POST /api/chown/{dataset}` shows and sets the owner/group of a dataset's mountpoint via Ansible; chown button added to the dataset row
+
+### Changed
+- Sysinfo tab layout overhauled: Host card now has a section header; Storage Pools and I/O Statistics rendered side-by-side in a 50/50 grid, each filling its half
+- Dumpstore version moved from the ZFS version bar into the sticky header badge
+- Pool device names wrap instead of truncating with ellipsis
+- I/O Statistics table stretches to fill its column; redundant section label removed
+
+### Fixed
+- Duplicate `v` prefix in the header version badge (version string already contains the prefix from the build tag)
+- Missing `btn-chown` CSS style that caused the chown button to be invisible
+- `syslog` priority prefixes now emitted correctly so journald maps log levels to the right `PRIORITY` field
+
 ## [v0.0.6] — 2026-03-04
 
 ### Fixed
