@@ -14,6 +14,7 @@
 #   copies       - 1, 2, 3
 #   xattr        - on, sa, off
 #   acltype      - off, posix, nfsv4
+#   sharenfs     - off, on, or NFS options (e.g. rw=@192.168.1.0/24)
 - name: Set ZFS dataset properties
   hosts: localhost
   gather_facts: false
@@ -30,6 +31,7 @@
     xattr: "__skip__"
     readonly: "__skip__"
     acltype: "__skip__"
+    sharenfs: "__skip__"
   tasks:
     - name: Validate input
       ansible.builtin.assert:
@@ -53,7 +55,8 @@
             (['copies='       + copies]      if copies       not in ['', '__skip__'] else []) +
             (['xattr='        + xattr]       if xattr        not in ['', '__skip__'] else []) +
             (['readonly='     + readonly]    if readonly     not in ['', '__skip__'] else []) +
-            (['acltype='      + acltype]     if acltype      not in ['', '__skip__'] else [])
+            (['acltype='      + acltype]     if acltype      not in ['', '__skip__'] else []) +
+            (['sharenfs='     + sharenfs]    if sharenfs     not in ['', '__skip__'] else [])
           }}
         inherit_list: >-
           {{
@@ -68,7 +71,8 @@
             (['copies']      if copies       == '' else []) +
             (['xattr']       if xattr        == '' else []) +
             (['readonly']    if readonly     == '' else []) +
-            (['acltype']     if acltype      == '' else [])
+            (['acltype']     if acltype      == '' else []) +
+            (['sharenfs']    if sharenfs      == '' else [])
           }}
 
     - name: Set properties

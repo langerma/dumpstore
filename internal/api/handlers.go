@@ -165,7 +165,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype"}
+	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype", "sharenfs"}
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, p := range allowed {
 		allowedSet[p] = true
@@ -197,6 +197,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err, steps)
 		return
 	}
+	h.publishDatasets()
 	writeJSON(w, map[string]any{"name": name, "tasks": out.Steps()})
 }
 
@@ -1011,6 +1012,14 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishUserGroup()
 	writeJSON(w, map[string]any{"groupname": resultName, "tasks": out.Steps()})
+}
+
+// publishDatasets re-reads the dataset list and immediately pushes
+// dataset.query to all SSE subscribers. Called after any dataset property change.
+func (h *Handler) publishDatasets() {
+	if datasets, err := zfs.ListDatasets(); err == nil {
+		h.broker.Publish("dataset.query", datasets)
+	}
 }
 
 // publishUserGroup re-reads /etc/passwd and /etc/group and immediately pushes

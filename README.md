@@ -30,6 +30,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
+- **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
@@ -203,28 +204,37 @@ DELETE /api/acl/{dataset}     → acl_remove_posix.yml      (ansible)
 
 ## Requirements
 
-|                       | Linux                          | FreeBSD                                      |
-|-----------------------|--------------------------------|----------------------------------------------|
-| ZFS                   | `zfsutils-linux` or equivalent | built-in (`zfsutils` pkg for older releases) |
-| Ansible               | `ansible` package (Python 3)   | `py311-ansible` or equivalent                |
-| Service manager       | systemd                        | rc.d (via `daemon(8)`)                       |
-| S.M.A.R.T. (optional) | `smartmontools`                | `smartmontools` pkg                          |
-| POSIX ACLs (optional) | `acl` pkg (`getfacl`/`setfacl`) | `py311-pylibacl` or `acl` port             |
-| NFSv4 ACLs (optional) | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`) | `nfs4-acl-tools` port       |
-| Build                 | Go 1.22+                       | Go 1.22+                                     |
+|                        | Linux                                                     | FreeBSD                                      |
+|------------------------|-----------------------------------------------------------|----------------------------------------------|
+| ZFS                    | `zfsutils-linux` or equivalent                            | built-in (`zfsutils` pkg for older releases) |
+| Ansible                | `ansible` package (Python 3)                              | `py311-ansible` or equivalent                |
+| Service manager        | systemd                                                   | rc.d (via `daemon(8)`)                       |
+| S.M.A.R.T. (optional)  | `smartmontools`                                           | `smartmontools` pkg                          |
+| POSIX ACLs (optional)  | `acl` pkg (`getfacl`/`setfacl`)                           | `py311-pylibacl` or `acl` port               |
+| NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
+| NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
+| Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
 
-The ACL tools are optional — the ACL dialog will show an error if the required tool is not installed on the target host. Install only what you need:
+The NFS server and ACL tools are optional — the relevant dialogs will show an error if the required tool is not installed. Install only what you need:
 
 ```bash
 # Debian/Ubuntu — POSIX ACLs
 apt install acl
 
+# Debian/Ubuntu — NFS sharing
+apt install nfs-kernel-server
+systemctl enable --now nfs-server
+
 # Debian/Ubuntu — NFSv4 ACLs
 apt install nfs4-acl-tools
 
-# RHEL/Fedora
+# RHEL/Fedora — NFS sharing
+dnf install nfs-utils
+systemctl enable --now nfs-server
+
+# RHEL/Fedora — ACLs
 dnf install acl nfs4-acl-tools
 ```
 
@@ -346,7 +356,7 @@ sudo make uninstall
 │   ├── acl_set_posix.yml            # Add/modify POSIX ACL entry (setfacl -m)
 │   ├── acl_remove_posix.yml         # Remove POSIX ACL entry (setfacl -x)
 │   ├── acl_set_nfs4.yml             # Add NFSv4 ACL entry (nfs4_setfacl -a)
-│   └── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
+│   ├── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
@@ -532,13 +542,13 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 
 ## Planned
 
-| Feature                  | Notes                                                                                                                      |
-|--------------------------|----------------------------------------------------------------------------------------------------------------------------|
-| Snapshot rollback        | Roll a dataset back to a snapshot with confirm dialog; destroys newer snapshots                                            |
-| Dataset rename           | Rename a dataset or volume in place                                                                                        |
-| Snapshot clone           | Create a new dataset from an existing snapshot                                                                             |
-| NFS share management     | List, create, and remove NFS exports; platform-aware for Linux and FreeBSD (`/etc/exports` format + reload command differ) |
-| SMB share management     | List, create, and remove Samba shares (`smb.conf`); Linux and FreeBSD service handling                                     |
-| File browser             | Browse dataset contents, set permissions                                                                                   |
-| ZFS send/receive         | Pool replication and off-site backup                                                                                       |
-| Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                                               |
+| Feature                  | Notes                                                                                         |
+|--------------------------|-----------------------------------------------------------------------------------------------|
+| Snapshot rollback        | Roll a dataset back to a snapshot with confirm dialog; destroys newer snapshots               |
+| Dataset rename           | Rename a dataset or volume in place                                                           |
+| Snapshot clone           | Create a new dataset from an existing snapshot                                                |
+| ~~NFS share management~~ | ~~List, create, and remove NFS exports~~ — **done** (ZFS `sharenfs` property; cross-platform) |
+| SMB share management     | List, create, and remove Samba shares (`smb.conf`); Linux and FreeBSD service handling        |
+| File browser             | Browse dataset contents, set permissions                                                      |
+| ZFS send/receive         | Pool replication and off-site backup                                                          |
+| Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                  |

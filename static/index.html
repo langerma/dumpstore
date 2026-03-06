@@ -600,6 +600,24 @@
     </form>
   </dialog>
 
+  <!-- NFS SHARE DIALOG -->
+  <dialog id="nfsDialog">
+    <h3 id="nfsDialogTitle">NFS Share</h3>
+    <p class="muted" id="nfsDialogPath" style="margin:0 0 1rem;font-size:0.85rem"></p>
+    <div id="nfsDialogEntries" style="margin-bottom:1rem"></div>
+    <fieldset class="form-section" id="nfsAddForm">
+      <legend>Set sharenfs</legend>
+      <label>Options <span class="field-note">(blank = "on"; e.g. rw=@192.168.1.0/24,no_root_squash)</span>
+        <input type="text" id="nfs-clients" placeholder="rw=@192.168.1.0/24,no_root_squash" autocomplete="off">
+      </label>
+    </fieldset>
+    <div class="dialog-actions">
+      <button type="button" id="nfsDialogClose" class="btn-secondary">Close</button>
+      <button type="button" id="nfsDisableBtn" class="btn-danger">Disable</button>
+      <button type="button" id="nfsAddBtn" class="btn-primary">Share</button>
+    </div>
+  </dialog>
+
   <!-- OPERATION LOG DIALOG -->
   <dialog id="opLogDialog">
     <h3 id="opLogTitle">Operation Result</h3>

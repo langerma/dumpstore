@@ -473,6 +473,7 @@ function renderDatasets() {
             <button class="btn-edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
             ${d.type !== 'volume' ? `<button class="btn-acl btn-small" data-ds="${esc(d.name)}">ACL</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -516,6 +517,10 @@ function renderDatasets() {
 
   wrap.querySelectorAll('.btn-chown[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openChownDialog(btn.dataset.ds));
+  });
+
+  wrap.querySelectorAll('.btn-nfs[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openNFSDialog(btn.dataset.ds));
   });
 }
 
@@ -1488,6 +1493,65 @@ document.getElementById('chownForm').addEventListener('submit', async e => {
     showOpLog(`Failed to change ownership of ${dataset}`, err.tasks, err.message);
   }
 });
+
+// ── NFS share dialog (sharenfs property) ─────────────────────────────────────
+const nfsDialog = document.getElementById('nfsDialog');
+document.getElementById('nfsDialogClose').addEventListener('click', () => nfsDialog.close());
+
+let _nfsDataset = '';
+
+async function openNFSDialog(dataset) {
+  _nfsDataset = dataset;
+  document.getElementById('nfsDialogTitle').textContent = 'NFS Share — ' + dataset;
+  document.getElementById('nfsDialogPath').textContent = '';
+  document.getElementById('nfs-clients').value = '';
+  document.getElementById('nfsDialogEntries').innerHTML = '<span class="muted">Loading…</span>';
+  nfsDialog.showModal();
+  try {
+    const props = await api('GET', '/api/dataset-props/' + encodeURIComponent(dataset).replace(/%2F/g, '/'));
+    const sharenfs = props.sharenfs?.value ?? 'off';
+    const src = props.sharenfs?.source ?? '';
+    const entriesEl = document.getElementById('nfsDialogEntries');
+    if (sharenfs && sharenfs !== 'off' && sharenfs !== '-') {
+      entriesEl.innerHTML = `
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem">
+          <code style="flex:1">${esc(sharenfs)}</code>
+          <span class="muted" style="font-size:0.8rem">${esc(src)}</span>
+        </div>`;
+      document.getElementById('nfs-clients').value = sharenfs === 'on' ? '' : sharenfs;
+    } else {
+      entriesEl.innerHTML = '<p class="muted">Not currently shared via NFS.</p>';
+    }
+  } catch (e) {
+    document.getElementById('nfsDialogEntries').innerHTML = `<p class="op-error">${esc(e.message)}</p>`;
+  }
+}
+
+document.getElementById('nfsAddBtn').addEventListener('click', async () => {
+  const options = document.getElementById('nfs-clients').value.trim() || 'on';
+  const dataset = _nfsDataset;
+  nfsDialog.close();
+  try {
+    const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+      { sharenfs: options });
+    showOpLog('NFS share enabled: ' + dataset, result.tasks, null);
+  } catch (e) {
+    showOpLog('Failed to set sharenfs', e.tasks, e.message);
+  }
+});
+
+document.getElementById('nfsDisableBtn').addEventListener('click', async () => {
+  const dataset = _nfsDataset;
+  nfsDialog.close();
+  try {
+    const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+      { sharenfs: 'off' });
+    showOpLog('NFS share disabled: ' + dataset, result.tasks, null);
+  } catch (e) {
+    showOpLog('Failed to disable sharenfs', e.tasks, e.message);
+  }
+});
+
 
 // ── SSE client ────────────────────────────────────────────────────────────────
 // Maps SSE topic names → state key + render function.
