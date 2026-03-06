@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.8] — 2026-03-06
+
+### Added
+- **Enhanced Prometheus metrics** — `GET /metrics` now exposes HTTP request counters (`http_requests_total{method,path,status}`) and latency histograms (`http_request_duration_seconds{method,path}`), plus Ansible playbook counters (`ansible_runs_total{playbook,status}`) and duration histograms (`ansible_run_duration_seconds{playbook}`); paths are normalised to keep cardinality low; static file requests are excluded
+- **Install script** — `install.sh` builds and installs the binary, playbooks, and static files, and registers the service on both Linux (systemd) and FreeBSD (rc.d); also supports `--uninstall`
+- **BSD 2-Clause License**
+
 ## [v0.0.7] — 2026-03-05
 
 ### Added
