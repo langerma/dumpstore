@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -80,6 +81,7 @@ func (o *PlaybookOutput) Steps() []TaskStep {
 type Runner struct {
 	PlaybookDir   string
 	InventoryPath string
+	metrics       ansibleMetrics
 }
 
 // NewRunner creates a Runner whose paths are relative to baseDir.
@@ -96,6 +98,7 @@ func NewRunner(baseDir string) *Runner {
 	return &Runner{
 		PlaybookDir:   filepath.Join(baseDir, "playbooks"),
 		InventoryPath: filepath.Join(baseDir, "playbooks", "inventory", "localhost"),
+		metrics:       *newAnsibleMetrics(),
 	}
 }
 
@@ -110,8 +113,14 @@ func NewRunner(baseDir string) *Runner {
 //  2. Process-level: non-zero exit code after successful JSON parse (e.g. unreachable host).
 //
 // Returns an error if any task failed, including a descriptive message from the task.
+// EmitMetrics writes Ansible metrics in Prometheus text format to w.
+func (r *Runner) EmitMetrics(w io.Writer) {
+	r.metrics.emitTo(w)
+}
+
 func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOutput, error) {
 	playbookPath := filepath.Join(r.PlaybookDir, playbook)
+	playbookLabel := strings.TrimSuffix(playbook, ".yml")
 
 	args := []string{"-i", r.InventoryPath, playbookPath}
 
@@ -144,24 +153,29 @@ func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOut
 	if parseErr != nil {
 		if runErr != nil {
 			slog.Error("ansible-playbook failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr, "stderr", stderr.String())
+			r.metrics.record(playbookLabel, elapsed, true)
 			return nil, fmt.Errorf("ansible-playbook %s failed: %w\nstderr: %s", playbook, runErr, stderr.String())
 		}
+		r.metrics.record(playbookLabel, elapsed, true)
 		return nil, fmt.Errorf("parse ansible output: %w", parseErr)
 	}
 
 	// Scan task results for failures — this is the authoritative failure signal.
 	if err := firstFailure(out); err != nil {
 		slog.Error("ansible-playbook task failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", err)
+		r.metrics.record(playbookLabel, elapsed, true)
 		return out, err
 	}
 
 	// Fallback: non-zero exit but no task-level failure detected.
 	if runErr != nil {
 		slog.Error("ansible-playbook exited non-zero", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr)
+		r.metrics.record(playbookLabel, elapsed, true)
 		return out, fmt.Errorf("ansible-playbook %s: %w", playbook, runErr)
 	}
 
 	slog.Info("ansible-playbook done", "playbook", playbook, "duration_ms", elapsed.Milliseconds())
+	r.metrics.record(playbookLabel, elapsed, false)
 	return out, nil
 }
 
