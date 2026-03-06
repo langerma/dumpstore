@@ -36,6 +36,7 @@ type Dataset struct {
 	Reservation   uint64 `json:"reservation"`
 	Pool          string `json:"pool"`
 	Depth         int    `json:"depth"`
+	ShareNFS      string `json:"sharenfs"`
 }
 
 // Snapshot represents a ZFS snapshot.
@@ -114,14 +115,14 @@ func ListPools() ([]Pool, error) {
 // ListDatasets runs `zfs list` and returns all datasets.
 func ListDatasets() ([]Dataset, error) {
 	out, err := run("zfs", "list", "-H", "-p",
-		"-o", "name,used,avail,refer,mountpoint,type,compressratio,compression,quota,reservation")
+		"-o", "name,used,avail,refer,mountpoint,type,compressratio,compression,quota,reservation,sharenfs")
 	if err != nil {
 		return nil, err
 	}
 	var datasets []Dataset
 	for _, line := range splitLines(out) {
 		f := strings.Split(line, "\t")
-		if len(f) < 10 {
+		if len(f) < 11 {
 			continue
 		}
 		name := f[0]
@@ -139,6 +140,7 @@ func ListDatasets() ([]Dataset, error) {
 			Reservation:   parseUint(f[9]),
 			Pool:          pool,
 			Depth:         strings.Count(name, "/"),
+			ShareNFS:      f[10],
 		})
 	}
 	return datasets, nil
@@ -217,7 +219,7 @@ type DatasetProp struct {
 // returns a map of property name → DatasetProp.
 func GetDatasetProps(name string) (map[string]DatasetProp, error) {
 	out, err := run("zfs", "get", "-H",
-		"compression,quota,mountpoint,recordsize,atime,exec,sync,dedup,copies,xattr,readonly,acltype",
+		"compression,quota,mountpoint,recordsize,atime,exec,sync,dedup,copies,xattr,readonly,acltype,sharenfs",
 		name)
 	if err != nil {
 		return nil, err

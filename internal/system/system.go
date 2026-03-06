@@ -284,12 +284,23 @@ func detectPkgManager() string {
 	return ""
 }
 
+// probeNFSServer returns "installed" when the platform NFS server tool is present.
+// Linux uses exportfs (from nfs-kernel-server/nfs-utils).
+// FreeBSD ships nfsd in the base system, so we probe mountd instead.
+func probeNFSServer() string {
+	if runtime.GOOS == "freebsd" {
+		return probePresence("mountd")
+	}
+	return probePresence("exportfs")
+}
+
 func softwareVersions() []SoftwareTool {
 	return []SoftwareTool{
 		{Name: "ZFS", Version: probeVersion("zfs", "version")},
 		{Name: "Ansible", Version: probeVersion("ansible-playbook", "--version")},
 		{Name: "Python", Version: probeVersion("python3", "--version")},
 		{Name: "smartctl", Version: probeVersion("smartctl", "--version")},
+		{Name: "NFS server", Version: probeNFSServer()},
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
 		{Name: "Package manager", Version: detectPkgManager()},
