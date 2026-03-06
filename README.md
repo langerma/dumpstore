@@ -32,7 +32,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
-- **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
+- **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
 
 ## Screenshots
 
@@ -532,9 +532,13 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 
 ## Planned
 
-| Feature                  | Notes                                                        |
-|--------------------------|--------------------------------------------------------------|
-| SMB/NFS share management | Create and manage Samba and NFS exports                      |
-| File browser             | Browse dataset contents, set permissions                     |
-| ZFS send/receive         | Pool replication and off-site backup                         |
-| Alerts                   | Configurable thresholds for pool health, disk temp, capacity |
+| Feature                  | Notes                                                                                                                      |
+|--------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| Snapshot rollback        | Roll a dataset back to a snapshot with confirm dialog; destroys newer snapshots                                            |
+| Dataset rename           | Rename a dataset or volume in place                                                                                        |
+| Snapshot clone           | Create a new dataset from an existing snapshot                                                                             |
+| NFS share management     | List, create, and remove NFS exports; platform-aware for Linux and FreeBSD (`/etc/exports` format + reload command differ) |
+| SMB share management     | List, create, and remove Samba shares (`smb.conf`); Linux and FreeBSD service handling                                     |
+| File browser             | Browse dataset contents, set permissions                                                                                   |
+| ZFS send/receive         | Pool replication and off-site backup                                                                                       |
+| Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                                               |

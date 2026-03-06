@@ -90,6 +90,9 @@ func (h *Handler) getMetrics(w http.ResponseWriter, _ *http.Request) {
 			"# TYPE dumpstore_build_info gauge\n"+
 			"dumpstore_build_info{version=%q,goversion=%q} 1\n",
 		h.version, runtime.Version())
+
+	globalHTTP.emitTo(w)
+	h.runner.EmitMetrics(w)
 }
 
 func gauge(w http.ResponseWriter, name, help string, val float64) {

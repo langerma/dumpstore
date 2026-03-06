@@ -103,6 +103,7 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
+		elapsed := time.Since(start)
 
 		level := slog.LevelInfo
 		if rw.status >= 500 {
@@ -114,9 +115,10 @@ func requestLogger(next http.Handler) http.Handler {
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rw.status,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", elapsed.Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
+		api.RecordHTTP(r.Method, r.URL.Path, rw.status, elapsed)
 	})
 }
 
