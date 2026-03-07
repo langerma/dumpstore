@@ -698,6 +698,8 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-small { font-size: 11px; padding: 2px 7px; }
 .btn-acl { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
 .btn-acl:hover { background: var(--surface); color: var(--text); }
+.btn-acl.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
+.btn-acl.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
 .btn-chown { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
 .btn-chown:hover { background: var(--surface); color: var(--text); }
 .btn-nfs { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }

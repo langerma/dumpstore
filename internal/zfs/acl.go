@@ -64,6 +64,33 @@ func GetDatasetACL(dataset string) (*DatasetACL, error) {
 	return acl, nil
 }
 
+// DatasetHasACL returns true if the mountpoint has non-trivial POSIX ACL
+// entries (more than the base user/group/other entries), or any NFSv4 ACL
+// entries. It calls getfacl or nfs4_getfacl directly, so it works regardless
+// of whether the ZFS acltype property is set.
+func DatasetHasACL(mountpoint string) bool {
+	out, err := run("getfacl", "-c", mountpoint)
+	if err == nil {
+		n := 0
+		for _, line := range splitLines(out) {
+			if line != "" && !strings.HasPrefix(line, "#") {
+				n++
+			}
+		}
+		return n > 3
+	}
+	// Fall back to NFSv4.
+	out, err = run("nfs4_getfacl", mountpoint)
+	if err == nil {
+		for _, line := range splitLines(out) {
+			if line != "" && !strings.HasPrefix(line, "#") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func normalizeACLType(s string) string {
 	switch strings.ToLower(s) {
 	case "posix", "posixacl":
