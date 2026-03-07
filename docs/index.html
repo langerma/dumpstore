@@ -720,5 +720,14 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
   &nbsp;&middot;&nbsp; MIT License
 </footer>
 
+<script>
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+</script>
 </body>
 </html>
