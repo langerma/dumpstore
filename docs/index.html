@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dumpstore — ZFS management UI</title>
+  <meta name="description" content="A lightweight NAS management UI written in Go — built for Linux and FreeBSD, designed to stay out of the way of a vanilla system.">
+  <meta property="og:title" content="dumpstore">
+  <meta property="og:description" content="A lightweight NAS management UI written in Go — built for Linux and FreeBSD.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/langerma/dumpstore/main/screenshots/sysinfo.png">
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --surface2:  #22263a;
+      --border:    #2e3347;
+      --accent:    #4f9cf9;
+      --accent-dim:#1d3a5f;
+      --text:      #e2e8f0;
+      --text-muted:#8892a4;
+      --green:     #34d399;
+      --yellow:    #fbbf24;
+      --red:       #f87171;
+      --radius:    8px;
+      --font:      'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── sticky header (matches app) ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .logo { height: 28px; width: auto; display: block; }
+
+    nav { display: flex; gap: 4px; }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 13px;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+      display: inline-block;
+    }
+    .tab-btn:hover { background: var(--surface2); color: var(--text); text-decoration: none; }
+    .tab-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .gh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 12px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .gh-btn:hover { background: var(--border); text-decoration: none; }
+
+    /* ── main layout ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+
+    /* ── section header (matches app) ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .section-header h2 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .section-header .divider {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── hero ── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1.25rem;
+      padding: 2.5rem 0 1rem;
+    }
+    .hero-logo { height: 44px; width: auto; display: block; }
+    .hero-tagline {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 560px;
+      line-height: 1.65;
+    }
+    .hero-tagline strong { color: var(--text); font-weight: 600; }
+    .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      border: none;
+      color: #000;
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.85; text-decoration: none; }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 13px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: var(--border); text-decoration: none; }
+
+    /* pills row under hero */
+    .pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .pill-green { border-color: #1a4a30; color: var(--green); background: #0d2a1a; }
+
+    /* ── pool-style cards (reuse app's .pool-card) ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .pool-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      transition: border-color 0.15s;
+    }
+    .pool-card:hover { border-color: var(--accent-dim); }
+    .pool-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+    }
+    .pool-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .health-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .badge-blue   { background: #1a2d4f; color: #7cb9ff; }
+    .badge-green  { background: #0d3d2e; color: var(--green); }
+    .badge-purple { background: #2a1a4f; color: #c07cff; }
+    .badge-orange { background: #3d2a0d; color: var(--yellow); }
+
+    .pool-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+    .pool-card p strong { color: var(--text); }
+
+    /* ── screenshots ── */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 600px) { .screenshot-grid { grid-template-columns: 1fr; } }
+
+    .screenshot-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+    }
+    .screenshot-caption {
+      padding: 7px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── install cards ── */
+    .install-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .install-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+    .install-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 0.75rem;
+    }
+    .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .install-card h3 { font-size: 13px; font-weight: 600; color: var(--text); }
+
+    pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    pre .comment { color: var(--text-muted); }
+
+    .install-note {
+      margin-top: 0.6rem;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .install-note code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: var(--font);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    /* ── requirements table (matches app table style) ── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    thead th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 9px 14px; white-space: nowrap; color: var(--text); }
+    td.muted { color: var(--text-muted); font-size: 12px; }
+
+    .opt-badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      margin-left: 6px;
+      font-weight: 600;
+    }
+
+    /* ── why section ── */
+    .why-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+    }
+    .why-card p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.75;
+    }
+    .why-card p + p { margin-top: 0.75rem; }
+    .why-card p strong { color: var(--text); }
+
+    /* ── footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- HEADER — same structure as app -->
+<header>
+  <div class="header-inner">
+    <picture>
+      <source media="(prefers-color-scheme: dark)"
+        srcset="https://raw.githubusercontent.com/langerma/dumpstore/main/images/dumpstore-blue-dark-lockup.svg">
+      <img class="logo"
+        src="https://raw.githubusercontent.com/langerma/dumpstore/main/images/dumpstore-blue-light-lockup.svg"
+        alt="dumpstore">
+    </picture>
+    <nav>
+      <a class="tab-btn active" href="#features">features</a>
+      <a class="tab-btn" href="#screenshots">screenshots</a>
+      <a class="tab-btn" href="#install">install</a>
+      <a class="tab-btn" href="#requirements">requirements</a>
+    </nav>
+    <div class="header-right">
+      <a class="gh-btn" href="https://github.com/langerma/dumpstore">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+        </svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <div class="hero">
+    <picture>
+      <source media="(prefers-color-scheme: dark)"
+        srcset="https://raw.githubusercontent.com/langerma/dumpstore/main/images/dumpstore-blue-dark-lockup.svg">
+      <img class="hero-logo"
+        src="https://raw.githubusercontent.com/langerma/dumpstore/main/images/dumpstore-blue-light-lockup.svg"
+        alt="dumpstore">
+    </picture>
+    <p class="hero-tagline">
+      A <strong>lightweight NAS management UI</strong> written in Go — built for Linux and FreeBSD,
+      designed to stay out of the way of a vanilla system.<br><br>
+      No container runtime. No database. No Node.js. Just a
+      <strong>single compiled binary</strong>, some Ansible playbooks, and a handful of static files.
+    </p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="#install">install</a>
+      <a class="btn-secondary" href="https://github.com/langerma/dumpstore">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+        </svg>
+        view source
+      </a>
+    </div>
+    <div class="pill-row">
+      <span class="pill">Go 1.22+</span>
+      <span class="pill">Linux</span>
+      <span class="pill">FreeBSD</span>
+      <span class="pill">ZFS / OpenZFS</span>
+      <span class="pill">no external Go deps</span>
+      <span class="pill pill-green">stdlib only</span>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="section-header">
+      <h2>features</h2>
+      <div class="divider"></div>
+    </div>
+    <div class="card-grid">
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">pool overview</span>
+          <span class="health-badge badge-green">ONLINE</span>
+        </div>
+        <p>Health badges, usage bars, fragmentation, dedup ratio, and the full vdev tree per pool.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">I/O statistics</span>
+          <span class="health-badge badge-blue">live</span>
+        </div>
+        <p>Read/write IOPS and bandwidth per pool — pushed via <strong>Server-Sent Events</strong> every 10 s. Falls back to REST polling.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">dataset browser</span>
+          <span class="health-badge badge-blue">filesystem</span>
+        </div>
+        <p>Collapsible depth-indented tree. Compression, quota, mountpoint. <strong>Inline editing</strong> of any ZFS property.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">snapshots</span>
+          <span class="health-badge badge-green">snapshot</span>
+        </div>
+        <p>List, create (with recursive option), and delete snapshots — all with confirm dialogs.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">user management</span>
+          <span class="health-badge badge-blue">users</span>
+        </div>
+        <p>Create, edit shell/password/groups, and delete local users. System accounts (uid &lt; 1000) are visible but protected.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">group management</span>
+          <span class="health-badge badge-blue">groups</span>
+        </div>
+        <p>Create, edit (name, GID, members), and delete local groups. System groups protected by the same guard.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">ACL management</span>
+          <span class="health-badge badge-orange">POSIX / NFSv4</span>
+        </div>
+        <p>View, add, and remove POSIX and NFSv4 ACL entries per dataset. One-click <code>acltype</code> enable. Recursive apply.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">NFS sharing</span>
+          <span class="health-badge badge-green">sharenfs</span>
+        </div>
+        <p>Enable, configure, and disable NFS sharing per dataset via the ZFS <strong>sharenfs</strong> property. Cross-platform (Linux &amp; FreeBSD).</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">SMB sharing</span>
+          <span class="health-badge badge-blue">usershares</span>
+        </div>
+        <p>Samba usershares per dataset. Manage Samba users. One-click setup playbook that configures usershares, disables <code>[homes]</code>, and enables PAM passthrough.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">S.M.A.R.T. health</span>
+          <span class="health-badge badge-green">smartctl</span>
+        </div>
+        <p>Temperature, power-on hours, reallocated sectors, pending sectors, and uncorrectable errors per drive.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">system info</span>
+          <span class="health-badge badge-blue">sysinfo</span>
+        </div>
+        <p>Hostname, OS, kernel, CPU, uptime, load averages, and process stats. ZFS and dumpstore version in the header.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">Prometheus metrics</span>
+          <span class="health-badge badge-purple">/metrics</span>
+        </div>
+        <p>Go runtime, HTTP request counters &amp; latency histograms, and Ansible playbook run metrics out of the box.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section id="why">
+    <div class="section-header">
+      <h2>why this exists</h2>
+      <div class="divider"></div>
+    </div>
+    <div class="why-card">
+      <p>
+        I run a <a href="https://wiki.kobol.io/helios64/intro/">Kobol Helios64</a> as my home NAS — a five-bay ARM board that deserves better than the software ecosystem currently offers it.
+        The existing storage UIs I tried were either too heavy, too opinionated about the underlying distribution, or simply unmaintained.
+        None of them gave me a clean, no-nonsense window into my ZFS pools without pulling in a container runtime, a database, or a Node.js server alongside them.
+      </p>
+      <p>
+        What I wanted was simple: <strong>observe and manage my storage from a browser</strong>, on a machine that stays as close to a vanilla Linux or FreeBSD installation as possible.
+        No agents, no daemons-within-daemons, no frameworks that outlive their welcome. Just a single compiled binary, some Ansible playbooks, and a handful of static files.
+      </p>
+      <p>
+        If you run a Helios64, an old server, or any ZFS box where you care about what is actually installed on it, this might be the tool for you.
+      </p>
+    </div>
+  </section>
+
+  <!-- SCREENSHOTS -->
+  <section id="screenshots">
+    <div class="section-header">
+      <h2>screenshots</h2>
+      <div class="divider"></div>
+    </div>
+    <div class="screenshot-grid">
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/langerma/dumpstore/main/screenshots/sysinfo.png"
+          alt="System info and storage pools" loading="lazy">
+        <div class="screenshot-caption">system info &amp; pool overview</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/langerma/dumpstore/main/screenshots/datasets.png"
+          alt="Dataset browser" loading="lazy">
+        <div class="screenshot-caption">dataset browser</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/langerma/dumpstore/main/screenshots/snapshots.png"
+          alt="Snapshot management" loading="lazy">
+        <div class="screenshot-caption">snapshot management</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="https://raw.githubusercontent.com/langerma/dumpstore/main/screenshots/edit-dataset.png"
+          alt="Edit dataset properties" loading="lazy">
+        <div class="screenshot-caption">edit dataset properties</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="section-header">
+      <h2>install</h2>
+      <div class="divider"></div>
+    </div>
+    <div class="install-cards">
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="step-num">1</div>
+          <h3>clone and install</h3>
+        </div>
+        <pre>git clone https://github.com/langerma/dumpstore.git
+cd dumpstore
+sudo ./install.sh</pre>
+        <p class="install-note">
+          The script checks prerequisites, compiles the binary, copies everything to
+          <code>/usr/local/lib/dumpstore/</code>, and registers the service —
+          systemd on Linux, rc.d on FreeBSD.
+        </p>
+      </div>
+
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="step-num">2</div>
+          <h3>open the UI</h3>
+        </div>
+        <pre>http://localhost:8080</pre>
+        <p class="install-note">The service starts automatically after install.</p>
+      </div>
+
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="step-num">3</div>
+          <h3>uninstall</h3>
+        </div>
+        <pre>sudo ./install.sh --uninstall</pre>
+      </div>
+
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="step-num" style="background:var(--surface2);color:var(--text-muted);">—</div>
+          <h3>run without installing</h3>
+        </div>
+        <pre>go build -o dumpstore .
+sudo ./dumpstore -addr :8080 -dir .</pre>
+        <p class="install-note">
+          <code>-dir</code> must point to the directory containing <code>playbooks/</code>
+          and <code>static/</code>. Defaults to the directory of the executable.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQUIREMENTS -->
+  <section id="requirements">
+    <div class="section-header">
+      <h2>requirements</h2>
+      <div class="divider"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>dependency</th>
+            <th>Linux</th>
+            <th>FreeBSD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Build</td>
+            <td class="muted">Go 1.22+</td>
+            <td class="muted">Go 1.22+</td>
+          </tr>
+          <tr>
+            <td>ZFS</td>
+            <td class="muted">zfsutils-linux</td>
+            <td class="muted">built-in</td>
+          </tr>
+          <tr>
+            <td>Ansible</td>
+            <td class="muted">ansible (Python 3)</td>
+            <td class="muted">py311-ansible</td>
+          </tr>
+          <tr>
+            <td>S.M.A.R.T.<span class="opt-badge">optional</span></td>
+            <td class="muted">smartmontools</td>
+            <td class="muted">smartmontools pkg</td>
+          </tr>
+          <tr>
+            <td>POSIX ACLs<span class="opt-badge">optional</span></td>
+            <td class="muted">acl</td>
+            <td class="muted">py311-pylibacl</td>
+          </tr>
+          <tr>
+            <td>NFSv4 ACLs<span class="opt-badge">optional</span></td>
+            <td class="muted">nfs4-acl-tools</td>
+            <td class="muted">nfs4-acl-tools port</td>
+          </tr>
+          <tr>
+            <td>NFS sharing<span class="opt-badge">optional</span></td>
+            <td class="muted">nfs-kernel-server / nfs-utils</td>
+            <td class="muted">built-in base system</td>
+          </tr>
+          <tr>
+            <td>SMB sharing<span class="opt-badge">optional</span></td>
+            <td class="muted">samba</td>
+            <td class="muted">samba pkg</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <a href="https://github.com/langerma/dumpstore">github.com/langerma/dumpstore</a>
+  &nbsp;&middot;&nbsp; MIT License
+</footer>
+
+</body>
+</html>
