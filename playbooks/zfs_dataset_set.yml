@@ -15,6 +15,7 @@
 #   xattr        - on, sa, off
 #   acltype      - off, posix, nfsv4
 #   sharenfs     - off, on, or NFS options (e.g. rw=@192.168.1.0/24)
+#   sharesmb     - off, on, or Samba share name (e.g. myshare)
 - name: Set ZFS dataset properties
   hosts: localhost
   gather_facts: false
@@ -32,6 +33,7 @@
     readonly: "__skip__"
     acltype: "__skip__"
     sharenfs: "__skip__"
+    sharesmb: "__skip__"
   tasks:
     - name: Validate input
       ansible.builtin.assert:
@@ -56,7 +58,8 @@
             (['xattr='        + xattr]       if xattr        not in ['', '__skip__'] else []) +
             (['readonly='     + readonly]    if readonly     not in ['', '__skip__'] else []) +
             (['acltype='      + acltype]     if acltype      not in ['', '__skip__'] else []) +
-            (['sharenfs='     + sharenfs]    if sharenfs     not in ['', '__skip__'] else [])
+            (['sharenfs='     + sharenfs]    if sharenfs     not in ['', '__skip__'] else []) +
+            (['sharesmb='     + sharesmb]    if sharesmb     not in ['', '__skip__'] else [])
           }}
         inherit_list: >-
           {{
@@ -72,7 +75,8 @@
             (['xattr']       if xattr        == '' else []) +
             (['readonly']    if readonly     == '' else []) +
             (['acltype']     if acltype      == '' else []) +
-            (['sharenfs']    if sharenfs      == '' else [])
+            (['sharenfs']    if sharenfs      == '' else []) +
+            (['sharesmb']    if sharesmb      == '' else [])
           }}
 
     - name: Set properties

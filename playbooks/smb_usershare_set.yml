@@ -1,0 +1,53 @@
+---
+# Creates or updates a Samba usershare for a ZFS dataset via `net usershare`.
+# This approach works on all Linux systems, including Ubuntu/Debian where
+# `zfs set sharesmb` fails due to missing libshare SMB backend.
+#
+# Required extra vars:
+#   dataset   - full ZFS dataset path (e.g. tank/data)
+#   sharename - Windows share name (e.g. "data" or "myshare")
+
+- name: Set SMB usershare for ZFS dataset
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - dataset is defined and dataset != ""
+          - sharename is defined and sharename != ""
+          - dataset is not search('[;|&$`]')
+          - sharename is not search('[;|&$`\s]')
+        fail_msg: "dataset and sharename are required and must not contain special characters"
+
+    - name: Assert net is available
+      ansible.builtin.command:
+        argv: ["which", "net"]
+      changed_when: false
+      register: _which_net
+      failed_when: _which_net.rc != 0
+
+    - name: Get dataset mountpoint
+      ansible.builtin.command:
+        argv: ["zfs", "get", "-H", "-o", "value", "mountpoint", "{{ dataset }}"]
+      register: _mp
+      changed_when: false
+
+    - name: Validate mountpoint
+      ansible.builtin.assert:
+        that:
+          - _mp.stdout | trim not in ['none', '-', '']
+        fail_msg: "Dataset {{ dataset }} has no valid mountpoint (got: {{ _mp.stdout | trim }})"
+
+    - name: Create usershare
+      ansible.builtin.command:
+        argv:
+          - net
+          - usershare
+          - add
+          - "{{ sharename }}"
+          - "{{ _mp.stdout | trim }}"
+          - ""
+          - "everyone:F"
+          - "guest_ok=n"
+      changed_when: true

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -70,6 +71,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/groups", h.createGroup)
 	mux.HandleFunc("PUT /api/groups/{name}", h.modifyGroup)
 	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
+	mux.HandleFunc("GET /api/smb-users", h.getSambaUsers)
+	mux.HandleFunc("POST /api/smb-users/{name}", h.addSambaUser)
+	mux.HandleFunc("DELETE /api/smb-users/{name}", h.removeSambaUser)
+	mux.HandleFunc("POST /api/smb-config/pam", h.configureSambaPAM)
+	mux.HandleFunc("GET /api/smb-shares", h.getSMBShares)
+	mux.HandleFunc("POST /api/smb-share/{dataset...}", h.setSMBShare)
+	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +174,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype", "sharenfs"}
+	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype", "sharenfs", "sharesmb"}
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, p := range allowed {
 		allowedSet[p] = true
@@ -647,8 +655,194 @@ func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, groups)
 }
 
+// getSMBShares handles GET /api/smb-shares
+// Returns all Samba usershares from `net usershare info *`.
+func (h *Handler) getSMBShares(w http.ResponseWriter, r *http.Request) {
+	shares, err := system.ListSMBUsershares()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, shares)
+}
+
+// setSMBShare handles POST /api/smb-share/{dataset...}
+// Body: {"sharename":"myshare"}
+// Creates a usershare via `net usershare add` using the dataset's mountpoint.
+func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
+	dataset := r.PathValue("dataset")
+	if dataset == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(dataset, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+	var req struct {
+		Sharename string `json:"sharename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Sharename == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		return
+	}
+	if strings.ContainsAny(req.Sharename, "@;|&$` \t") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in sharename"), nil)
+		return
+	}
+	out, err := h.runner.Run("smb_usershare_set.yml", map[string]string{
+		"dataset":   dataset,
+		"sharename": req.Sharename,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"dataset": dataset, "sharename": req.Sharename, "tasks": out.Steps()})
+}
+
+// deleteSMBShare handles DELETE /api/smb-share/{dataset...}?name=<sharename>
+// Removes a usershare via `net usershare delete`.
+func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
+	dataset := r.PathValue("dataset")
+	if dataset == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	sharename := r.URL.Query().Get("name")
+	if sharename == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("name query parameter required"), nil)
+		return
+	}
+	if strings.ContainsAny(sharename, "@;|&$` \t") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in sharename"), nil)
+		return
+	}
+	out, err := h.runner.Run("smb_usershare_unset.yml", map[string]string{
+		"sharename": sharename,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"dataset": dataset, "sharename": sharename, "tasks": out.Steps()})
+}
+
+// getSambaUsers handles GET /api/smb-users
+// Returns {"available":true,"users":["alice","bob"]} or {"available":false,"users":[]}
+// when pdbedit is not installed.
+func (h *Handler) getSambaUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := system.ListSambaUsers()
+	if errors.Is(err, system.ErrSambaNotAvailable) {
+		writeJSON(w, map[string]any{"available": false, "users": []string{}})
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if users == nil {
+		users = []string{}
+	}
+	writeJSON(w, map[string]any{"available": true, "users": users})
+}
+
+// addSambaUser handles POST /api/smb-users/{name}
+// Body: {"password":"plaintext"}
+func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Password == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("password is required"), nil)
+		return
+	}
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	out, err := h.runner.Run("smb_user_add.yml", map[string]string{
+		"username":     name,
+		"smb_password": req.Password,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+}
+
+// removeSambaUser handles DELETE /api/smb-users/{name}
+func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+		return
+	}
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	out, err := h.runner.Run("smb_user_remove.yml", map[string]string{
+		"username": name,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+}
+
+// configureSambaPAM handles POST /api/smb-config/pam
+// Applies usershare + PAM passthrough settings to /etc/samba/smb.conf and restarts smbd/nmbd.
+func (h *Handler) configureSambaPAM(w http.ResponseWriter, r *http.Request) {
+	out, err := h.runner.Run("smb_setup.yml", map[string]string{})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"tasks": out.Steps()})
+}
+
 // createUser handles POST /api/users
-// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","user_groups":"wheel,backup","password":"$6$...","create_group":true}
+// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","user_groups":"wheel,backup","password":"$6$...","create_group":true,"smb_user":false}
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string `json:"username"`
@@ -658,6 +852,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		Groups      string `json:"groups"`
 		Password    string `json:"password"`
 		CreateGroup bool   `json:"create_group"`
+		SMBUser     bool   `json:"smb_user"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
@@ -679,6 +874,10 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	if req.CreateGroup {
 		createGroup = "true"
 	}
+	smbUser := "false"
+	if req.SMBUser {
+		smbUser = "true"
+	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
 	vars := map[string]string{
@@ -689,6 +888,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		"user_groups":  req.Groups,
 		"password":     req.Password,
 		"create_group": createGroup,
+		"smb_user":     smbUser,
 	}
 	out, err := h.runner.Run("user_create.yml", vars)
 	if err != nil {

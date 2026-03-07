@@ -1,0 +1,27 @@
+---
+# Removes a user from Samba's tdbsam database.
+# Required extra vars:
+#   username - Linux username to remove from Samba
+
+- name: Remove user from Samba
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - username is defined and username != ""
+          - username is not search('[;|&$`]')
+        fail_msg: "username is required"
+
+    - name: Assert pdbedit is available
+      ansible.builtin.command:
+        argv: ["which", "pdbedit"]
+      changed_when: false
+      register: _which
+      failed_when: _which.rc != 0
+
+    - name: Remove user from Samba (pdbedit -x)
+      ansible.builtin.command:
+        argv: "{{ ['pdbedit', '-x', '-u', username] }}"
+      changed_when: true

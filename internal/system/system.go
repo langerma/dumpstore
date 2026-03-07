@@ -3,6 +3,7 @@ package system
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -84,6 +85,72 @@ func ListGroups() ([]Group, error) {
 		groups = append(groups, Group{Name: f[0], GID: gid, Members: members})
 	}
 	return groups, nil
+}
+
+// SMBShare represents a single entry from `net usershare info`.
+type SMBShare struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// ListSMBUsershares runs `net usershare info *` and returns all registered
+// usershares. Returns an empty slice when `net` is not in PATH.
+func ListSMBUsershares() ([]SMBShare, error) {
+	if _, err := exec.LookPath("net"); err != nil {
+		return []SMBShare{}, nil
+	}
+	var out bytes.Buffer
+	cmd := exec.Command("net", "usershare", "info", "*")
+	cmd.Stdout = &out
+	cmd.Run() // non-zero when no shares exist — that is fine
+
+	var shares []SMBShare
+	var cur *SMBShare
+	for _, line := range strings.Split(out.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			if cur != nil {
+				shares = append(shares, *cur)
+			}
+			cur = &SMBShare{Name: line[1 : len(line)-1]}
+		} else if cur != nil && strings.HasPrefix(line, "path=") {
+			cur.Path = strings.TrimPrefix(line, "path=")
+		}
+	}
+	if cur != nil {
+		shares = append(shares, *cur)
+	}
+	return shares, nil
+}
+
+// ErrSambaNotAvailable is returned by ListSambaUsers when pdbedit is not in PATH.
+var ErrSambaNotAvailable = fmt.Errorf("pdbedit not found in PATH — is Samba installed?")
+
+// ListSambaUsers runs pdbedit -L and returns the usernames registered in the
+// Samba tdbsam database. Returns ErrSambaNotAvailable when pdbedit is absent.
+func ListSambaUsers() ([]string, error) {
+	if _, err := exec.LookPath("pdbedit"); err != nil {
+		return nil, ErrSambaNotAvailable
+	}
+	var out bytes.Buffer
+	cmd := exec.Command("pdbedit", "-L")
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	var users []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// pdbedit -L format: "username:uid:Full Name"
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) >= 1 && parts[0] != "" {
+			users = append(users, parts[0])
+		}
+	}
+	return users, nil
 }
 
 // UIDMin returns the minimum UID for regular users from /etc/login.defs (default 1000).
@@ -294,6 +361,27 @@ func probeNFSServer() string {
 	return probePresence("exportfs")
 }
 
+// probeSambaZFSVFS returns "installed" when a Samba ZFS VFS module (.so) is
+// found in a well-known library path. Shipped by samba-vfs-modules on Debian/
+// Ubuntu/RHEL; required for ZFS ACL passthrough via sharesmb.
+func probeSambaZFSVFS() string {
+	candidates := []string{
+		"/usr/lib/x86_64-linux-gnu/samba/vfs/zfsacl.so",
+		"/usr/lib/aarch64-linux-gnu/samba/vfs/zfsacl.so",
+		"/usr/lib64/samba/vfs/zfsacl.so",
+		"/usr/lib/samba/vfs/zfsacl.so",
+		"/usr/lib/x86_64-linux-gnu/samba/vfs/zfs_core.so",
+		"/usr/lib64/samba/vfs/zfs_core.so",
+		"/usr/lib/samba/vfs/zfs_core.so",
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return "installed"
+		}
+	}
+	return ""
+}
+
 func softwareVersions() []SoftwareTool {
 	return []SoftwareTool{
 		{Name: "ZFS", Version: probeVersion("zfs", "version")},
@@ -303,6 +391,8 @@ func softwareVersions() []SoftwareTool {
 		{Name: "NFS server", Version: probeNFSServer()},
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
+		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
+		{Name: "samba-vfs-modules", Version: probeSambaZFSVFS()},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}
 }
