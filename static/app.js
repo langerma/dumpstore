@@ -12,6 +12,9 @@ const state = {
   smart: null,
   users: [],
   groups: [],
+  sambaUsers: [],
+  sambaAvailable: false,
+  smbShares: [],   // [{name, path}] from net usershare info
   activeTab: 'pools',
   collapsedDatasets: new Set(),
   aclDataset: '',
@@ -112,7 +115,7 @@ function setRefreshing(v) {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, iostat, smart, users, groups] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, iostat, smart, users, groups, smbData, smbShares] = await Promise.all([
       api('GET', '/api/pools'),
       api('GET', '/api/poolstatus'),
       api('GET', '/api/version'),
@@ -123,6 +126,8 @@ async function loadAll() {
       api('GET', '/api/smart'),
       api('GET', '/api/users'),
       api('GET', '/api/groups'),
+      api('GET', '/api/smb-users').catch(() => null),
+      api('GET', '/api/smb-shares').catch(() => []),
     ]);
     state.pools = pools || [];
     state.poolStatuses = poolStatuses || [];
@@ -134,6 +139,9 @@ async function loadAll() {
     state.smart = smart || null;
     state.users = users || [];
     state.groups = groups || [];
+    state.sambaAvailable = smbData?.available ?? false;
+    state.sambaUsers = smbData?.users || [];
+    state.smbShares = smbShares || [];
     renderPools();
     renderSysInfo();
     renderSoftware();
@@ -143,6 +151,7 @@ async function loadAll() {
     renderSMART();
     renderUsers();
     renderGroups();
+    renderSambaUsers();
   } catch (e) {
     toast('Load failed: ' + e.message, 'err');
     console.error(e);
@@ -475,6 +484,7 @@ function renderDatasets() {
             ${d.type !== 'volume' ? `<button class="btn-acl btn-small${state.aclStatus[d.name] ? ' active' : ''}" data-ds="${esc(d.name)}" title="${state.aclStatus[d.name] ? 'ACL entries configured' : 'No ACL'}">ACL</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -522,6 +532,10 @@ function renderDatasets() {
 
   wrap.querySelectorAll('.btn-nfs[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openNFSDialog(btn.dataset.ds));
+  });
+
+  wrap.querySelectorAll('.btn-smb[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openSMBDialog(btn.dataset.ds));
   });
 }
 
@@ -907,22 +921,29 @@ document.getElementById('userCancelBtn').addEventListener('click', () => newUser
 
 document.getElementById('newUserForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const username = document.getElementById('user-name').value.trim();
-  const shell    = document.getElementById('user-shell').value;
-  const uid      = document.getElementById('user-uid').value.trim();
-  const group    = document.getElementById('user-group').value.trim();
-  const groups   = document.getElementById('user-groups').value.trim();
-  const password = document.getElementById('user-password').value;
+  const username    = document.getElementById('user-name').value.trim();
+  const shell       = document.getElementById('user-shell').value;
+  const uid         = document.getElementById('user-uid').value.trim();
+  const group       = document.getElementById('user-group').value.trim();
+  const groups      = document.getElementById('user-groups').value.trim();
+  const password    = document.getElementById('user-password').value;
   const createGroup = document.getElementById('user-create-group').checked;
+  const smb_user    = document.getElementById('user-smb').checked;
   newUserDialog.close();
   try {
-    const result = await api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup });
+    const result = await api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
     showOpLog(`User created: ${username}`, result.tasks, null);
-    const users = await api('GET', '/api/users');
+    const [users, smbData] = await Promise.all([
+      api('GET', '/api/users'),
+      api('GET', '/api/smb-users').catch(() => null),
+    ]);
     state.users = users || [];
+    state.sambaAvailable = smbData?.available ?? false;
+    state.sambaUsers = smbData?.users || [];
     renderUsers();
-  } catch (e) {
-    showOpLog('User creation failed', e.tasks, e.message);
+    renderSambaUsers();
+  } catch (err) {
+    showOpLog('User creation failed', err.tasks, err.message);
   }
 });
 
@@ -1117,6 +1138,125 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
     renderGroups();
   } catch (err) {
     showOpLog(`Failed to update group: ${groupname}`, err.tasks, err.message);
+  }
+});
+
+// ── Render: SMB Users ─────────────────────────────────────────────────────────
+function renderSambaUsers() {
+  const wrap = document.getElementById('smb-users-wrap');
+  if (!state.sambaAvailable) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba (pdbedit) not available on this system.</div>';
+    return;
+  }
+  const smbSet = new Set(state.sambaUsers);
+  const regularUsers = state.users.filter(u => u.uid >= 1000 && !PROTECTED_USERS.has(u.username));
+  if (!regularUsers.length) {
+    wrap.innerHTML = '<div class="loading">No regular users found.</div>';
+    return;
+  }
+  const rows = regularUsers.map(u => {
+    const registered = smbSet.has(u.username);
+    const statusHtml = registered
+      ? '<span class="smb-status smb-yes">● registered</span>'
+      : '<span class="smb-status smb-no">○ not registered</span>';
+    const actionBtn = registered
+      ? `<button class="btn-del smb-remove-btn" data-user="${esc(u.username)}">Remove from SMB</button>`
+      : `<button class="btn-secondary smb-add-btn" data-user="${esc(u.username)}">Add to SMB</button>`;
+    return `
+      <tr>
+        <td class="mono">${esc(u.username)}</td>
+        <td>${u.uid}</td>
+        <td>${statusHtml}</td>
+        <td>${actionBtn}</td>
+      </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Username</th><th>UID</th><th>SMB Status</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  wrap.querySelectorAll('.smb-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => openAddSmbUserDialog(btn.dataset.user));
+  });
+  wrap.querySelectorAll('.smb-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeSmbUser(btn.dataset.user));
+  });
+}
+
+// ── Add SMB User dialog ───────────────────────────────────────────────────────
+const addSmbUserDialog = document.getElementById('addSmbUserDialog');
+let _addSmbUserTarget = '';
+
+function openAddSmbUserDialog(username) {
+  _addSmbUserTarget = username;
+  document.getElementById('addSmbUserDisplayName').textContent = username;
+  document.getElementById('smb-user-password').value = '';
+  addSmbUserDialog.showModal();
+  document.getElementById('smb-user-password').focus();
+}
+
+document.getElementById('addSmbUserCancelBtn').addEventListener('click', () => addSmbUserDialog.close());
+
+document.getElementById('addSmbUserForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = _addSmbUserTarget;
+  const password = document.getElementById('smb-user-password').value;
+  addSmbUserDialog.close();
+  try {
+    const result = await api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
+    showOpLog(`SMB access added: ${username}`, result.tasks, null);
+    const smbData = await api('GET', '/api/smb-users').catch(() => null);
+    state.sambaAvailable = smbData?.available ?? false;
+    state.sambaUsers = smbData?.users || [];
+    renderSambaUsers();
+  } catch (err) {
+    showOpLog(`Failed to add SMB access: ${username}`, err.tasks, err.message);
+  }
+});
+
+// ── Remove SMB User dialog ────────────────────────────────────────────────────
+const removeSmbUserDialog = document.getElementById('removeSmbUserDialog');
+let _removeSmbUserTarget = '';
+
+function removeSmbUser(username) {
+  _removeSmbUserTarget = username;
+  document.getElementById('removeSmbUserDisplayName').textContent = username;
+  removeSmbUserDialog.showModal();
+}
+
+document.getElementById('removeSmbUserCancelBtn').addEventListener('click', () => removeSmbUserDialog.close());
+
+document.getElementById('removeSmbUserConfirmBtn').addEventListener('click', async () => {
+  const username = _removeSmbUserTarget;
+  removeSmbUserDialog.close();
+  try {
+    const result = await api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
+    showOpLog(`SMB access removed: ${username}`, result.tasks, null);
+    const smbData = await api('GET', '/api/smb-users').catch(() => null);
+    state.sambaAvailable = smbData?.available ?? false;
+    state.sambaUsers = smbData?.users || [];
+    renderSambaUsers();
+  } catch (err) {
+    showOpLog(`Failed to remove SMB access: ${username}`, err.tasks, err.message);
+  }
+});
+
+// ── Configure Samba dialog ────────────────────────────────────────────────────
+const configureSambaDialog = document.getElementById('configureSambaDialog');
+document.getElementById('smbConfigPamBtn').addEventListener('click', () => configureSambaDialog.showModal());
+document.getElementById('configureSambaCancelBtn').addEventListener('click', () => configureSambaDialog.close());
+
+document.getElementById('configureSambaConfirmBtn').addEventListener('click', async () => {
+  configureSambaDialog.close();
+  try {
+    const result = await api('POST', '/api/smb-config/pam');
+    showOpLog('Samba configured', result.tasks, null);
+  } catch (err) {
+    showOpLog('Failed to configure Samba', err.tasks, err.message);
   }
 });
 
@@ -1564,6 +1704,98 @@ document.getElementById('nfsDisableBtn').addEventListener('click', async () => {
   }
 });
 
+
+
+
+// ── SMB share dialog (net usershare) ─────────────────────────────────────────
+const smbDialog = document.getElementById('smbDialog');
+document.getElementById('smbDialogClose').addEventListener('click', () => smbDialog.close());
+
+let _smbDataset = '';
+let _smbCurrentSharename = ''; // share name of the active usershare (if any)
+
+function _smbUNCPreview(sharename, dataset) {
+  const ds = dataset || _smbDataset;
+  const host = state.sysinfo?.hostname || 'server';
+  const derived = ds.replace(/\//g, '-');
+  const name = sharename.trim() || derived;
+  document.getElementById('smb-unc-preview').textContent = `Accessible as \\\\${host}\\${name}`;
+}
+
+async function openSMBDialog(dataset) {
+  _smbDataset = dataset;
+  _smbCurrentSharename = '';
+  document.getElementById('smbDialogTitle').textContent = 'SMB Share — ' + dataset;
+  document.getElementById('smb-sharename').value = '';
+  document.getElementById('smbDialogEntries').innerHTML = '<span class="muted">Loading…</span>';
+  _smbUNCPreview('', dataset);
+  smbDialog.showModal();
+  try {
+    // Get dataset mountpoint, then match against live usershare list
+    const [props, shares] = await Promise.all([
+      api('GET', '/api/dataset-props/' + encodeURIComponent(dataset).replace(/%2F/g, '/')),
+      api('GET', '/api/smb-shares'),
+    ]);
+    state.smbShares = shares || [];
+    const mountpoint = props.mountpoint?.value ?? '';
+    const existing = state.smbShares.find(s => s.path === mountpoint);
+    const entriesEl = document.getElementById('smbDialogEntries');
+    if (existing) {
+      _smbCurrentSharename = existing.name;
+      document.getElementById('smb-sharename').value = existing.name;
+      _smbUNCPreview(existing.name, dataset);
+      entriesEl.innerHTML = `
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem">
+          <span class="field-note">Currently shared as</span>
+          <code style="flex:1">${esc(existing.name)}</code>
+          <span class="muted" style="font-size:0.8rem">${esc(mountpoint)}</span>
+        </div>`;
+    } else {
+      entriesEl.innerHTML = '<p class="muted">Not currently shared via SMB.</p>';
+    }
+  } catch (e) {
+    document.getElementById('smbDialogEntries').innerHTML = `<p class="op-error">${esc(e.message)}</p>`;
+  }
+}
+
+document.getElementById('smb-sharename').addEventListener('input', e => {
+  _smbUNCPreview(e.target.value, _smbDataset);
+});
+
+async function _refreshSMBShares() {
+  const shares = await api('GET', '/api/smb-shares').catch(() => []);
+  state.smbShares = shares || [];
+  renderDatasets();
+}
+
+document.getElementById('smbAddBtn').addEventListener('click', async () => {
+  const sharename = document.getElementById('smb-sharename').value.trim() || _smbDataset.replace(/\//g, '-');
+  const dataset = _smbDataset;
+  smbDialog.close();
+  try {
+    const result = await api('POST', '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+      { sharename });
+    showOpLog('SMB share enabled: ' + dataset, result.tasks, null);
+    await _refreshSMBShares();
+  } catch (e) {
+    showOpLog('Failed to enable SMB share', e.tasks, e.message);
+  }
+});
+
+document.getElementById('smbDisableBtn').addEventListener('click', async () => {
+  const dataset = _smbDataset;
+  const sharename = _smbCurrentSharename;
+  if (!sharename) { smbDialog.close(); return; }
+  smbDialog.close();
+  try {
+    const result = await api('DELETE',
+      '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/') + '?name=' + encodeURIComponent(sharename));
+    showOpLog('SMB share disabled: ' + dataset, result.tasks, null);
+    await _refreshSMBShares();
+  } catch (e) {
+    showOpLog('Failed to disable SMB share', e.tasks, e.message);
+  }
+});
 
 // ── SSE client ────────────────────────────────────────────────────────────────
 // Maps SSE topic names → state key + render function.

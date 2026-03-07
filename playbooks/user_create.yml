@@ -8,6 +8,8 @@
 #   groups      - comma-separated supplementary groups
 #   password    - pre-hashed password string (e.g. from openssl passwd)
 #   create_group - "true" to ensure a group named <username> is created first
+#   smb_user    - "true" to also register the user in Samba's tdbsam database
+#                 (requires smbpasswd; uses the same plaintext password field)
 
 - name: Create local user
   hosts: localhost
@@ -18,6 +20,7 @@
     user_groups: ""
     password: ""
     create_group: "false"
+    smb_user: "false"
   tasks:
     - name: Assert required vars
       ansible.builtin.assert:
@@ -69,3 +72,11 @@
       delay: 2
       until: user_result is not failed
       changed_when: user_result.changed
+
+    - name: Register user with Samba (smbpasswd -a)
+      ansible.builtin.shell:
+        cmd: "smbpasswd -a -s {{ username | quote }}"
+        stdin: "{{ password }}\n{{ password }}\n"
+      no_log: true
+      changed_when: true
+      when: smb_user == "true" and password != ""

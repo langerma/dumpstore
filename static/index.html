@@ -99,6 +99,13 @@
       <div id="groups-table-wrap">
         <div class="loading">Loading groups…</div>
       </div>
+      <div class="section-header" style="margin-top:2rem">
+        <h2>SMB Users</h2>
+        <button class="btn-secondary" id="smbConfigPamBtn">Configure Samba</button>
+      </div>
+      <div id="smb-users-wrap">
+        <div class="loading">Loading SMB users…</div>
+      </div>
     </section>
   </main>
 
@@ -438,6 +445,10 @@
         <label>Password <span class="field-note">(leave blank to lock account)</span>
           <input type="password" id="user-password" autocomplete="new-password">
         </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="user-smb">
+          Also register as SMB user <span class="field-note">(uses same password; requires Samba)</span>
+        </label>
       </fieldset>
       <div class="dialog-actions">
         <button type="button" id="userCancelBtn" class="btn-secondary">Cancel</button>
@@ -616,6 +627,66 @@
       <button type="button" id="nfsDisableBtn" class="btn-danger">Disable</button>
       <button type="button" id="nfsAddBtn" class="btn-primary">Share</button>
     </div>
+  </dialog>
+
+
+  <!-- SMB SHARE DIALOG -->
+  <dialog id="smbDialog">
+    <h3 id="smbDialogTitle">SMB Share</h3>
+    <div id="smbDialogEntries" style="margin-bottom:1rem"></div>
+    <fieldset class="form-section" id="smbAddForm">
+      <legend>Share settings</legend>
+      <label>Share name <span class="field-note">(leave blank to use "on" — shares under the dataset name)</span>
+        <input type="text" id="smb-sharename" placeholder="leave blank for default" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="field-note" id="smb-unc-preview" style="margin:0.4rem 0 0;font-size:0.8rem"></p>
+    </fieldset>
+    <div class="dialog-actions">
+      <button type="button" id="smbDialogClose" class="btn-secondary">Close</button>
+      <button type="button" id="smbDisableBtn" class="btn-danger">Disable</button>
+      <button type="button" id="smbAddBtn" class="btn-primary">Share</button>
+    </div>
+  </dialog>
+
+  <!-- REMOVE SMB USER DIALOG -->
+  <dialog id="removeSmbUserDialog">
+    <h3>Remove SMB Access</h3>
+    <div class="delete-warning">
+      <p>Remove Samba access for <strong id="removeSmbUserDisplayName"></strong>?</p>
+      <p class="delete-child-warning">The Linux account is not affected — only the Samba password entry is deleted.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="removeSmbUserCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="removeSmbUserConfirmBtn" class="btn-danger">Remove</button>
+    </div>
+  </dialog>
+
+  <!-- CONFIGURE SAMBA DIALOG -->
+  <dialog id="configureSambaDialog">
+    <h3>Configure Samba</h3>
+    <div class="delete-warning">
+      <p>This will modify <strong>/etc/samba/smb.conf</strong> and restart smbd/nmbd.</p>
+      <p class="delete-child-warning">Applies usershare configuration (required for custom share names) and PAM password sync.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="configureSambaCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="configureSambaConfirmBtn" class="btn-primary">Apply</button>
+    </div>
+  </dialog>
+
+  <!-- ADD SMB USER DIALOG -->
+  <dialog id="addSmbUserDialog">
+    <form id="addSmbUserForm" method="dialog">
+      <h3>Add SMB Access: <span id="addSmbUserDisplayName"></span></h3>
+      <p class="muted" style="margin:0 0 1rem">Set a Samba password for this user to grant SMB access.</p>
+      <label>SMB Password
+        <input type="password" id="smb-user-password" autocomplete="new-password">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="addSmbUserCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Add to SMB</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- OPERATION LOG DIALOG -->

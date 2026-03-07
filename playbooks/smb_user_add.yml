@@ -1,0 +1,31 @@
+---
+# Registers an existing local user in Samba's tdbsam database.
+# Required extra vars:
+#   username     - Linux username to register
+#   smb_password - plaintext SMB password (piped to smbpasswd via stdin)
+
+- name: Add user to Samba
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - username is defined and username != ""
+          - smb_password is defined and smb_password != ""
+          - username is not search('[;|&$`]')
+        fail_msg: "username and smb_password are required"
+
+    - name: Assert smbpasswd is available
+      ansible.builtin.command:
+        argv: ["which", "smbpasswd"]
+      changed_when: false
+      register: _which
+      failed_when: _which.rc != 0
+
+    - name: Register user with Samba  # noqa: command-instead-of-shell
+      ansible.builtin.shell:
+        cmd: "smbpasswd -a -s {{ username | quote }}"
+        stdin: "{{ smb_password }}\n{{ smb_password }}\n"
+      no_log: true
+      changed_when: true

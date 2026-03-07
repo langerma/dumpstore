@@ -1,0 +1,28 @@
+---
+# Removes a Samba usershare via `net usershare delete`.
+#
+# Required extra vars:
+#   sharename - the share name to remove (as shown in net usershare list)
+
+- name: Remove SMB usershare
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - sharename is defined and sharename != ""
+          - sharename is not search('[;|&$`\s]')
+        fail_msg: "sharename is required and must not contain special characters"
+
+    - name: Assert net is available
+      ansible.builtin.command:
+        argv: ["which", "net"]
+      changed_when: false
+      register: _which_net
+      failed_when: _which_net.rc != 0
+
+    - name: Remove usershare
+      ansible.builtin.command:
+        argv: ["net", "usershare", "delete", "{{ sharename }}"]
+      changed_when: true
