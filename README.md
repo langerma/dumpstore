@@ -23,7 +23,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
-- **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL and NFS buttons light up when configured
+- **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
@@ -31,6 +31,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
+- **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough)
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
@@ -201,6 +202,14 @@ POST   /api/acl/{dataset}     → acl_set_posix.yml         (ansible)
                                 acl_set_nfs4.yml
 DELETE /api/acl/{dataset}     → acl_remove_posix.yml      (ansible)
                                 acl_remove_nfs4.yml
+
+GET    /api/smb-shares        → net usershare list        (direct)
+GET    /api/smb-users         → pdbedit -L                (direct)
+POST   /api/smb-share/{ds}    → smb_usershare_set.yml     (ansible)
+DELETE /api/smb-share/{ds}    → smb_usershare_unset.yml   (ansible)
+POST   /api/smb-users/{name}  → smb_user_add.yml          (ansible)
+DELETE /api/smb-users/{name}  → smb_user_remove.yml       (ansible)
+POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
 ```
 
 ## Requirements
@@ -213,6 +222,7 @@ DELETE /api/acl/{dataset}     → acl_remove_posix.yml      (ansible)
 | S.M.A.R.T. (optional)  | `smartmontools`                                           | `smartmontools` pkg                          |
 | POSIX ACLs (optional)  | `acl` pkg (`getfacl`/`setfacl`)                           | `py311-pylibacl` or `acl` port               |
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
+| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`)                         | `samba` pkg                                  |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
@@ -237,6 +247,11 @@ systemctl enable --now nfs-server
 
 # RHEL/Fedora — ACLs
 dnf install acl nfs4-acl-tools
+
+# Debian/Ubuntu — SMB sharing
+apt install samba
+# Then run the SMB setup from the dumpstore UI (Settings → Configure Samba)
+# or manually: ansible-playbook playbooks/smb_setup.yml
 ```
 
 ## Versioning
@@ -358,6 +373,11 @@ sudo make uninstall
 │   ├── acl_remove_posix.yml         # Remove POSIX ACL entry (setfacl -x)
 │   ├── acl_set_nfs4.yml             # Add NFSv4 ACL entry (nfs4_setfacl -a)
 │   ├── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
+│   ├── smb_setup.yml                # Configure Samba: usershares dir, disable [homes], PAM passthrough
+│   ├── smb_usershare_set.yml        # Create/update a Samba usershare for a dataset
+│   ├── smb_usershare_unset.yml      # Remove a Samba usershare
+│   ├── smb_user_add.yml             # Add a Linux user to smbpasswd
+│   └── smb_user_remove.yml          # Remove a user from smbpasswd
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
@@ -403,6 +423,13 @@ sudo make uninstall
 | GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset         |
 | POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry            |
 | DELETE | `/api/acl/{dataset}`        | Remove an ACL entry                   |
+| GET    | `/api/smb-shares`           | List all active Samba usershares      |
+| POST   | `/api/smb-share/{dataset}`  | Create or update a Samba usershare    |
+| DELETE | `/api/smb-share/{dataset}`  | Remove a Samba usershare              |
+| GET    | `/api/smb-users`            | List users registered in smbpasswd   |
+| POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd               |
+| DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd          |
+| POST   | `/api/smb-config/pam`       | Run Samba setup playbook              |
 
 ### POST /api/datasets
 
@@ -437,7 +464,7 @@ Body is a JSON object with any subset of editable properties. An empty string va
 }
 ```
 
-Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`.
+Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`, `sharenfs`, `sharesmb`.
 
 ### DELETE /api/datasets/{name}
 
@@ -549,8 +576,8 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 | Snapshot rollback        | Roll a dataset back to a snapshot with confirm dialog; destroys newer snapshots               |
 | Dataset rename           | Rename a dataset or volume in place                                                           |
 | Snapshot clone           | Create a new dataset from an existing snapshot                                                |
-| ~~NFS share management~~ | ~~List, create, and remove NFS exports~~ — **done** (ZFS `sharenfs` property; cross-platform) |
-| SMB share management     | List, create, and remove Samba shares (`smb.conf`); Linux and FreeBSD service handling        |
+| ~~NFS share management~~ | ~~List, create, and remove NFS exports~~ — **done** (ZFS `sharenfs` property; cross-platform)         |
+| ~~SMB share management~~ | ~~List, create, and remove Samba shares~~ — **done** (`net usershare`; Samba user management; setup playbook) |
 | File browser             | Browse dataset contents, set permissions                                                      |
 | ZFS send/receive         | Pool replication and off-site backup                                                          |
 | Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                  |
