@@ -1,7 +1,7 @@
 ---
 # Removes a user from Samba's tdbsam database.
 # Required extra vars:
-#   username - Linux username to remove from Samba
+#   username - local username to remove from Samba
 
 - name: Remove user from Samba
   hosts: localhost

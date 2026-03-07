@@ -31,7 +31,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
-- **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough)
+- **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
@@ -376,7 +376,7 @@ sudo make uninstall
 │   ├── smb_setup.yml                # Configure Samba: usershares dir, disable [homes], PAM passthrough
 │   ├── smb_usershare_set.yml        # Create/update a Samba usershare for a dataset
 │   ├── smb_usershare_unset.yml      # Remove a Samba usershare
-│   ├── smb_user_add.yml             # Add a Linux user to smbpasswd
+│   ├── smb_user_add.yml             # Add a local user to smbpasswd
 │   └── smb_user_remove.yml          # Remove a user from smbpasswd
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/

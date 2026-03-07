@@ -1,5 +1,5 @@
 ---
-# Registers an existing Linux user in Samba's tdbsam database.
+# Registers an existing local user in Samba's tdbsam database.
 # Required extra vars:
 #   username     - Linux username to register
 #   smb_password - plaintext SMB password (piped to smbpasswd via stdin)
@@ -23,7 +23,7 @@
       register: _which
       failed_when: _which.rc != 0
 
-    - name: Register user with Samba
+    - name: Register user with Samba  # noqa: command-instead-of-shell
       ansible.builtin.shell:
         cmd: "smbpasswd -a -s {{ username | quote }}"
         stdin: "{{ smb_password }}\n{{ smb_password }}\n"

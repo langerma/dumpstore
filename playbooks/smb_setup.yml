@@ -1,52 +1,72 @@
 ---
-# Configures Samba for ZFS integration on Linux. Idempotent — safe to run
+# Configures Samba for ZFS integration on Linux and FreeBSD. Idempotent — safe to run
 # multiple times. Performs:
-#   1. Creates the usershares directory and sambashare group so that
-#      `zfs set sharesmb=<name>` can call `net usershare` for custom share names.
-#   2. Adds PAM passthrough options so SMB logins are checked against Linux PAM
+#   1. Creates the usershares directory so that `net usershare add` works.
+#   2. Enables usershares in smb.conf and removes [homes] so home dirs are not shared.
+#   3. Adds PAM passthrough options (Linux only) so SMB logins are checked against PAM
 #      and password changes sync between Samba and the Linux account.
-#   3. Restarts smbd/nmbd to apply changes.
+#   4. Restarts smbd/nmbd (Linux) or samba_server (FreeBSD) to apply changes.
+#
+# OS-specific defaults:
+#   Linux  : smb.conf=/etc/samba/smb.conf        usershares=/var/lib/samba/usershares  services=[smbd,nmbd]
+#   FreeBSD: smb.conf=/usr/local/etc/smb4.conf   usershares=/var/db/samba4/usershares  services=[samba_server]
 
 - name: Configure Samba for ZFS integration
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   tasks:
+    - name: Set OS-specific Samba variables
+      ansible.builtin.set_fact:
+        smb_conf: >-
+          {{ '/usr/local/etc/smb4.conf'
+             if ansible_os_family == 'FreeBSD'
+             else '/etc/samba/smb.conf' }}
+        usershares_dir: >-
+          {{ '/var/db/samba4/usershares'
+             if ansible_os_family == 'FreeBSD'
+             else '/var/lib/samba/usershares' }}
+        samba_services: >-
+          {{ ['samba_server']
+             if ansible_os_family == 'FreeBSD'
+             else ['smbd', 'nmbd'] }}
+
     - name: Check smb.conf exists
       ansible.builtin.stat:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
       register: smb_conf_stat
 
     - name: Fail if smb.conf not found
       ansible.builtin.fail:
-        msg: "/etc/samba/smb.conf not found — is Samba installed?"
+        msg: "{{ smb_conf }} not found — is Samba installed?"
       when: not smb_conf_stat.stat.exists
 
     # ── usershares setup ──────────────────────────────────────────────────────
 
-    - name: Ensure sambashare group exists
+    - name: Ensure sambashare group exists (Linux only)
       ansible.builtin.group:
         name: sambashare
         state: present
+      when: ansible_os_family != 'FreeBSD'
 
     - name: Create usershares directory
       ansible.builtin.file:
-        path: /var/lib/samba/usershares
+        path: "{{ usershares_dir }}"
         state: directory
         owner: root
-        group: sambashare
-        mode: "1770"
+        group: "{{ 'sambashare' if ansible_os_family != 'FreeBSD' else 'wheel' }}"
+        mode: "{{ '1770' if ansible_os_family != 'FreeBSD' else '1755' }}"
 
     - name: Set usershare path
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*usershare path\s*='
-        line: '   usershare path = /var/lib/samba/usershares'
+        line: "   usershare path = {{ usershares_dir }}"
         insertafter: '^\[global\]'
       notify: Restart samba
 
     - name: Set usershare max shares
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*usershare max shares\s*='
         line: '   usershare max shares = 100'
         insertafter: '^\[global\]'
@@ -54,7 +74,7 @@
 
     - name: Disable usershare guest access
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*usershare allow guests\s*='
         line: '   usershare allow guests = no'
         insertafter: '^\[global\]'
@@ -62,7 +82,7 @@
 
     - name: Allow root to manage shares for any path
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*usershare owner only\s*='
         line: '   usershare owner only = no'
         insertafter: '^\[global\]'
@@ -70,35 +90,38 @@
 
     - name: Remove [homes] section (home dirs must not be shared by default)
       ansible.builtin.replace:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '(?m)^\[homes\][^\[]*'
         replace: ''
       notify: Restart samba
 
-    # ── PAM passthrough ───────────────────────────────────────────────────────
+    # ── PAM passthrough (Linux only) ──────────────────────────────────────────
 
     - name: Set obey pam restrictions
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*obey pam restrictions\s*='
         line: '   obey pam restrictions = yes'
         insertafter: '^\[global\]'
+      when: ansible_os_family != 'FreeBSD'
       notify: Restart samba
 
     - name: Set pam password change
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*pam password change\s*='
         line: '   pam password change = yes'
         insertafter: '^\[global\]'
+      when: ansible_os_family != 'FreeBSD'
       notify: Restart samba
 
     - name: Set unix password sync
       ansible.builtin.lineinfile:
-        path: /etc/samba/smb.conf
+        path: "{{ smb_conf }}"
         regexp: '^\s*unix password sync\s*='
         line: '   unix password sync = yes'
         insertafter: '^\[global\]'
+      when: ansible_os_family != 'FreeBSD'
       notify: Restart samba
 
   handlers:
@@ -106,7 +129,5 @@
       ansible.builtin.service:
         name: "{{ item }}"
         state: restarted
-      loop:
-        - smbd
-        - nmbd
+      loop: "{{ samba_services }}"
       failed_when: false
