@@ -16,6 +16,7 @@ const state = {
   collapsedDatasets: new Set(),
   aclDataset: '',
   aclData: null,
+  aclStatus: {},
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ async function loadAll() {
   } finally {
     setRefreshing(false);
   }
+  refreshACLStatus();
 }
 
 // ── Formatting: uptime ────────────────────────────────────────────────────────
@@ -461,7 +463,6 @@ function renderDatasets() {
     return `
       <tr>
         <td class="dataset-indent" ${indent}>${toggle}${typeBadge(d.depth === 0 ? 'pool' : d.type)} ${esc(shortName)}</td>
-        <td class="muted">${esc(d.name)}</td>
         <td>${fmtBytes(d.used)}</td>
         <td>${fmtBytes(d.avail)}</td>
         <td>${fmtBytes(d.refer)}</td>
@@ -471,7 +472,7 @@ function renderDatasets() {
         <td>
           <div class="row-actions">
             <button class="btn-edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
-            ${d.type !== 'volume' ? `<button class="btn-acl btn-small" data-ds="${esc(d.name)}">ACL</button>` : ''}
+            ${d.type !== 'volume' ? `<button class="btn-acl btn-small${state.aclStatus[d.name] ? ' active' : ''}" data-ds="${esc(d.name)}" title="${state.aclStatus[d.name] ? 'ACL entries configured' : 'No ACL'}">ACL</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
@@ -484,7 +485,7 @@ function renderDatasets() {
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Name</th><th>Full Path</th><th>Used</th><th>Avail</th>
+          <th>Name</th><th>Used</th><th>Avail</th>
           <th>Refer</th><th>Compress</th><th>Ratio</th><th>Mount</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -1381,6 +1382,13 @@ function renderNFSv4AddForm(d) {
   });
 }
 
+async function refreshACLStatus() {
+  try {
+    state.aclStatus = await api('GET', '/api/acl-status') || {};
+    renderDatasets();
+  } catch (_) { /* best-effort */ }
+}
+
 async function addACLEntry(ace, recursive) {
   const dataset = state.aclDataset;
   try {
@@ -1389,6 +1397,7 @@ async function addACLEntry(ace, recursive) {
     showOpLog(`ACL entry added — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
+    refreshACLStatus();
   } catch (err) {
     showOpLog(`Failed to add ACL entry`, err.tasks, err.message);
   }
@@ -1402,6 +1411,7 @@ async function removeACLEntry(entry, recursive) {
     showOpLog(`ACL entry removed — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
+    refreshACLStatus();
   } catch (err) {
     showOpLog(`Failed to remove ACL entry`, err.tasks, err.message);
   }
@@ -1414,6 +1424,7 @@ async function enableACLs(dataset, acltype) {
     showOpLog(`Enabled ${acltype} ACLs — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
+    refreshACLStatus();
   } catch (err) {
     showOpLog(`Failed to enable ACLs`, err.tasks, err.message);
   }
@@ -1430,6 +1441,7 @@ document.getElementById('disableACLConfirmBtn').addEventListener('click', async 
     showOpLog(`Disabled ACLs — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
+    refreshACLStatus();
   } catch (err) {
     showOpLog(`Failed to disable ACLs`, err.tasks, err.message);
   }

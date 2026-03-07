@@ -37,6 +37,7 @@ type Dataset struct {
 	Pool          string `json:"pool"`
 	Depth         int    `json:"depth"`
 	ShareNFS      string `json:"sharenfs"`
+	ACLType       string `json:"acltype"`
 }
 
 // Snapshot represents a ZFS snapshot.
@@ -115,14 +116,14 @@ func ListPools() ([]Pool, error) {
 // ListDatasets runs `zfs list` and returns all datasets.
 func ListDatasets() ([]Dataset, error) {
 	out, err := run("zfs", "list", "-H", "-p",
-		"-o", "name,used,avail,refer,mountpoint,type,compressratio,compression,quota,reservation,sharenfs")
+		"-o", "name,used,avail,refer,mountpoint,type,compressratio,compression,quota,reservation,sharenfs,acltype")
 	if err != nil {
 		return nil, err
 	}
 	var datasets []Dataset
 	for _, line := range splitLines(out) {
 		f := strings.Split(line, "\t")
-		if len(f) < 11 {
+		if len(f) < 12 {
 			continue
 		}
 		name := f[0]
@@ -141,6 +142,7 @@ func ListDatasets() ([]Dataset, error) {
 			Pool:          pool,
 			Depth:         strings.Count(name, "/"),
 			ShareNFS:      f[10],
+			ACLType:       normalizeACLType(f[11]),
 		})
 	}
 	return datasets, nil

@@ -58,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", h.getEvents)
 	mux.HandleFunc("GET /api/chown/{dataset...}", h.getDatasetOwnership)
 	mux.HandleFunc("POST /api/chown/{dataset...}", h.setDatasetOwnership)
+	mux.HandleFunc("GET /api/acl-status", h.getACLStatus)
 	mux.HandleFunc("GET /api/acl/{dataset...}", h.getDatasetACL)
 	mux.HandleFunc("POST /api/acl/{dataset...}", h.setACLEntry)
 	mux.HandleFunc("DELETE /api/acl/{dataset...}", h.removeACLEntry)
@@ -1050,6 +1051,31 @@ var aclSafeRe = func() func(string) bool {
 	}
 }()
 
+// getACLStatus handles GET /api/acl-status
+// Returns a map of dataset name → bool indicating whether the dataset has
+// non-trivial ACL entries on its mountpoint.
+func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
+	datasets, err := zfs.ListDatasets()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	status := make(map[string]bool, len(datasets))
+	for _, d := range datasets {
+		if d.Type != "filesystem" || d.Mountpoint == "none" || d.Mountpoint == "-" || d.Mountpoint == "" {
+			continue
+		}
+		// DatasetHasACL checks actual getfacl output; fall back to acltype
+		// when getfacl / nfs4_getfacl are not available.
+		hasACL := zfs.DatasetHasACL(d.Mountpoint)
+		if !hasACL {
+			hasACL = d.ACLType != "" && d.ACLType != "off"
+		}
+		status[d.Name] = hasACL
+	}
+	writeJSON(w, status)
+}
+
 // getDatasetACL handles GET /api/acl/{dataset...}
 func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
@@ -1122,6 +1148,7 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 
 	var playbook string
 	vars := map[string]string{
+		"dataset":    name,
 		"mountpoint": acl.Mountpoint,
 		"ace":        req.ACE,
 		"recursive":  recursive,

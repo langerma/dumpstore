@@ -2,6 +2,7 @@
 # Add or modify a POSIX ACL entry on a dataset mountpoint.
 #
 # Required extra vars:
+#   dataset     - ZFS dataset name (e.g. tank/data)
 #   mountpoint  - absolute path of the dataset mountpoint (e.g. /tank/data)
 #   ace         - setfacl entry spec (e.g. "user:alice:rwx", "group:storage:r-x",
 #                 "default:user:alice:rwx")
@@ -17,11 +18,19 @@
     - name: Assert required vars
       ansible.builtin.assert:
         that:
+          - dataset is defined and dataset != ""
           - mountpoint is defined and mountpoint != ""
           - ace is defined and ace != ""
+          - dataset is not search('[;|&$`]')
           - mountpoint is not search('[;|&$`]')
           - ace is not search('[;|&$`]')
-        fail_msg: "mountpoint and ace are required and must not contain shell-special characters"
+        fail_msg: "dataset, mountpoint and ace are required and must not contain shell-special characters"
+
+    - name: Ensure acltype is set to posixacl
+      ansible.builtin.command:
+        argv: ["zfs", "set", "acltype=posixacl", "{{ dataset }}"]
+      register: acltype_result
+      changed_when: acltype_result.rc == 0
 
     - name: Set POSIX ACL entry (non-recursive)
       ansible.builtin.command:

@@ -23,7 +23,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
-- **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint
+- **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL and NFS buttons light up when configured
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
@@ -31,7 +31,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
-- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
+- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
 
@@ -195,6 +195,7 @@ POST   /api/groups            → group_create.yml          (ansible)
 PUT    /api/groups/{name}     → group_modify.yml          (ansible)
 DELETE /api/groups/{name}     → group_delete.yml          (ansible)
 
+GET    /api/acl-status         → getfacl / acltype         (direct)
 GET    /api/acl/{dataset}     → getfacl / nfs4_getfacl    (direct)
 POST   /api/acl/{dataset}     → acl_set_posix.yml         (ansible)
                                 acl_set_nfs4.yml
@@ -398,6 +399,7 @@ sudo make uninstall
 | POST   | `/api/groups`               | Create a local group                  |
 | PUT    | `/api/groups/{name}`        | Edit group (name, GID, members)       |
 | DELETE | `/api/groups/{name}`        | Delete a local group                  |
+| GET    | `/api/acl-status`           | ACL presence map (dataset → bool)     |
 | GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset         |
 | POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry            |
 | DELETE | `/api/acl/{dataset}`        | Remove an ACL entry                   |
