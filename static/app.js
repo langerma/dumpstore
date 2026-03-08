@@ -20,6 +20,8 @@ const state = {
   aclDataset: '',
   aclData: null,
   aclStatus: {},
+  hideSystemUsers: true,
+  hideSystemGroups: true,
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -62,6 +64,18 @@ document.getElementById('opLogClose').addEventListener('click', () => opLogDialo
 
 const stepIcons = { ok: '✓', changed: '●', failed: '✗', skipped: '–' };
 
+function showOpLogRunning(title) {
+  document.getElementById('opLogTitle').textContent = title;
+  document.getElementById('opLogSteps').innerHTML = `
+    <div class="op-step running">
+      <span class="op-step-icon">⟳</span>
+      <span class="op-step-name">Running…</span>
+    </div>`;
+  document.getElementById('opLogError').style.display = 'none';
+  document.getElementById('opLogClose').disabled = true;
+  if (!opLogDialog.open) opLogDialog.showModal();
+}
+
 function showOpLog(title, tasks, errorMsg) {
   document.getElementById('opLogTitle').textContent = title;
   const stepsEl = document.getElementById('opLogSteps');
@@ -80,7 +94,8 @@ function showOpLog(title, tasks, errorMsg) {
   } else {
     errorEl.style.display = 'none';
   }
-  opLogDialog.showModal();
+  document.getElementById('opLogClose').disabled = false;
+  if (!opLogDialog.open) opLogDialog.showModal();
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -586,8 +601,14 @@ function renderSnapshots() {
   });
 }
 
-async function deleteSnapshot(name) {
-  if (!confirm(`Delete snapshot ${name}?`)) return;
+const deleteSnapDialog = document.getElementById('deleteSnapDialog');
+document.getElementById('deleteSnapCancelBtn').addEventListener('click', () => deleteSnapDialog.close());
+
+let _deleteSnapName = '';
+document.getElementById('deleteSnapConfirmBtn').addEventListener('click', async () => {
+  const name = _deleteSnapName;
+  deleteSnapDialog.close();
+  showOpLogRunning(`Deleting snapshot…`);
   try {
     const result = await api('DELETE', '/api/snapshots/' + encodeURIComponent(name));
     state.snapshots = state.snapshots.filter(s => s.name !== name);
@@ -596,6 +617,12 @@ async function deleteSnapshot(name) {
   } catch (e) {
     showOpLog('Snapshot deletion failed', e.tasks, e.message);
   }
+});
+
+function deleteSnapshot(name) {
+  _deleteSnapName = name;
+  document.getElementById('deleteSnapDisplayName').textContent = name;
+  deleteSnapDialog.showModal();
 }
 
 // ── New Snapshot dialog ───────────────────────────────────────────────────────
@@ -620,6 +647,7 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
   const snapname = document.getElementById('snap-label').value.trim();
   const recursive = document.getElementById('snap-recursive').checked;
   dialog.close();
+  showOpLogRunning(`Creating snapshot…`);
   try {
     const result = await api('POST', '/api/snapshots', { dataset, snapname, recursive });
     showOpLog(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
@@ -670,6 +698,7 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
     xattr:        document.getElementById('ds-xattr').value,
   };
   datasetDialog.close();
+  showOpLogRunning('Creating dataset…');
   try {
     const result = await api('POST', '/api/datasets', body);
     showOpLog(`Dataset created: ${body.name}`, result.tasks, null);
@@ -732,6 +761,7 @@ deleteDatasetBtn.addEventListener('click', async () => {
   const name = _deleteDatasetTarget;
   const recursive = deleteDatasetRecursive.checked;
   deleteDatasetDialog.close();
+  showOpLogRunning(`Deleting dataset…`);
   try {
     const encodedName = name.split('/').map(encodeURIComponent).join('/');
     const url = '/api/datasets/' + encodedName + (recursive ? '?recursive=true' : '');
@@ -818,6 +848,7 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
   }
 
   editDatasetDialog.close();
+  showOpLogRunning('Updating properties…');
   try {
     const encodedName = _editDatasetName.split('/').map(encodeURIComponent).join('/');
     const result = await api('PATCH', '/api/datasets/' + encodedName, body);
@@ -836,12 +867,18 @@ const PROTECTED_GROUPS = new Set(['nogroup', 'nobody', 'nfsnobody']);
 
 // ── Render: Users ─────────────────────────────────────────────────────────────
 function renderUsers() {
+  const btn = document.getElementById('toggleSystemUsersBtn');
+  if (btn) btn.textContent = state.hideSystemUsers ? 'Show system' : 'Hide system';
+
   const wrap = document.getElementById('users-table-wrap');
-  if (!state.users.length) {
+  const users = state.hideSystemUsers
+    ? state.users.filter(u => u.uid >= 1000 && !PROTECTED_USERS.has(u.username))
+    : state.users;
+  if (!users.length) {
     wrap.innerHTML = '<div class="loading">No users found.</div>';
     return;
   }
-  const rows = state.users.map(u => {
+  const rows = users.map(u => {
     const isSystem = u.uid < 1000 || PROTECTED_USERS.has(u.username);
     return `
       <tr class="${isSystem ? 'row-muted' : ''}">
@@ -875,12 +912,18 @@ function renderUsers() {
 
 // ── Render: Groups ────────────────────────────────────────────────────────────
 function renderGroups() {
+  const btn = document.getElementById('toggleSystemGroupsBtn');
+  if (btn) btn.textContent = state.hideSystemGroups ? 'Show system' : 'Hide system';
+
   const wrap = document.getElementById('groups-table-wrap');
-  if (!state.groups.length) {
+  const groups = state.hideSystemGroups
+    ? state.groups.filter(g => g.gid >= 1000 && !PROTECTED_GROUPS.has(g.name))
+    : state.groups;
+  if (!groups.length) {
     wrap.innerHTML = '<div class="loading">No groups found.</div>';
     return;
   }
-  const rows = state.groups.map(g => {
+  const rows = groups.map(g => {
     const isSystem = g.gid < 1000 || PROTECTED_GROUPS.has(g.name);
     return `
       <tr class="${isSystem ? 'row-muted' : ''}">
@@ -910,6 +953,16 @@ function renderGroups() {
   });
 }
 
+// ── System user/group toggles ─────────────────────────────────────────────────
+document.getElementById('toggleSystemUsersBtn').addEventListener('click', () => {
+  state.hideSystemUsers = !state.hideSystemUsers;
+  renderUsers();
+});
+document.getElementById('toggleSystemGroupsBtn').addEventListener('click', () => {
+  state.hideSystemGroups = !state.hideSystemGroups;
+  renderGroups();
+});
+
 // ── New User dialog ───────────────────────────────────────────────────────────
 const newUserDialog = document.getElementById('newUserDialog');
 document.getElementById('newUserBtn').addEventListener('click', () => {
@@ -930,6 +983,7 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
   const createGroup = document.getElementById('user-create-group').checked;
   const smb_user    = document.getElementById('user-smb').checked;
   newUserDialog.close();
+  showOpLogRunning('Creating user…');
   try {
     const result = await api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
     showOpLog(`User created: ${username}`, result.tasks, null);
@@ -973,6 +1027,7 @@ deleteUserConfirmBtn.addEventListener('click', async () => {
   if (deleteUserConfirmInput.value !== _deleteUserTarget) return;
   const username = _deleteUserTarget;
   deleteUserDialog.close();
+  showOpLogRunning('Deleting user…');
   try {
     const result = await api('DELETE', '/api/users/' + encodeURIComponent(username));
     showOpLog(`Deleted user: ${username}`, result.tasks, null);
@@ -997,6 +1052,7 @@ document.getElementById('newGroupForm').addEventListener('submit', async e => {
   const groupname = document.getElementById('group-name').value.trim();
   const gid       = document.getElementById('group-gid').value.trim();
   newGroupDialog.close();
+  showOpLogRunning('Creating group…');
   try {
     const result = await api('POST', '/api/groups', { groupname, gid });
     showOpLog(`Group created: ${groupname}`, result.tasks, null);
@@ -1034,6 +1090,7 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
   if (deleteGroupConfirmInput.value !== _deleteGroupTarget) return;
   const groupname = _deleteGroupTarget;
   deleteGroupDialog.close();
+  showOpLogRunning('Deleting group…');
   try {
     const result = await api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
     showOpLog(`Deleted group: ${groupname}`, result.tasks, null);
@@ -1091,6 +1148,7 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
   const user_groups = document.getElementById('edit-user-groups').value.trim();
   const password   = document.getElementById('edit-user-password').value;
   editUserDialog.close();
+  showOpLogRunning('Updating user…');
   try {
     const result = await api('PUT', '/api/users/' + encodeURIComponent(username), { shell, group, user_groups, password });
     showOpLog(`User updated: ${username}`, result.tasks, null);
@@ -1128,6 +1186,7 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   const gid       = document.getElementById('edit-group-gid').value.trim();
   const members   = document.getElementById('edit-group-members').value.trim();
   editGroupDialog.close();
+  showOpLogRunning('Updating group…');
   try {
     const result = await api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
     showOpLog(`Group updated: ${result.groupname}`, result.tasks, null);
@@ -1206,6 +1265,7 @@ document.getElementById('addSmbUserForm').addEventListener('submit', async e => 
   const username = _addSmbUserTarget;
   const password = document.getElementById('smb-user-password').value;
   addSmbUserDialog.close();
+  showOpLogRunning('Adding SMB user…');
   try {
     const result = await api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
     showOpLog(`SMB access added: ${username}`, result.tasks, null);
@@ -1233,6 +1293,7 @@ document.getElementById('removeSmbUserCancelBtn').addEventListener('click', () =
 document.getElementById('removeSmbUserConfirmBtn').addEventListener('click', async () => {
   const username = _removeSmbUserTarget;
   removeSmbUserDialog.close();
+  showOpLogRunning('Removing SMB user…');
   try {
     const result = await api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
     showOpLog(`SMB access removed: ${username}`, result.tasks, null);
@@ -1252,6 +1313,7 @@ document.getElementById('configureSambaCancelBtn').addEventListener('click', () 
 
 document.getElementById('configureSambaConfirmBtn').addEventListener('click', async () => {
   configureSambaDialog.close();
+  showOpLogRunning('Configuring Samba…');
   try {
     const result = await api('POST', '/api/smb-config/pam');
     showOpLog('Samba configured', result.tasks, null);
@@ -1379,7 +1441,7 @@ function renderNFSv4ACLEntries(d) {
   });
 }
 
-function renderPOSIXAddForm(d) {
+function renderPOSIXAddForm(_d) {
   const userList = state.users.map(u => `<option value="${esc(u.username)}">`).join('');
   const groupList = state.groups.map(g => `<option value="${esc(g.name)}">`).join('');
 
@@ -1416,8 +1478,6 @@ function renderPOSIXAddForm(d) {
   const tagSel = document.getElementById('aclTag');
   const qualLabel = document.getElementById('aclQualifierLabel');
   const qualInput = document.getElementById('aclQualifier');
-  const listEl = document.getElementById('aclUserList');
-
   tagSel.addEventListener('change', () => {
     const t = tagSel.value;
     const hasQualifier = t === 'user' || t === 'group';
@@ -1448,7 +1508,7 @@ function renderPOSIXAddForm(d) {
   });
 }
 
-function renderNFSv4AddForm(d) {
+function renderNFSv4AddForm(_d) {
   document.getElementById('aclDialogAddForm').innerHTML = `
     <fieldset class="form-section acl-add-form">
       <legend>Add Entry</legend>
@@ -1531,6 +1591,7 @@ async function refreshACLStatus() {
 
 async function addACLEntry(ace, recursive) {
   const dataset = state.aclDataset;
+  showOpLogRunning('Applying ACL entry…');
   try {
     const res = await api('POST', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { ace, recursive });
@@ -1545,6 +1606,7 @@ async function addACLEntry(ace, recursive) {
 
 async function removeACLEntry(entry, recursive) {
   const dataset = state.aclDataset;
+  showOpLogRunning('Removing ACL entry…');
   try {
     const qs = `entry=${encodeURIComponent(entry)}${recursive ? '&recursive=true' : ''}`;
     const res = await api('DELETE', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}?${qs}`);
@@ -1558,6 +1620,7 @@ async function removeACLEntry(entry, recursive) {
 }
 
 async function enableACLs(dataset, acltype) {
+  showOpLogRunning('Enabling ACLs…');
   try {
     const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { acltype });
@@ -1575,6 +1638,7 @@ document.getElementById('disableACLCancelBtn').addEventListener('click', () => d
 document.getElementById('disableACLConfirmBtn').addEventListener('click', async () => {
   const dataset = state.aclDataset;
   disableACLDialog.close();
+  showOpLogRunning('Disabling ACLs…');
   try {
     const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { acltype: 'off' });
@@ -1637,6 +1701,7 @@ document.getElementById('chownForm').addEventListener('submit', async e => {
   const group = document.getElementById('chown-group').value;
   const recursive = document.getElementById('chown-recursive').checked;
   chownDialog.close();
+  showOpLogRunning('Changing ownership…');
   try {
     const result = await api('POST', `/api/chown/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { owner, group, recursive });
@@ -1683,6 +1748,7 @@ document.getElementById('nfsAddBtn').addEventListener('click', async () => {
   const options = document.getElementById('nfs-clients').value.trim() || 'on';
   const dataset = _nfsDataset;
   nfsDialog.close();
+  showOpLogRunning('Enabling NFS share…');
   try {
     const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharenfs: options });
@@ -1695,6 +1761,7 @@ document.getElementById('nfsAddBtn').addEventListener('click', async () => {
 document.getElementById('nfsDisableBtn').addEventListener('click', async () => {
   const dataset = _nfsDataset;
   nfsDialog.close();
+  showOpLogRunning('Disabling NFS share…');
   try {
     const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharenfs: 'off' });
@@ -1772,6 +1839,7 @@ document.getElementById('smbAddBtn').addEventListener('click', async () => {
   const sharename = document.getElementById('smb-sharename').value.trim() || _smbDataset.replace(/\//g, '-');
   const dataset = _smbDataset;
   smbDialog.close();
+  showOpLogRunning('Enabling SMB share…');
   try {
     const result = await api('POST', '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharename });
@@ -1787,6 +1855,7 @@ document.getElementById('smbDisableBtn').addEventListener('click', async () => {
   const sharename = _smbCurrentSharename;
   if (!sharename) { smbDialog.close(); return; }
   smbDialog.close();
+  showOpLogRunning('Disabling SMB share…');
   try {
     const result = await api('DELETE',
       '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/') + '?name=' + encodeURIComponent(sharename));

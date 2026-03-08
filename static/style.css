@@ -436,7 +436,8 @@ dialog h3 {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-dialog form {
+dialog form,
+.dialog-body {
   overflow-y: auto;
   padding: 1rem 1.5rem;
   flex: 1;
@@ -547,6 +548,7 @@ dialog label select:focus { border-color: var(--accent); }
 .op-step.failed  { background: #2a1010; }
 .op-step.failed  .op-step-icon { color: var(--red); }
 .op-step.skipped .op-step-icon { color: var(--text-muted); }
+.op-step.running .op-step-icon { color: var(--accent); display: inline-block; animation: spin 1s linear infinite; }
 .op-error {
   color: var(--red);
   font-size: 12px;
@@ -646,7 +648,7 @@ dialog label select:focus { border-color: var(--accent); }
   border: 1px solid #5a2020;
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
-  margin: 0 1.5rem 0.75rem;
+  margin-bottom: 0.75rem;
   font-size: 13px;
   display: flex;
   flex-direction: column;
@@ -656,7 +658,7 @@ dialog label select:focus { border-color: var(--accent); }
 .delete-vol-warning   { color: var(--yellow); }
 .confirm-label {
   display: block;
-  margin: 0.75rem 1.5rem 0;
+  margin-top: 0.75rem;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -681,21 +683,20 @@ dialog label select:focus { border-color: var(--accent); }
 }
 .confirm-label input[type=text]:focus { border-color: var(--accent); }
 #deleteDatasetDialog { width: 420px; max-width: 95vw; }
-#deleteDatasetDialog .dialog-actions { margin: 0.75rem 1.5rem 0; }
 
 
 /* ── ACL dialog ─────────────────────────────────────────────────────────────── */
 #aclDialog { width: 680px; max-width: 96vw; }
-.acl-meta { margin: 0 1.5rem 0.75rem; font-size: 13px; color: var(--text-muted); }
+.acl-meta { margin-bottom: 0.75rem; font-size: 13px; color: var(--text-muted); }
 .acl-meta code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
-.acl-off { margin: 0 1.5rem 1rem; }
+.acl-off { margin-bottom: 1rem; }
 .acl-off p { margin: 0 0 0.75rem; }
 .acl-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 0.75rem; }
 .acl-table th { text-align: left; color: var(--text-muted); font-weight: normal; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .acl-table td { padding: 4px 8px; border-bottom: 1px solid var(--surface2); }
 .acl-table tr:last-child td { border-bottom: none; }
 .acl-perms { font-family: var(--font); letter-spacing: 0.05em; }
-.acl-add-form { margin: 0.5rem 1.5rem; }
+.acl-add-form { margin-top: 0.5rem; }
 .acl-perms-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0.5rem 0; align-items: center; font-size: 13px; }
 .acl-perms-row .field-note { color: var(--text-muted); font-size: 12px; }
 .btn-small { font-size: 11px; padding: 2px 7px; }

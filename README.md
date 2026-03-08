@@ -27,9 +27,9 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
-- **Snapshot management** — list, create (recursive), and delete snapshots
-- **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
-- **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
+- **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
+- **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
+- **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
 - **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
