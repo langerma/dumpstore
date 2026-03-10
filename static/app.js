@@ -98,6 +98,22 @@ function showOpLog(title, tasks, errorMsg) {
   if (!opLogDialog.open) opLogDialog.showModal();
 }
 
+// Append a single task step to the op-log while it is in running state.
+// Removes the "Running…" placeholder on the first call.
+function appendOpLogStep(step) {
+  const stepsEl = document.getElementById('opLogSteps');
+  // Remove the "Running…" placeholder if present
+  const running = stepsEl.querySelector('.op-step.running');
+  if (running) running.remove();
+  const div = document.createElement('div');
+  div.className = `op-step ${esc(step.status)}`;
+  div.innerHTML = `
+    <span class="op-step-icon">${esc(stepIcons[step.status] || '?')}</span>
+    <span class="op-step-name">${esc(step.name)}</span>
+    ${step.msg ? `<span class="op-step-msg">${esc(step.msg)}</span>` : ''}`;
+  stepsEl.appendChild(div);
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, type = 'ok') {
@@ -1892,7 +1908,7 @@ function stopPolling() {
 
 function startSSE() {
   if (_es) { _es.close(); _es = null; }
-  const topics = Object.keys(sseTopicMap).join(',');
+  const topics = [...Object.keys(sseTopicMap), 'ansible.progress'].join(',');
   const es = new EventSource('/api/events?topics=' + encodeURIComponent(topics));
   _es = es;
 
@@ -1900,6 +1916,16 @@ function startSSE() {
     stopPolling();
     if (_sseRetryTimer) { clearTimeout(_sseRetryTimer); _sseRetryTimer = null; }
   };
+
+  es.addEventListener('ansible.progress', e => {
+    try {
+      const step = JSON.parse(e.data);
+      // Only append if the dialog is open and still in running state (close button disabled)
+      if (opLogDialog.open && document.getElementById('opLogClose').disabled) {
+        appendOpLogStep(step);
+      }
+    } catch (err) { console.warn('[SSE] ansible.progress parse error', err); }
+  });
 
   for (const [topic, { key, render }] of Object.entries(sseTopicMap)) {
     es.addEventListener(topic, e => {

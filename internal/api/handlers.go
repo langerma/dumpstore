@@ -96,6 +96,14 @@ func NewHandler(runner *ansible.Runner, version string, b *broker.Broker) *Handl
 	return &Handler{runner: runner, version: version, broker: b}
 }
 
+// runOp executes a playbook and publishes each task step to the ansible.progress
+// SSE topic as it completes, so the frontend can show live progress.
+func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {
+	return h.runner.RunStreaming(playbook, vars, func(step ansible.TaskStep) {
+		h.broker.PublishNoCache("ansible.progress", step)
+	})
+}
+
 // RegisterRoutes attaches all API routes to mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sysinfo", h.getSysInfo)
@@ -250,7 +258,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runner.Run("zfs_dataset_set.yml", vars)
+	out, err := h.runOp("zfs_dataset_set.yml", vars)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -337,7 +345,7 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		"copies":       req.Copies,
 		"xattr":        req.Xattr,
 	}
-	out, err := h.runner.Run("zfs_dataset_create.yml", vars)
+	out, err := h.runOp("zfs_dataset_create.yml", vars)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -404,7 +412,7 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runner.Run("zfs_snapshot_create.yml", map[string]string{
+	out, err := h.runOp("zfs_snapshot_create.yml", map[string]string{
 		"dataset":   req.Dataset,
 		"snapname":  req.SnapName,
 		"recursive": recursive,
@@ -451,7 +459,7 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runner.Run("zfs_dataset_destroy.yml", map[string]string{
+	out, err := h.runOp("zfs_dataset_destroy.yml", map[string]string{
 		"name":      name,
 		"recursive": recursive,
 	})
@@ -485,7 +493,7 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runner.Run("zfs_snapshot_destroy.yml", map[string]string{
+	out, err := h.runOp("zfs_snapshot_destroy.yml", map[string]string{
 		"snapshot":  snapshot,
 		"recursive": recursive,
 	})
@@ -583,7 +591,7 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runner.Run("dataset_chown.yml", map[string]string{
+	out, err := h.runOp("dataset_chown.yml", map[string]string{
 		"mountpoint": mp,
 		"owner":      req.Owner,
 		"group":      req.Group,
@@ -752,7 +760,7 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
-	out, err := h.runner.Run("smb_usershare_set.yml", map[string]string{
+	out, err := h.runOp("smb_usershare_set.yml", map[string]string{
 		"dataset":   dataset,
 		"sharename": req.Sharename,
 	})
@@ -784,7 +792,7 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
-	out, err := h.runner.Run("smb_usershare_unset.yml", map[string]string{
+	out, err := h.runOp("smb_usershare_unset.yml", map[string]string{
 		"sharename": sharename,
 	})
 	if err != nil {
@@ -842,7 +850,7 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("smb_user_add.yml", map[string]string{
+	out, err := h.runOp("smb_user_add.yml", map[string]string{
 		"username":     name,
 		"smb_password": req.Password,
 	})
@@ -870,7 +878,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("smb_user_remove.yml", map[string]string{
+	out, err := h.runOp("smb_user_remove.yml", map[string]string{
 		"username": name,
 	})
 	if err != nil {
@@ -887,7 +895,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 // configureSambaPAM handles POST /api/smb-config/pam
 // Applies usershare + PAM passthrough settings to /etc/samba/smb.conf and restarts smbd/nmbd.
 func (h *Handler) configureSambaPAM(w http.ResponseWriter, r *http.Request) {
-	out, err := h.runner.Run("smb_setup.yml", map[string]string{})
+	out, err := h.runOp("smb_setup.yml", map[string]string{})
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -960,7 +968,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		"create_group": createGroup,
 		"smb_user":     smbUser,
 	}
-	out, err := h.runner.Run("user_create.yml", vars)
+	out, err := h.runOp("user_create.yml", vars)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -1021,7 +1029,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("user_delete.yml", map[string]string{
+	out, err := h.runOp("user_delete.yml", map[string]string{
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
 	})
@@ -1099,7 +1107,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("user_modify.yml", map[string]string{
+	out, err := h.runOp("user_modify.yml", map[string]string{
 		"username":      name,
 		"uid":           fmt.Sprintf("%d", target.UID),
 		"shell":         req.Shell,
@@ -1141,7 +1149,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("group_create.yml", map[string]string{
+	out, err := h.runOp("group_create.yml", map[string]string{
 		"groupname": req.Groupname,
 		"gid":       req.GID,
 	})
@@ -1199,7 +1207,7 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("group_delete.yml", map[string]string{
+	out, err := h.runOp("group_delete.yml", map[string]string{
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
 	})
@@ -1277,7 +1285,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runner.Run("group_modify.yml", map[string]string{
+	out, err := h.runOp("group_modify.yml", map[string]string{
 		"groupname":      name,
 		"gid":            fmt.Sprintf("%d", target.GID),
 		"new_name":       req.NewName,
@@ -1445,7 +1453,7 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runner.Run(playbook, vars)
+	out, err := h.runOp(playbook, vars)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -1514,7 +1522,7 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runner.Run(playbook, vars)
+	out, err := h.runOp(playbook, vars)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

@@ -9,12 +9,13 @@ import (
 // ValidTopics is the canonical set of topic names understood by the SSE endpoint.
 // Unknown topic names in client query params are silently ignored.
 var ValidTopics = map[string]bool{
-	"pool.query":     true,
-	"dataset.query":  true,
-	"snapshot.query": true,
-	"iostat":         true,
-	"user.query":     true,
-	"group.query":    true,
+	"pool.query":       true,
+	"dataset.query":    true,
+	"snapshot.query":   true,
+	"iostat":           true,
+	"user.query":       true,
+	"group.query":      true,
+	"ansible.progress": true,
 }
 
 // Broker is a thread-safe, topic-based pub/sub message broker.
@@ -79,6 +80,29 @@ func (b *Broker) Publish(topic string, data any) {
 	// Subscribe call racing with Publish cannot miss the update.
 	b.mu.Lock()
 	b.cache[topic] = payload
+	snapshot := make([]chan []byte, len(b.subs[topic]))
+	copy(snapshot, b.subs[topic])
+	b.mu.Unlock()
+
+	for _, ch := range snapshot {
+		select {
+		case ch <- payload:
+		default:
+			slog.Warn("broker: subscriber slow, dropping message", "topic", topic)
+		}
+	}
+}
+
+// PublishNoCache delivers data to current subscribers without updating the cache.
+// Use this for transient events (e.g. streaming progress) that a new subscriber
+// should not receive after the fact.
+func (b *Broker) PublishNoCache(topic string, data any) {
+	payload, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("broker: marshal failed", "topic", topic, "err", err)
+		return
+	}
+	b.mu.Lock()
 	snapshot := make([]chan []byte, len(b.subs[topic]))
 	copy(snapshot, b.subs[topic])
 	b.mu.Unlock()

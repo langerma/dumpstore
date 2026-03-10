@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 	"time"
 )
 
-// TaskResult holds the result of a single Ansible task on one host.
+// TaskResult holds the raw result fields from a single Ansible task (used by RunAndGetStdout).
 type TaskResult struct {
 	Stdout      string   `json:"stdout"`
 	StdoutLines []string `json:"stdout_lines"`
@@ -32,50 +33,22 @@ type TaskStep struct {
 	Msg    string `json:"msg,omitempty"`
 }
 
-// PlaybookOutput is the top-level JSON structure from ANSIBLE_STDOUT_CALLBACK=json.
-type PlaybookOutput struct {
-	Plays []struct {
-		Tasks []struct {
-			Task struct {
-				Name string `json:"name"`
-			} `json:"task"`
-			Hosts map[string]TaskResult `json:"hosts"`
-		} `json:"tasks"`
-	} `json:"plays"`
-	Stats map[string]struct {
-		Failures    int `json:"failures"`
-		Unreachable int `json:"unreachable"`
-	} `json:"stats"`
+// ndjsonLine is the JSON structure emitted by the ndjson callback plugin.
+type ndjsonLine struct {
+	Task   string `json:"task"`
+	Status string `json:"status"`
+	Msg    string `json:"msg"`
+	Stdout string `json:"stdout"`
 }
 
-// Steps returns a flat ordered list of task steps from the output.
+// PlaybookOutput holds the result of a completed playbook run.
+type PlaybookOutput struct {
+	steps []TaskStep
+}
+
+// Steps returns the ordered list of task steps.
 func (o *PlaybookOutput) Steps() []TaskStep {
-	var steps []TaskStep
-	for _, play := range o.Plays {
-		for _, task := range play.Tasks {
-			// Use first host result (we always target localhost)
-			for _, result := range task.Hosts {
-				status := "ok"
-				switch {
-				case result.Failed:
-					status = "failed"
-				case result.Changed:
-					status = "changed"
-				}
-				msg := result.Msg
-				if msg == "" && result.Failed {
-					msg = strings.TrimSpace(result.Stderr + " " + result.Stdout)
-				}
-				steps = append(steps, TaskStep{
-					Name:   task.Task.Name,
-					Status: status,
-					Msg:    strings.TrimSpace(msg),
-				})
-				break
-			}
-		}
-	}
-	return steps
+	return o.steps
 }
 
 // Runner executes Ansible playbooks.
@@ -105,28 +78,26 @@ func NewRunner(baseDir string) *Runner {
 	}
 }
 
-// Run executes a playbook and returns the parsed output.
-//
-// extraVars are marshalled to JSON and passed as --extra-vars. The JSON callback
-// is always enabled (ANSIBLE_STDOUT_CALLBACK=json) so the output can be parsed
-// regardless of the system's ansible.cfg settings.
-//
-// Failure detection is two-layered:
-//  1. Task-level: scan PlaybookOutput for any host result with Failed=true.
-//  2. Process-level: non-zero exit code after successful JSON parse (e.g. unreachable host).
-//
-// Returns an error if any task failed, including a descriptive message from the task.
 // EmitMetrics writes Ansible metrics in Prometheus text format to w.
 func (r *Runner) EmitMetrics(w io.Writer) {
 	r.metrics.emitTo(w)
 }
 
+// Run executes a playbook and returns the parsed output.
 func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOutput, error) {
+	return r.runCore(playbook, extraVars, nil)
+}
+
+// RunStreaming executes a playbook, calling onStep for each task as it completes.
+func (r *Runner) RunStreaming(playbook string, extraVars map[string]string, onStep func(TaskStep)) (*PlaybookOutput, error) {
+	return r.runCore(playbook, extraVars, onStep)
+}
+
+func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep func(TaskStep)) (*PlaybookOutput, error) {
 	playbookPath := filepath.Join(r.PlaybookDir, playbook)
 	playbookLabel := strings.TrimSuffix(playbook, ".yml")
 
 	args := []string{"-i", r.InventoryPath, playbookPath}
-
 	if len(extraVars) > 0 {
 		ev, err := json.Marshal(extraVars)
 		if err != nil {
@@ -140,49 +111,62 @@ func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOut
 
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
 	cmd.Env = append(os.Environ(),
-		"ANSIBLE_STDOUT_CALLBACK=json",
-		"ANSIBLE_LOAD_CALLBACK_PLUGINS=true",
+		"ANSIBLE_STDOUT_CALLBACK=ndjson",
 		"ANSIBLE_FORCE_COLOR=false",
 	)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	slog.Debug("ansible-playbook starting", "playbook", playbook, "timeout", r.Timeout)
 	start := time.Now()
-	runErr := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start ansible-playbook: %w", err)
+	}
+
+	var steps []TaskStep
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		var line ndjsonLine
+		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+			continue // skip non-JSON lines (deprecation warnings etc.)
+		}
+		step := TaskStep{Name: line.Task, Status: line.Status, Msg: line.Msg}
+		steps = append(steps, step)
+		if onStep != nil {
+			onStep(step)
+		}
+	}
+
+	runErr := cmd.Wait()
 	elapsed := time.Since(start)
+
 	if ctx.Err() == context.DeadlineExceeded {
 		slog.Error("ansible-playbook timed out", "playbook", playbook, "timeout", r.Timeout)
 		r.metrics.record(playbookLabel, elapsed, true)
 		return nil, fmt.Errorf("ansible-playbook %s: timed out after %s", playbook, r.Timeout)
 	}
 
-	// Always try to parse the JSON output — Ansible writes it even on failure.
-	out, parseErr := parseOutput(stdout.Bytes())
-	if parseErr != nil {
-		if runErr != nil {
-			slog.Error("ansible-playbook failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr, "stderr", stderr.String())
-			r.metrics.record(playbookLabel, elapsed, true)
-			return nil, fmt.Errorf("ansible-playbook %s failed: %w\nstderr: %s", playbook, runErr, stderr.String())
-		}
-		r.metrics.record(playbookLabel, elapsed, true)
-		return nil, fmt.Errorf("parse ansible output: %w", parseErr)
-	}
+	out := &PlaybookOutput{steps: steps}
 
-	// Scan task results for failures — this is the authoritative failure signal.
-	if err := firstFailure(out); err != nil {
-		slog.Error("ansible-playbook task failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", err)
-		r.metrics.record(playbookLabel, elapsed, true)
-		return out, err
+	// Scan for task-level failures — authoritative failure signal.
+	for _, s := range steps {
+		if s.Status == "failed" || s.Status == "unreachable" {
+			slog.Error("ansible-playbook task failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "task", s.Name)
+			r.metrics.record(playbookLabel, elapsed, true)
+			return out, fmt.Errorf("task %q failed: %s", s.Name, s.Msg)
+		}
 	}
 
 	// Fallback: non-zero exit but no task-level failure detected.
 	if runErr != nil {
-		slog.Error("ansible-playbook exited non-zero", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr)
+		slog.Error("ansible-playbook exited non-zero", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr, "stderr", stderr.String())
 		r.metrics.record(playbookLabel, elapsed, true)
-		return out, fmt.Errorf("ansible-playbook %s: %w", playbook, runErr)
+		return out, fmt.Errorf("ansible-playbook %s: %w\nstderr: %s", playbook, runErr, stderr.String())
 	}
 
 	slog.Info("ansible-playbook done", "playbook", playbook, "duration_ms", elapsed.Milliseconds())
@@ -191,69 +175,16 @@ func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOut
 }
 
 // RunAndGetStdout runs a playbook and returns the stdout of the named task.
+// It looks up the task by name in the NDJSON step output.
 func (r *Runner) RunAndGetStdout(playbook, taskName string, extraVars map[string]string) (string, error) {
 	out, err := r.Run(playbook, extraVars)
 	if err != nil {
 		return "", err
 	}
-	result := findTask(out, taskName)
-	if result == nil {
-		return "", fmt.Errorf("task %q not found in playbook output", taskName)
-	}
-	return strings.TrimSpace(result.Stdout), nil
-}
-
-// firstFailure returns an error describing the first failed task, or nil.
-func firstFailure(out *PlaybookOutput) error {
-	for _, play := range out.Plays {
-		for _, task := range play.Tasks {
-			for _, result := range task.Hosts {
-				if !result.Failed {
-					continue
-				}
-				msg := strings.TrimSpace(result.Msg)
-				if detail := strings.TrimSpace(result.Stderr + "\n" + result.Stdout); detail != "" {
-					if msg == "" {
-						msg = detail
-					} else {
-						msg = msg + ": " + detail
-					}
-				}
-				if msg == "" {
-					msg = fmt.Sprintf("exit code %d", result.RC)
-				}
-				return fmt.Errorf("task %q failed: %s", task.Task.Name, msg)
-			}
+	for _, s := range out.steps {
+		if s.Name == taskName {
+			return s.Msg, nil
 		}
 	}
-	return nil
-}
-
-// parseOutput extracts the JSON object from ansible-playbook stdout.
-// Ansible may emit non-JSON lines before the opening brace (e.g. deprecation
-// warnings), so we skip to the first '{' before unmarshalling.
-func parseOutput(data []byte) (*PlaybookOutput, error) {
-	idx := bytes.IndexByte(data, '{')
-	if idx < 0 {
-		return nil, fmt.Errorf("no JSON in ansible output: %s", string(data))
-	}
-	var out PlaybookOutput
-	if err := json.Unmarshal(data[idx:], &out); err != nil {
-		return nil, fmt.Errorf("unmarshal ansible JSON: %w", err)
-	}
-	return &out, nil
-}
-
-func findTask(out *PlaybookOutput, name string) *TaskResult {
-	for _, play := range out.Plays {
-		for _, task := range play.Tasks {
-			if task.Task.Name == name {
-				for _, result := range task.Hosts {
-					r := result
-					return &r
-				}
-			}
-		}
-	}
-	return nil
+	return "", fmt.Errorf("task %q not found in playbook output", taskName)
 }
