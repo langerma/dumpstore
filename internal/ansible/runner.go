@@ -2,6 +2,7 @@ package ansible
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,6 +82,7 @@ func (o *PlaybookOutput) Steps() []TaskStep {
 type Runner struct {
 	PlaybookDir   string
 	InventoryPath string
+	Timeout       time.Duration // per-playbook timeout; defaults to 5 minutes
 	metrics       ansibleMetrics
 }
 
@@ -98,6 +100,7 @@ func NewRunner(baseDir string) *Runner {
 	return &Runner{
 		PlaybookDir:   filepath.Join(baseDir, "playbooks"),
 		InventoryPath: filepath.Join(baseDir, "playbooks", "inventory", "localhost"),
+		Timeout:       5 * time.Minute,
 		metrics:       *newAnsibleMetrics(),
 	}
 }
@@ -132,7 +135,10 @@ func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOut
 		args = append(args, "--extra-vars", string(ev))
 	}
 
-	cmd := exec.Command("ansible-playbook", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
 	cmd.Env = append(os.Environ(),
 		"ANSIBLE_STDOUT_CALLBACK=json",
 		"ANSIBLE_LOAD_CALLBACK_PLUGINS=true",
@@ -143,10 +149,15 @@ func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOut
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	slog.Debug("ansible-playbook starting", "playbook", playbook)
+	slog.Debug("ansible-playbook starting", "playbook", playbook, "timeout", r.Timeout)
 	start := time.Now()
 	runErr := cmd.Run()
 	elapsed := time.Since(start)
+	if ctx.Err() == context.DeadlineExceeded {
+		slog.Error("ansible-playbook timed out", "playbook", playbook, "timeout", r.Timeout)
+		r.metrics.record(playbookLabel, elapsed, true)
+		return nil, fmt.Errorf("ansible-playbook %s: timed out after %s", playbook, r.Timeout)
+	}
 
 	// Always try to parse the JSON output — Ansible writes it even on failure.
 	out, parseErr := parseOutput(stdout.Bytes())
