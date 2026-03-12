@@ -40,12 +40,20 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 <table>
 <tr>
-<td><img src="screenshots/sysinfo.png" width="420" alt="Sysinfo and storage pools"></td>
-<td><img src="screenshots/datasets.png" width="420" alt="Dataset browser"></td>
+<td><img src="screenshots/sysinfo.png" width="420" alt="Sysinfo, storage pools, and disk health"></td>
+<td><img src="screenshots/datasets.png" width="420" alt="Dataset browser with ACL, NFS, and SMB actions"></td>
 </tr>
 <tr>
 <td><img src="screenshots/snapshots.png" width="420" alt="Snapshot management"></td>
+<td><img src="screenshots/users-groups.png" width="420" alt="Users, groups, and SMB users"></td>
+</tr>
+<tr>
 <td><img src="screenshots/edit-dataset.png" width="420" alt="Edit dataset properties"></td>
+<td><img src="screenshots/create-user.png" width="420" alt="Create user dialog"></td>
+</tr>
+<tr>
+<td><img src="screenshots/delete-snapshot.png" width="420" alt="Delete snapshot confirmation dialog"></td>
+<td><img src="screenshots/users-system.png" width="420" alt="Users & Groups with system users revealed"></td>
 </tr>
 </table>
 
