@@ -10,6 +10,7 @@ import (
 // Unknown topic names in client query params are silently ignored.
 var ValidTopics = map[string]bool{
 	"pool.query":       true,
+	"poolstatus":       true,
 	"dataset.query":    true,
 	"snapshot.query":   true,
 	"iostat":           true,

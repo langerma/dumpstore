@@ -143,6 +143,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/smb-shares", h.getSMBShares)
 	mux.HandleFunc("POST /api/smb-share/{dataset...}", h.setSMBShare)
 	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)
+	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
+	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -1546,4 +1548,52 @@ func writeError(w http.ResponseWriter, code int, err error, steps []ansible.Task
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(apiError{Error: err.Error(), Tasks: steps})
+}
+
+// startScrub handles POST /api/scrub/{pool}
+// Initiates a scrub on the named pool via `zpool scrub`.
+func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	if pool == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
+		return
+	}
+	if !validZFSName(pool) || strings.Contains(pool, "/") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		return
+	}
+	out, err := h.runOp("zfs_scrub_start.yml", map[string]string{"pool": pool})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+}
+
+// cancelScrub handles DELETE /api/scrub/{pool}
+// Cancels a running scrub on the named pool via `zpool scrub -s`.
+func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	if pool == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
+		return
+	}
+	if !validZFSName(pool) || strings.Contains(pool, "/") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		return
+	}
+	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }

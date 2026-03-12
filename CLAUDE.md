@@ -87,18 +87,58 @@ Do not change this split without a good reason — it exists to avoid Ansible's 
 
 ## File map
 
+### Core
+
 | File | Responsibility |
 |------|---------------|
 | `main.go` | Server setup, flag parsing, dependency check (`ansible-playbook` in PATH, `playbooks/` and `static/` dirs exist) |
 | `internal/zfs/zfs.go` | `ListPools`, `ListDatasets`, `ListSnapshots`, `IOStats` — all direct CLI calls |
+| `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
+| `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
 | `internal/api/handlers.go` | All HTTP handlers + input validation + `writeJSON` / `writeError` helpers |
+| `internal/api/httpmetrics.go` | HTTP middleware for request count/latency metrics |
+| `internal/api/metrics.go` | `/metrics` handler (Prometheus exposition) |
+| `internal/system/system.go` | `ListUsers`, `ListGroups`, `UIDMin` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` |
+| `internal/smart/smart.go` | `ListDrives` — calls `smartctl` for disk health data |
+| `internal/broker/broker.go` | SSE broker — fan-out of events to connected clients |
+| `internal/broker/poller.go` | Background poller that pushes pool/dataset/snapshot/iostat updates to the broker |
+
+### Playbooks
+
+| File | Responsibility |
+|------|---------------|
 | `playbooks/zfs_dataset_create.yml` | Creates filesystem or volume; vars: `name`, `type`, `volsize`, `compression`, `quota`, `mountpoint` |
+| `playbooks/zfs_dataset_destroy.yml` | Destroys dataset/volume; vars: `name`, optional `recursive` |
+| `playbooks/zfs_dataset_set.yml` | Updates dataset properties; vars: `name`, optional `compression`, `quota`, `mountpoint`, `sharenfs`, `sharesmb` |
 | `playbooks/zfs_snapshot_create.yml` | Creates snapshot; vars: `dataset`, `snapname`, `recursive` |
 | `playbooks/zfs_snapshot_destroy.yml` | Destroys snapshot; vars: `snapshot`, `recursive` |
+| `playbooks/zfs_scrub_start.yml` | Starts pool scrub; vars: `pool` |
+| `playbooks/zfs_scrub_cancel.yml` | Cancels running pool scrub; vars: `pool` |
+| `playbooks/acl_set_posix.yml` | Adds/updates a POSIX ACL entry; vars: `dataset`, `entry`, `recursive` |
+| `playbooks/acl_remove_posix.yml` | Removes a POSIX ACL entry; vars: `mountpoint`, `entry`, `recursive` |
+| `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |
+| `playbooks/acl_remove_nfs4.yml` | Removes an NFSv4 ACL entry; vars: `mountpoint`, `entry`, `recursive` |
+| `playbooks/dataset_chown.yml` | Sets owner/group on a dataset mountpoint; vars: `mountpoint`, `owner`, `group` |
+| `playbooks/user_create.yml` | Creates local Unix user; vars: `username`, `shell`, optional `uid`, `group`, `groups`, `password`, `create_group` |
+| `playbooks/user_modify.yml` | Modifies local Unix user; vars: `username`, `uid`, optional `shell`, `groups`, `password` |
+| `playbooks/user_delete.yml` | Deletes local Unix user; vars: `username`, `uid` |
+| `playbooks/group_create.yml` | Creates local Unix group; vars: `groupname`, optional `gid` |
+| `playbooks/group_modify.yml` | Modifies local Unix group; vars: `groupname`, `gid`, optional `new_groupname`, `new_gid` |
+| `playbooks/group_delete.yml` | Deletes local Unix group; vars: `groupname`, `gid` |
+| `playbooks/smb_setup.yml` | One-time Samba setup (usershares dir, smb.conf patch); no vars |
+| `playbooks/smb_usershare_set.yml` | Creates/updates a Samba usershare via `net usershare`; vars: `sharename`, `mountpoint` |
+| `playbooks/smb_usershare_unset.yml` | Removes a Samba usershare; vars: `sharename` |
+| `playbooks/smb_user_add.yml` | Registers user in Samba tdbsam; vars: `username`, `smb_password` |
+| `playbooks/smb_user_remove.yml` | Removes user from Samba tdbsam; vars: `username` |
 | `playbooks/inventory/localhost` | `ansible_connection=local`, `ansible_python_interpreter=auto_silent` |
-| `static/index.html` | Page shell, dialogs (new dataset, new snapshot) |
-| `static/app.js` | State, fetch, render functions for pools/datasets/snapshots/iostat, dialog wiring |
+
+### Frontend & install
+
+| File | Responsibility |
+|------|---------------|
+| `static/index.html` | Page shell, all dialogs (dataset, snapshot, user, group, ACL, SMB, etc.) |
+| `static/app.js` | State, fetch, render functions for all tabs; dialog wiring; SSE client |
 | `static/style.css` | Dark monospace theme, CSS variables in `:root` |
 | `contrib/dumpstore.service` | systemd unit; binary at `/usr/local/lib/dumpstore/dumpstore` |
 | `contrib/dumpstore.rc` | FreeBSD rc.d script |

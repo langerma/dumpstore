@@ -24,6 +24,7 @@
 | Software inventory | v0.0.7 | Versions of all runtime tools shown in Sysinfo tab |
 | NFS share management | v0.0.9 | Enable/configure/disable NFS sharing via ZFS `sharenfs` property; cross-platform |
 | SMB share management | v0.1.0 | Create/remove Samba usershares; manage Samba users; one-click Samba setup; cross-platform |
+| Pool scrub management | v0.1.1 | Trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool |
 
 ---
 
@@ -32,7 +33,7 @@
 | Feature | Priority | Notes |
 |---------|----------|-------|
 | Auto-snapshot scheduling | High | Hourly/daily/weekly/monthly rotation policies; built-in scheduler (sanoid-style) |
-| Pool scrub management | High | Trigger scrubs, view last scrub time/status/progress, schedule periodic scrubs |
+| Pool scrub scheduling | Medium | Schedule periodic scrubs (cron-style) |
 | ZFS native encryption | High | Load/unload keys, encryption status per dataset, keyformat/keylocation support |
 | Dataset rename | Medium | Rename a dataset or volume in place |
 | Snapshot clone | Medium | Create a new dataset from an existing snapshot |

@@ -230,9 +230,15 @@ main {
   margin-top: 0.6rem;
   font-size: 10px;
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pool-scrub-actions {
+  margin-top: 0.6rem;
+}
+.btn-sm {
+  padding: 0.2rem 0.6rem;
+  font-size: 11px;
 }
 .pool-status-msg {
   margin-top: 0.4rem;

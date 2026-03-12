@@ -70,6 +70,12 @@ func pollOnce(publish func(string, any)) {
 		slog.Warn("poller: ListPools failed", "err", err)
 	}
 
+	if statuses, err := zfs.PoolStatuses(); err == nil {
+		publish("poolstatus", statuses)
+	} else {
+		slog.Warn("poller: PoolStatuses failed", "err", err)
+	}
+
 	if datasets, err := zfs.ListDatasets(); err == nil {
 		publish("dataset.query", datasets)
 	} else {

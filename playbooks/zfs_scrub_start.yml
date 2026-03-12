@@ -1,0 +1,20 @@
+---
+# Required extra vars:
+#   pool  - pool name (e.g. tank)
+- name: Start ZFS pool scrub
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - pool is defined and pool != ""
+          - pool is not search("/")
+          - pool is not search("@")
+        fail_msg: "pool must be a valid pool name (no slashes or @)"
+
+    - name: Start scrub
+      ansible.builtin.command:
+        cmd: zpool scrub {{ pool }}
+      register: scrub_result
+      changed_when: scrub_result.rc == 0

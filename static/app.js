@@ -143,20 +143,21 @@ function setRefreshing(v) {
 }
 
 // ── Load all ──────────────────────────────────────────────────────────────────
+// Fast path: all endpoints that respond in <100 ms. Rendered immediately.
+// Slow path: iostat (~1 s sampling) and SMART (drive scans) load separately
+// so they never block the initial page render.
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, iostat, smart, users, groups, smbData, smbShares] = await Promise.all([
-      api('GET', '/api/pools'),
-      api('GET', '/api/poolstatus'),
-      api('GET', '/api/version'),
-      api('GET', '/api/sysinfo'),
-      api('GET', '/api/datasets'),
-      api('GET', '/api/snapshots'),
-      api('GET', '/api/iostat'),
-      api('GET', '/api/smart'),
-      api('GET', '/api/users'),
-      api('GET', '/api/groups'),
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares] = await Promise.all([
+      api('GET', '/api/pools').catch(() => []),
+      api('GET', '/api/poolstatus').catch(() => []),
+      api('GET', '/api/version').catch(() => null),
+      api('GET', '/api/sysinfo').catch(() => null),
+      api('GET', '/api/datasets').catch(() => []),
+      api('GET', '/api/snapshots').catch(() => []),
+      api('GET', '/api/users').catch(() => []),
+      api('GET', '/api/groups').catch(() => []),
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => []),
     ]);
@@ -166,8 +167,6 @@ async function loadAll() {
     state.sysinfo = sysinfo || null;
     state.datasets = datasets || [];
     state.snapshots = snapshots || [];
-    state.iostat = iostat || [];
-    state.smart = smart || null;
     state.users = users || [];
     state.groups = groups || [];
     state.sambaAvailable = smbData?.available ?? false;
@@ -178,8 +177,6 @@ async function loadAll() {
     renderSoftware();
     renderDatasets();
     renderSnapshots();
-    renderIOStat();
-    renderSMART();
     renderUsers();
     renderGroups();
     renderSambaUsers();
@@ -190,6 +187,19 @@ async function loadAll() {
     setRefreshing(false);
   }
   refreshACLStatus();
+  loadSlowMetrics();
+}
+
+// Loads iostat (~1 s) and SMART (drive scans) without blocking the main render.
+async function loadSlowMetrics() {
+  const [iostat, smart] = await Promise.all([
+    api('GET', '/api/iostat').catch(() => []),
+    api('GET', '/api/smart').catch(() => null),
+  ]);
+  state.iostat = iostat || [];
+  state.smart = smart || null;
+  renderIOStat();
+  renderSMART();
 }
 
 // ── Formatting: uptime ────────────────────────────────────────────────────────
@@ -282,9 +292,18 @@ if (!state.pools.length) {
     const barClass = pct > 90 ? 'crit' : pct > 75 ? 'warn' : '';
     const detail = statusMap[p.name];
 
+    const scrubState = detail?.scan ? scrubStateOf(detail.scan) : 'idle';
     const scanLine = detail?.scan
       ? `<div class="pool-scan">${esc(detail.scan)}</div>`
       : '';
+
+    const scrubActions = `
+      <div class="pool-scrub-actions">
+        ${scrubState === 'in_progress' || scrubState === 'paused'
+          ? `<button class="btn-secondary btn-sm" onclick="cancelScrub('${p.name}')">Cancel Scrub</button>`
+          : `<button class="btn-secondary btn-sm" onclick="startScrub('${p.name}')">Start Scrub</button>`
+        }
+      </div>`;
 
     const statusLine = detail?.status
       ? `<div class="pool-status-msg">${esc(detail.status)}</div>`
@@ -348,9 +367,42 @@ if (!state.pools.length) {
             <div class="stat-value">${esc(p.dedup)}</div>
           </div>
         </div>
-        ${scanLine}${statusLine}${errLine}${vdevSection}
+        ${scanLine}${scrubActions}${statusLine}${errLine}${vdevSection}
       </div>`;
   }).join('');
+}
+
+// ── Pool scrub helpers ────────────────────────────────────────────────────────
+// Returns 'in_progress', 'paused', or 'idle' based on the raw scan string.
+function scrubStateOf(scan) {
+  if (!scan) return 'idle';
+  if (scan.startsWith('scrub in progress')) return 'in_progress';
+  if (scan.startsWith('scrub paused')) return 'paused';
+  return 'idle';
+}
+
+async function startScrub(pool) {
+  showOpLogRunning(`Start scrub: ${pool}`);
+  try {
+    const data = await api('POST', `/api/scrub/${encodeURIComponent(pool)}`);
+    showOpLog(`Start scrub: ${pool}`, data.tasks, null);
+    toast(`Scrub started on ${pool}`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Start scrub: ${pool}`, err.tasks, err.message);
+  }
+}
+
+async function cancelScrub(pool) {
+  showOpLogRunning(`Cancel scrub: ${pool}`);
+  try {
+    const data = await api('DELETE', `/api/scrub/${encodeURIComponent(pool)}`);
+    showOpLog(`Cancel scrub: ${pool}`, data.tasks, null);
+    toast(`Scrub cancelled on ${pool}`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Cancel scrub: ${pool}`, err.tasks, err.message);
+  }
 }
 
 // ── Render: I/O Stats ─────────────────────────────────────────────────────────
@@ -1885,12 +1937,13 @@ document.getElementById('smbDisableBtn').addEventListener('click', async () => {
 // ── SSE client ────────────────────────────────────────────────────────────────
 // Maps SSE topic names → state key + render function.
 const sseTopicMap = {
-  'pool.query':     { key: 'pools',     render: renderPools },
-  'dataset.query':  { key: 'datasets',  render: renderDatasets },
-  'snapshot.query': { key: 'snapshots', render: renderSnapshots },
-  'iostat':         { key: 'iostat',    render: renderIOStat },
-  'user.query':     { key: 'users',     render: renderUsers },
-  'group.query':    { key: 'groups',    render: renderGroups },
+  'pool.query':     { key: 'pools',        render: renderPools },
+  'poolstatus':     { key: 'poolStatuses', render: renderPools },
+  'dataset.query':  { key: 'datasets',     render: renderDatasets },
+  'snapshot.query': { key: 'snapshots',    render: renderSnapshots },
+  'iostat':         { key: 'iostat',       render: renderIOStat },
+  'user.query':     { key: 'users',        render: renderUsers },
+  'group.query':    { key: 'groups',       render: renderGroups },
 };
 
 let _pollInterval = null;  // setInterval handle; null when SSE is active

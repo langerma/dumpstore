@@ -282,6 +282,7 @@ func parsePoolStatuses(out string) []PoolDetail {
 	var pools []PoolDetail
 	var cur *PoolDetail
 	inConfig := false
+	inScan := false
 
 	for _, line := range strings.Split(out, "\n") {
 		// ── New pool entry ───────────────────────────────────────────────
@@ -291,6 +292,7 @@ func parsePoolStatuses(out string) []PoolDetail {
 			}
 			cur = &PoolDetail{Name: strings.TrimSpace(strings.TrimPrefix(line, "  pool:"))}
 			inConfig = false
+			inScan = false
 			continue
 		}
 		if cur == nil {
@@ -300,23 +302,37 @@ func parsePoolStatuses(out string) []PoolDetail {
 		// ── Top-level keyword lines ──────────────────────────────────────
 		if strings.HasPrefix(line, " state: ") {
 			cur.State = strings.TrimSpace(strings.TrimPrefix(line, " state:"))
+			inScan = false
 			continue
 		}
 		if strings.HasPrefix(line, "status: ") {
 			cur.Status = strings.TrimSpace(strings.TrimPrefix(line, "status:"))
+			inScan = false
 			continue
 		}
 		if strings.HasPrefix(line, "  scan: ") {
 			cur.Scan = strings.TrimSpace(strings.TrimPrefix(line, "  scan:"))
+			inScan = true
 			continue
 		}
 		if strings.HasPrefix(line, "errors: ") {
 			cur.Errors = strings.TrimSpace(strings.TrimPrefix(line, "errors:"))
+			inScan = false
 			continue
 		}
 		if strings.TrimSpace(line) == "config:" {
 			inConfig = true
+			inScan = false
 			continue
+		}
+
+		// ── Scan continuation lines (tab-prefixed, before config:) ───────
+		if inScan && !inConfig && strings.HasPrefix(line, "\t") {
+			cur.Scan += "\n" + strings.TrimSpace(line)
+			continue
+		}
+		if inScan && !strings.HasPrefix(line, "\t") {
+			inScan = false
 		}
 
 		if !inConfig {
