@@ -471,7 +471,7 @@
           <span class="pool-name">scrub management</span>
           <span class="health-badge badge-blue">scrub</span>
         </div>
-        <p>Trigger and cancel pool scrubs. Configure periodic scrub schedules — <code>zfsutils-linux</code> on Linux, <code>periodic.conf</code> on FreeBSD.</p>
+        <p>Trigger and cancel pool scrubs. Last scrub time, status, and progress shown per pool.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -541,7 +541,14 @@
           <span class="pool-name">system info</span>
           <span class="health-badge badge-blue">sysinfo</span>
         </div>
-        <p>Hostname, OS, kernel, CPU, uptime, load averages, and process stats. ZFS and dumpstore version in the header.</p>
+        <p>Hostname, OS, kernel, CPU, uptime, load averages, and process stats. Software inventory tab shows versions of all runtime tools (Go, ZFS, Ansible, smartctl, etc.).</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">mountpoint ownership</span>
+          <span class="health-badge badge-blue">chown</span>
+        </div>
+        <p>View and set the owner and group of a dataset's mountpoint directly from the dataset browser. Backed by an Ansible playbook with full op-log feedback.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
