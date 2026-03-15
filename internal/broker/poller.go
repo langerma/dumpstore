@@ -15,6 +15,10 @@ import (
 // 10s is 3x faster than the previous client-side 30s poll.
 const PollInterval = 10 * time.Second
 
+// startupRetryInterval is the retry cadence used when ZFS is not yet available
+// at startup (e.g. host just rebooted and pool import is still in progress).
+const startupRetryInterval = 2 * time.Second
+
 // StartPoller launches the background polling goroutine and returns immediately.
 // It polls ZFS CLI commands every PollInterval and publishes changed data to b.
 // The goroutine exits when ctx is cancelled.
@@ -43,12 +47,20 @@ func runPoller(ctx context.Context, b *Broker) {
 		slog.Debug("poller: published change", "topic", topic)
 	}
 
+	// At startup, ZFS pool import may still be in progress. Retry every
+	// startupRetryInterval until the first successful ZFS read, then switch
+	// to the normal PollInterval cadence.
+	for !pollOnce(publish) {
+		slog.Info("poller: ZFS not ready at startup, retrying", "in", startupRetryInterval)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(startupRetryInterval):
+		}
+	}
+
 	tick := time.NewTicker(PollInterval)
 	defer tick.Stop()
-
-	// Poll immediately on start so the first SSE client gets data right away
-	// instead of waiting up to PollInterval.
-	pollOnce(publish)
 
 	for {
 		select {
@@ -63,9 +75,14 @@ func runPoller(ctx context.Context, b *Broker) {
 
 // pollOnce runs one full data collection cycle. Each topic is independent:
 // a failure on one does not prevent the others from being published.
-func pollOnce(publish func(string, any)) {
+// Returns true if ZFS data was successfully read (pools/datasets/snapshots),
+// false if all ZFS commands failed (e.g. pools not yet imported at startup).
+func pollOnce(publish func(string, any)) bool {
+	zfsOK := false
+
 	if pools, err := zfs.ListPools(); err == nil {
 		publish("pool.query", pools)
+		zfsOK = true
 	} else {
 		slog.Warn("poller: ListPools failed", "err", err)
 	}
@@ -107,4 +124,6 @@ func pollOnce(publish func(string, any)) {
 	} else {
 		slog.Warn("poller: ListGroups failed", "err", err)
 	}
+
+	return zfsOK
 }
