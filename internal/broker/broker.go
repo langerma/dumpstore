@@ -9,14 +9,15 @@ import (
 // ValidTopics is the canonical set of topic names understood by the SSE endpoint.
 // Unknown topic names in client query params are silently ignored.
 var ValidTopics = map[string]bool{
-	"pool.query":       true,
-	"poolstatus":       true,
-	"dataset.query":    true,
-	"snapshot.query":   true,
-	"iostat":           true,
-	"user.query":       true,
-	"group.query":      true,
-	"ansible.progress": true,
+	"pool.query":         true,
+	"poolstatus":         true,
+	"dataset.query":      true,
+	"autosnapshot.query": true,
+	"snapshot.query":     true,
+	"iostat":             true,
+	"user.query":         true,
+	"group.query":        true,
+	"ansible.progress":   true,
 }
 
 // Broker is a thread-safe, topic-based pub/sub message broker.

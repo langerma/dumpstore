@@ -87,7 +87,7 @@ func ListPools() ([]Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	var pools []Pool
+	pools := make([]Pool, 0)
 	for _, line := range splitLines(out) {
 		f := strings.Split(line, "\t")
 		if len(f) < 8 {
@@ -121,7 +121,7 @@ func ListDatasets() ([]Dataset, error) {
 	if err != nil {
 		return nil, err
 	}
-	var datasets []Dataset
+	datasets := make([]Dataset, 0)
 	for _, line := range splitLines(out) {
 		f := strings.Split(line, "\t")
 		if len(f) < 13 {
@@ -157,7 +157,7 @@ func ListSnapshots() ([]Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	var snaps []Snapshot
+	snaps := make([]Snapshot, 0)
 	for _, line := range splitLines(out) {
 		f := strings.Split(line, "\t")
 		if len(f) < 5 {
@@ -196,7 +196,7 @@ func IOStats() ([]IOStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	var stats []IOStat
+	stats := make([]IOStat, 0)
 	for _, line := range splitLines(out) {
 		f := strings.Fields(line)
 		if len(f) < 7 || f[1] == "-" {
@@ -362,7 +362,7 @@ func PoolStatuses() ([]PoolDetail, error) {
 }
 
 func parsePoolStatuses(out string) []PoolDetail {
-	var pools []PoolDetail
+	pools := make([]PoolDetail, 0)
 	var cur *PoolDetail
 	inConfig := false
 	inScan := false

@@ -2274,8 +2274,11 @@ function startSSE() {
 
   for (const [topic, { key, render }] of Object.entries(sseTopicMap)) {
     es.addEventListener(topic, e => {
-      try { state[key] = JSON.parse(e.data); render(); }
-      catch (err) { console.warn('[SSE] parse error', topic, err); }
+      try {
+        const v = JSON.parse(e.data);
+        if (v !== null) state[key] = v;
+        render();
+      } catch (err) { console.warn('[SSE] parse error', topic, err); }
     });
   }
 
@@ -2446,5 +2449,12 @@ document.getElementById('autoSnapCancelBtn').addEventListener('click', () => doc
 // Perform an immediate REST load so the UI is populated on first paint,
 // then open the SSE stream. The SSE onopen handler cancels REST polling.
 // If SSE is unavailable, startPolling() is called from the onerror handler.
+//
+// Safety-net: re-fetch all REST state every 60 s regardless of SSE health.
+// SSE events can be silently dropped when the subscriber channel is full
+// (broker logs "subscriber slow, dropping message"). When that happens the
+// poller will not re-publish if the underlying data has not changed, leaving
+// the browser permanently stale. This interval guarantees recovery.
+setInterval(loadAll, 60_000);
 loadAll();
 startSSE();

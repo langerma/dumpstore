@@ -36,7 +36,7 @@ func ListUsers() ([]User, error) {
 	if err != nil {
 		return nil, err
 	}
-	var users []User
+	users := make([]User, 0)
 	for _, line := range strings.Split(string(data), "\n") {
 		if line == "" || line[0] == '#' {
 			continue
@@ -64,7 +64,7 @@ func ListGroups() ([]Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	var groups []Group
+	groups := make([]Group, 0)
 	for _, line := range strings.Split(string(data), "\n") {
 		if line == "" || line[0] == '#' {
 			continue
@@ -74,7 +74,7 @@ func ListGroups() ([]Group, error) {
 			continue
 		}
 		gid, _ := strconv.Atoi(f[2])
-		var members []string
+		members := make([]string, 0)
 		if f[3] != "" {
 			for _, m := range strings.Split(strings.TrimSpace(f[3]), ",") {
 				if m != "" {
