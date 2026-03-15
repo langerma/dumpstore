@@ -123,6 +123,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/snapshots", h.getSnapshots)
 	mux.HandleFunc("GET /api/iostat", h.getIOStat)
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
+	mux.HandleFunc("POST /api/snapshots/delete-batch", h.deleteSnapshotBatch)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)
 	mux.HandleFunc("GET /api/chown/{dataset...}", h.getDatasetOwnership)
@@ -151,6 +152,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
 	mux.HandleFunc("PUT /api/scrub-schedule/{pool}", h.setScrubSchedule)
 	mux.HandleFunc("DELETE /api/scrub-schedule/{pool}", h.deleteScrubSchedule)
+	mux.HandleFunc("GET /api/auto-snapshot-schedules", h.listAutoSnapshotSchedules)
+	mux.HandleFunc("GET /api/auto-snapshot/{name...}", h.getAutoSnapshotProps)
+	mux.HandleFunc("PUT /api/auto-snapshot/{name...}", h.setAutoSnapshotProps)
 	mux.HandleFunc("GET /api/schema", h.getSchema)
 }
 
@@ -516,6 +520,52 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
+}
+
+// deleteSnapshotBatch handles POST /api/snapshots/delete-batch
+// Body: {"snapshots": ["tank/data@snap1", "tank/home@snap2"]}
+func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Snapshots []string `json:"snapshots"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
+		return
+	}
+	if len(body.Snapshots) == 0 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("snapshots list is empty"), nil)
+		return
+	}
+	if len(body.Snapshots) > 100 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("too many snapshots (max 100)"), nil)
+		return
+	}
+	for _, snap := range body.Snapshots {
+		parts := strings.SplitN(snap, "@", 2)
+		if len(parts) != 2 || !validZFSName(parts[0]) || !validSnapLabel(parts[1]) {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name %q (expected dataset@label)", snap), nil)
+			return
+		}
+	}
+
+	snapsJSON, err := json.Marshal(body.Snapshots)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("encoding snapshots: %w", err), nil)
+		return
+	}
+
+	out, err := h.runOp("zfs_snapshot_destroy_batch.yml", map[string]string{
+		"snapshots_json": string(snapsJSON),
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"snapshots": body.Snapshots, "tasks": out.Steps()})
 }
 
 // getDatasetOwnership handles GET /api/chown/{dataset...}
@@ -1691,6 +1741,112 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+}
+
+// listAutoSnapshotSchedules handles GET /api/auto-snapshot-schedules
+func (h *Handler) listAutoSnapshotSchedules(w http.ResponseWriter, r *http.Request) {
+	props, err := zfs.ListAutoSnapshotProps()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, props)
+}
+
+// publishAutoSnapshot re-reads all auto-snapshot props and pushes autosnapshot.query
+// to all SSE subscribers. Called after any auto-snapshot property change.
+func (h *Handler) publishAutoSnapshot() {
+	if props, err := zfs.ListAutoSnapshotProps(); err == nil {
+		h.broker.Publish("autosnapshot.query", props)
+	}
+}
+
+// autoSnapProps maps the 6 com.sun:auto-snapshot* property names to their
+// Ansible-safe variable names (colons and dots replaced with underscores).
+var autoSnapProps = []struct{ prop, varName string }{
+	{"com.sun:auto-snapshot", "com_sun_auto_snapshot"},
+	{"com.sun:auto-snapshot:frequent", "com_sun_auto_snapshot_frequent"},
+	{"com.sun:auto-snapshot:hourly", "com_sun_auto_snapshot_hourly"},
+	{"com.sun:auto-snapshot:daily", "com_sun_auto_snapshot_daily"},
+	{"com.sun:auto-snapshot:weekly", "com_sun_auto_snapshot_weekly"},
+	{"com.sun:auto-snapshot:monthly", "com_sun_auto_snapshot_monthly"},
+}
+
+var reKeepCount = regexp.MustCompile(`^[1-9][0-9]{0,3}$`)
+
+// validAutoSnapValue returns true if val is a valid value for the given
+// com.sun:auto-snapshot* property. Empty string means "inherit".
+func validAutoSnapValue(prop, val string) bool {
+	if val == "" {
+		return true
+	}
+	if prop == "com.sun:auto-snapshot" {
+		return val == "true" || val == "false"
+	}
+	return reKeepCount.MatchString(val)
+}
+
+// getAutoSnapshotProps handles GET /api/auto-snapshot/{name...}
+func (h *Handler) getAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	props, err := zfs.GetAutoSnapshotProps(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, props)
+}
+
+// setAutoSnapshotProps handles PUT /api/auto-snapshot/{name...}
+func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
+		return
+	}
+
+	// Build allowed-prop set for fast lookup.
+	allowed := make(map[string]string, len(autoSnapProps))
+	for _, p := range autoSnapProps {
+		allowed[p.prop] = p.varName
+	}
+
+	vars := map[string]string{"name": name}
+	for _, ap := range autoSnapProps {
+		val, ok := body[ap.prop]
+		if !ok {
+			continue // not provided — playbook default (__skip__) applies
+		}
+		if !validAutoSnapValue(ap.prop, val) {
+			writeError(w, http.StatusBadRequest,
+				fmt.Errorf("invalid value %q for property %s", val, ap.prop), nil)
+			return
+		}
+		vars[ap.varName] = val
+	}
+
+	out, err := h.runOp("zfs_autosnap_set.yml", vars)
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	h.publishDatasets()
+	h.publishAutoSnapshot()
+	writeJSON(w, map[string]any{"name": name, "tasks": out.Steps()})
 }
 
 // getSchema handles GET /api/schema

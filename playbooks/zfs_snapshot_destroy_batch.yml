@@ -1,0 +1,22 @@
+---
+# Required extra vars:
+#   snapshots_json - JSON-encoded list of full snapshot names (e.g. '["tank/data@snap1","tank/home@snap2"]')
+#                   Each entry must contain '@'.
+- name: Destroy multiple ZFS snapshots
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - snapshots_json is defined and snapshots_json != ""
+          - snapshots_json | from_json | length > 0
+          - snapshots_json | from_json | select('search', '@') | list | length == snapshots_json | from_json | length
+        fail_msg: "snapshots_json must be a non-empty JSON list of snapshot names containing '@'"
+
+    - name: Destroy snapshot
+      ansible.builtin.command:
+        argv: ['zfs', 'destroy', '{{ item }}']
+      loop: "{{ snapshots_json | from_json }}"
+      register: destroy_result
+      changed_when: destroy_result.rc == 0

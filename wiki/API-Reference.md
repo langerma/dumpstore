@@ -48,6 +48,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/scrub-schedules`      | List periodic scrub schedule config |
 | PUT    | `/api/scrub-schedule/{pool}`| Add pool to periodic scrub schedule |
 | DELETE | `/api/scrub-schedule/{pool}`| Remove pool from periodic scrub schedule |
+| GET    | `/api/auto-snapshot/{dataset}` | Get auto-snapshot property values for a dataset |
+| PUT    | `/api/auto-snapshot/{dataset}` | Set auto-snapshot properties for a dataset |
 
 ---
 
@@ -154,6 +156,82 @@ Returns Ansible task steps.
 ### DELETE /api/scrub-schedule/{pool}
 
 Remove a pool from the periodic scrub schedule. Returns Ansible task steps.
+
+---
+
+## Auto-snapshot scheduling
+
+Manages `com.sun:auto-snapshot*` ZFS user properties per dataset. These properties are consumed by `zfs-auto-snapshot` (Linux) or `zfstools` (FreeBSD) to automatically create and rotate snapshots. dumpstore sets/clears the properties; the external daemon handles snapshot creation.
+
+#### Default behaviour — important
+
+`zfs-auto-snapshot` uses an **opt-out** model: any dataset where `com.sun:auto-snapshot` is **not explicitly set** is snapshotted by default. Setting the property to `false` is how you exclude a dataset.
+
+The recommended pattern for snapshotting only specific datasets:
+
+```bash
+# 1. Opt the entire pool out
+zfs set com.sun:auto-snapshot=false tank
+
+# 2. Opt specific datasets back in
+zfs set com.sun:auto-snapshot=true tank/data
+zfs set com.sun:auto-snapshot=true tank/home
+```
+
+#### Inspect current config via CLI
+
+```bash
+# All datasets, all 6 properties
+zfs get com.sun:auto-snapshot,com.sun:auto-snapshot:frequent,com.sun:auto-snapshot:hourly,com.sun:auto-snapshot:daily,com.sun:auto-snapshot:weekly,com.sun:auto-snapshot:monthly -t filesystem,volume
+
+# Recursively from a pool root
+zfs get -r com.sun:auto-snapshot tank
+
+# Only locally-set values (excludes inherited/default)
+zfs get -r -s local com.sun:auto-snapshot tank
+```
+
+### GET /api/auto-snapshot/{dataset}
+
+Returns the current `com.sun:auto-snapshot*` property values and their source (local/inherited/default) for the given dataset.
+
+```json
+{
+  "com.sun:auto-snapshot":          { "value": "true",  "source": "local" },
+  "com.sun:auto-snapshot:frequent": { "value": "4",     "source": "local" },
+  "com.sun:auto-snapshot:hourly":   { "value": "24",    "source": "local" },
+  "com.sun:auto-snapshot:daily":    { "value": "7",     "source": "local" },
+  "com.sun:auto-snapshot:weekly":   { "value": "4",     "source": "local" },
+  "com.sun:auto-snapshot:monthly":  { "value": "-",     "source": "default" }
+}
+```
+
+A `value` of `"-"` with `source` of `"default"` means the property is not set (inherits system default).
+
+### PUT /api/auto-snapshot/{dataset}
+
+Set or clear `com.sun:auto-snapshot*` properties on a dataset. Returns Ansible task steps.
+
+**Request body** — any combination of these keys; omitted keys are left unchanged:
+
+| Key | Values |
+|-----|--------|
+| `com.sun:auto-snapshot` | `"true"`, `"false"`, or `""` (inherit) |
+| `com.sun:auto-snapshot:frequent` | integer 1–9999, or `""` (inherit) |
+| `com.sun:auto-snapshot:hourly` | integer 1–9999, or `""` (inherit) |
+| `com.sun:auto-snapshot:daily` | integer 1–9999, or `""` (inherit) |
+| `com.sun:auto-snapshot:weekly` | integer 1–9999, or `""` (inherit) |
+| `com.sun:auto-snapshot:monthly` | integer 1–9999, or `""` (inherit) |
+
+Empty string (`""`) triggers `zfs inherit` on the property (clears the local value).
+
+```json
+{
+  "com.sun:auto-snapshot": "true",
+  "com.sun:auto-snapshot:daily": "7",
+  "com.sun:auto-snapshot:monthly": "3"
+}
+```
 
 ---
 

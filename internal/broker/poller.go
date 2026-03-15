@@ -99,6 +99,12 @@ func pollOnce(publish func(string, any)) bool {
 		slog.Warn("poller: ListDatasets failed", "err", err)
 	}
 
+	if autoSnap, err := zfs.ListAutoSnapshotProps(); err == nil {
+		publish("autosnapshot.query", autoSnap)
+	} else {
+		slog.Warn("poller: ListAutoSnapshotProps failed", "err", err)
+	}
+
 	if snaps, err := zfs.ListSnapshots(); err == nil {
 		publish("snapshot.query", snaps)
 	} else {

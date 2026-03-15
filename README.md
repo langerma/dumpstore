@@ -228,6 +228,9 @@ DELETE /api/smb-share/{ds}    → smb_usershare_unset.yml   (ansible)
 POST   /api/smb-users/{name}  → smb_user_add.yml          (ansible)
 DELETE /api/smb-users/{name}  → smb_user_remove.yml       (ansible)
 POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
+
+GET    /api/auto-snapshot/{ds} → zfs get com.sun:auto-snapshot* (direct)
+PUT    /api/auto-snapshot/{ds} → zfs_autosnap_set.yml           (ansible)
 ```
 
 ## Requirements
@@ -595,7 +598,7 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 |--------------------------|-----------------------------------------------------------------------------------------------|
 | Dataset rename           | Rename a dataset or volume in place                                                           |
 | Snapshot clone           | Create a new dataset from an existing snapshot                                                |
-| Auto-snapshot scheduling | Hourly/daily/weekly/monthly rotation policies; built-in scheduler (sanoid-style)              |
+| ~~Auto-snapshot scheduling~~ | ~~Hourly/daily/weekly/monthly rotation policies~~ — **done** (`com.sun:auto-snapshot*` ZFS properties; integrates with `zfs-auto-snapshot` / `zfstools`) |
 | ZFS native encryption    | Load/unload keys, show encryption status per dataset, support keyformat/keylocation           |
 | iSCSI target management  | Expose zvols as iSCSI targets (targetcli on Linux, ctld on FreeBSD)                           |
 | Pool import/export       | Import available pools from attached devices; export pools safely                             |

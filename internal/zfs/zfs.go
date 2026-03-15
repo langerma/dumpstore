@@ -240,6 +240,89 @@ func GetDatasetProps(name string) (map[string]DatasetProp, error) {
 	return result, nil
 }
 
+// AutoSnapshotProps holds the com.sun:auto-snapshot* property values for a dataset.
+type AutoSnapshotProps struct {
+	Master   DatasetProp `json:"com.sun:auto-snapshot"`
+	Frequent DatasetProp `json:"com.sun:auto-snapshot:frequent"`
+	Hourly   DatasetProp `json:"com.sun:auto-snapshot:hourly"`
+	Daily    DatasetProp `json:"com.sun:auto-snapshot:daily"`
+	Weekly   DatasetProp `json:"com.sun:auto-snapshot:weekly"`
+	Monthly  DatasetProp `json:"com.sun:auto-snapshot:monthly"`
+}
+
+// GetAutoSnapshotProps returns the com.sun:auto-snapshot* ZFS property values
+// for the given dataset.
+func GetAutoSnapshotProps(name string) (AutoSnapshotProps, error) {
+	out, err := run("zfs", "get", "-H", autoSnapPropList, name)
+	if err != nil {
+		return AutoSnapshotProps{}, err
+	}
+	m := make(map[string]DatasetProp)
+	for _, line := range splitLines(out) {
+		f := strings.SplitN(line, "\t", 4)
+		if len(f) < 4 {
+			continue
+		}
+		m[f[1]] = DatasetProp{Value: f[2], Source: strings.TrimSpace(f[3])}
+	}
+	return parseAutoSnapProps(m), nil
+}
+
+const autoSnapPropList = "com.sun:auto-snapshot," +
+	"com.sun:auto-snapshot:frequent," +
+	"com.sun:auto-snapshot:hourly," +
+	"com.sun:auto-snapshot:daily," +
+	"com.sun:auto-snapshot:weekly," +
+	"com.sun:auto-snapshot:monthly"
+
+// parseAutoSnapProps builds an AutoSnapshotProps from a property map.
+func parseAutoSnapProps(m map[string]DatasetProp) AutoSnapshotProps {
+	return AutoSnapshotProps{
+		Master:   m["com.sun:auto-snapshot"],
+		Frequent: m["com.sun:auto-snapshot:frequent"],
+		Hourly:   m["com.sun:auto-snapshot:hourly"],
+		Daily:    m["com.sun:auto-snapshot:daily"],
+		Weekly:   m["com.sun:auto-snapshot:weekly"],
+		Monthly:  m["com.sun:auto-snapshot:monthly"],
+	}
+}
+
+// ListAutoSnapshotProps returns com.sun:auto-snapshot* property values for
+// every filesystem and volume in one pair of CLI calls.
+func ListAutoSnapshotProps() (map[string]AutoSnapshotProps, error) {
+	namesOut, err := run("zfs", "list", "-H", "-o", "name", "-t", "filesystem,volume")
+	if err != nil {
+		return nil, err
+	}
+	names := splitLines(namesOut)
+	if len(names) == 0 {
+		return map[string]AutoSnapshotProps{}, nil
+	}
+	args := append([]string{"get", "-H", autoSnapPropList}, names...)
+	out, err := run("zfs", args...)
+	if err != nil {
+		return nil, err
+	}
+	// Accumulate per-dataset property map, then convert.
+	raw := make(map[string]map[string]DatasetProp)
+	for _, line := range splitLines(out) {
+		f := strings.SplitN(line, "\t", 4)
+		if len(f) < 4 {
+			continue
+		}
+		ds := f[0]
+		if raw[ds] == nil {
+			raw[ds] = make(map[string]DatasetProp)
+		}
+		raw[ds][f[1]] = DatasetProp{Value: f[2], Source: strings.TrimSpace(f[3])}
+	}
+	result := make(map[string]AutoSnapshotProps, len(raw))
+	for ds, m := range raw {
+		result[ds] = parseAutoSnapProps(m)
+	}
+	return result, nil
+}
+
 // GetMountpointOwnership returns the owner username and group name of a
 // mountpoint directory by running `stat --format=%U %G <path>`.
 // This is Linux-specific and matches the target platform for the service.

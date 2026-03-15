@@ -720,3 +720,7 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-smb:hover { background: var(--surface); color: var(--text); }
 .btn-smb.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
 .btn-smb.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
+.btn-autosnap { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.btn-autosnap:hover { background: var(--surface); color: var(--text); }
+.btn-autosnap.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
+.btn-autosnap.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }

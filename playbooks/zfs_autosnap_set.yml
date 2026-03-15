@@ -1,0 +1,74 @@
+---
+# Required extra vars:
+#   name  - full dataset path (e.g. tank/data) — must NOT contain '@'
+# Optional (default "__skip__" = leave unchanged; "" = inherit/reset):
+#   com_sun_auto_snapshot          - true, false
+#   com_sun_auto_snapshot_frequent - number of 15-min snapshots to keep (1-9999)
+#   com_sun_auto_snapshot_hourly   - number of hourly snapshots to keep (1-9999)
+#   com_sun_auto_snapshot_daily    - number of daily snapshots to keep (1-9999)
+#   com_sun_auto_snapshot_weekly   - number of weekly snapshots to keep (1-9999)
+#   com_sun_auto_snapshot_monthly  - number of monthly snapshots to keep (1-9999)
+- name: Set ZFS auto-snapshot properties
+  hosts: localhost
+  gather_facts: false
+  vars:
+    com_sun_auto_snapshot: "__skip__"
+    com_sun_auto_snapshot_frequent: "__skip__"
+    com_sun_auto_snapshot_hourly: "__skip__"
+    com_sun_auto_snapshot_daily: "__skip__"
+    com_sun_auto_snapshot_weekly: "__skip__"
+    com_sun_auto_snapshot_monthly: "__skip__"
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - name is defined and name != ""
+          - name is not search("@")
+        fail_msg: name is required and must not be a snapshot path
+
+    - name: Validate property values
+      ansible.builtin.assert:
+        that:
+          - com_sun_auto_snapshot in ['__skip__', '', 'true', 'false']
+          - com_sun_auto_snapshot_frequent  == '__skip__' or com_sun_auto_snapshot_frequent  == '' or (com_sun_auto_snapshot_frequent  | int > 0 and com_sun_auto_snapshot_frequent  | string == com_sun_auto_snapshot_frequent)
+          - com_sun_auto_snapshot_hourly    == '__skip__' or com_sun_auto_snapshot_hourly    == '' or (com_sun_auto_snapshot_hourly    | int > 0 and com_sun_auto_snapshot_hourly    | string == com_sun_auto_snapshot_hourly)
+          - com_sun_auto_snapshot_daily     == '__skip__' or com_sun_auto_snapshot_daily     == '' or (com_sun_auto_snapshot_daily     | int > 0 and com_sun_auto_snapshot_daily     | string == com_sun_auto_snapshot_daily)
+          - com_sun_auto_snapshot_weekly    == '__skip__' or com_sun_auto_snapshot_weekly    == '' or (com_sun_auto_snapshot_weekly    | int > 0 and com_sun_auto_snapshot_weekly    | string == com_sun_auto_snapshot_weekly)
+          - com_sun_auto_snapshot_monthly   == '__skip__' or com_sun_auto_snapshot_monthly   == '' or (com_sun_auto_snapshot_monthly   | int > 0 and com_sun_auto_snapshot_monthly   | string == com_sun_auto_snapshot_monthly)
+        fail_msg: "One or more property values are not valid"
+
+    - name: Build options
+      ansible.builtin.set_fact:
+        set_opts: >-
+          {{
+            (['com.sun:auto-snapshot='          + com_sun_auto_snapshot]         if com_sun_auto_snapshot         not in ['', '__skip__'] else []) +
+            (['com.sun:auto-snapshot:frequent=' + com_sun_auto_snapshot_frequent] if com_sun_auto_snapshot_frequent not in ['', '__skip__'] else []) +
+            (['com.sun:auto-snapshot:hourly='   + com_sun_auto_snapshot_hourly]   if com_sun_auto_snapshot_hourly   not in ['', '__skip__'] else []) +
+            (['com.sun:auto-snapshot:daily='    + com_sun_auto_snapshot_daily]    if com_sun_auto_snapshot_daily    not in ['', '__skip__'] else []) +
+            (['com.sun:auto-snapshot:weekly='   + com_sun_auto_snapshot_weekly]   if com_sun_auto_snapshot_weekly   not in ['', '__skip__'] else []) +
+            (['com.sun:auto-snapshot:monthly='  + com_sun_auto_snapshot_monthly]  if com_sun_auto_snapshot_monthly  not in ['', '__skip__'] else [])
+          }}
+        inherit_list: >-
+          {{
+            (['com.sun:auto-snapshot']          if com_sun_auto_snapshot         == '' else []) +
+            (['com.sun:auto-snapshot:frequent'] if com_sun_auto_snapshot_frequent == '' else []) +
+            (['com.sun:auto-snapshot:hourly']   if com_sun_auto_snapshot_hourly   == '' else []) +
+            (['com.sun:auto-snapshot:daily']    if com_sun_auto_snapshot_daily    == '' else []) +
+            (['com.sun:auto-snapshot:weekly']   if com_sun_auto_snapshot_weekly   == '' else []) +
+            (['com.sun:auto-snapshot:monthly']  if com_sun_auto_snapshot_monthly  == '' else [])
+          }}
+
+    - name: Set properties
+      ansible.builtin.command:
+        argv: "{{ ['zfs', 'set'] + set_opts + [name] }}"
+      when: set_opts | length > 0
+      register: set_result
+      changed_when: set_result.rc == 0
+
+    - name: Inherit properties
+      ansible.builtin.command:
+        argv: ['zfs', 'inherit', '{{ item }}', '{{ name }}']
+      loop: "{{ inherit_list }}"
+      when: inherit_list | length > 0
+      register: inherit_result
+      changed_when: true

@@ -388,6 +388,7 @@ func softwareVersions() []SoftwareTool {
 		{Name: "NFS server", Version: probeNFSServer()},
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
+		{Name: "zfs-auto-snapshot", Version: probeVersion("zfs-auto-snapshot", "--version")},
 		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}

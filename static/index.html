@@ -77,6 +77,7 @@
         <label class="filter-wrap">
           <input type="search" id="snap-filter" placeholder="Filter…">
         </label>
+        <button class="btn-danger" id="deleteMultiSnapBtn" style="display:none">Delete selected (0)</button>
         <button class="btn-primary" id="newSnapBtn">+ New Snapshot</button>
       </div>
       <div id="snapshots-table-wrap">
@@ -313,6 +314,21 @@
       <div class="dialog-actions">
         <button type="button" id="deleteSnapCancelBtn" class="btn-secondary">Cancel</button>
         <button type="button" id="deleteSnapConfirmBtn" class="btn-danger">Delete</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- DELETE MULTIPLE SNAPSHOTS DIALOG -->
+  <dialog id="deleteMultiSnapDialog">
+    <h3>Delete <span id="deleteMultiSnapCount"></span> Snapshot<span id="deleteMultiSnapPlural"></span></h3>
+    <div class="dialog-body">
+      <div class="delete-warning">
+        <p>Permanently destroy these snapshots? This cannot be undone.</p>
+      </div>
+      <ul id="deleteMultiSnapList" style="max-height:200px;overflow-y:auto;margin:0.75rem 0;padding-left:1.25rem;font-size:0.85rem;font-family:var(--font)"></ul>
+      <div class="dialog-actions">
+        <button type="button" id="deleteMultiSnapCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="deleteMultiSnapConfirmBtn" class="btn-danger">Delete all</button>
       </div>
     </div>
   </dialog>
@@ -637,6 +653,57 @@
         <button type="button" id="scrubScheduleSaveBtn" class="btn-primary">Enable</button>
         <button type="button" id="scrubScheduleRemoveBtn" class="btn-danger">Remove</button>
         <button type="button" id="scrubScheduleCancelBtn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- AUTO-SNAPSHOT SCHEDULE DIALOG -->
+  <dialog id="autoSnapDialog">
+    <h3>Auto-Snapshot &mdash; <span id="autoSnapDatasetName"></span></h3>
+    <div class="dialog-body">
+      <fieldset class="form-section">
+        <legend>Master enable</legend>
+        <label>Auto-snapshot
+          <select id="autosnap-master">
+            <option value="">&mdash; inherit &mdash;</option>
+            <option value="true">true (enabled)</option>
+            <option value="false">false (disabled)</option>
+          </select>
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Keep counts <span class="field-note">(blank&nbsp;=&nbsp;inherit)</span></legend>
+        <div class="form-grid">
+          <label>Frequent (15 min)
+            <input type="number" id="autosnap-frequent" min="1" max="9999" placeholder="inherit">
+            <span id="autosnap-frequent-hint" class="field-note"></span>
+          </label>
+          <label>Hourly
+            <input type="number" id="autosnap-hourly" min="1" max="9999" placeholder="inherit">
+            <span id="autosnap-hourly-hint" class="field-note"></span>
+          </label>
+          <label>Daily
+            <input type="number" id="autosnap-daily" min="1" max="9999" placeholder="inherit">
+            <span id="autosnap-daily-hint" class="field-note"></span>
+          </label>
+          <label>Weekly
+            <input type="number" id="autosnap-weekly" min="1" max="9999" placeholder="inherit">
+            <span id="autosnap-weekly-hint" class="field-note"></span>
+          </label>
+          <label>Monthly
+            <input type="number" id="autosnap-monthly" min="1" max="9999" placeholder="inherit">
+            <span id="autosnap-monthly-hint" class="field-note"></span>
+          </label>
+        </div>
+      </fieldset>
+      <p class="field-note" style="margin:0 0 0.75rem">
+        Requires <code>zfs-auto-snapshot</code> (Linux) or <code>zfstools</code> (FreeBSD).
+        Check the System Info tab to verify it is installed.
+      </p>
+      <div class="dialog-actions">
+        <button type="button" id="autoSnapCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="autoSnapRemoveBtn" class="btn-danger">Remove</button>
+        <button type="button" id="autoSnapSaveBtn" class="btn-primary">Save</button>
       </div>
     </div>
   </dialog>

@@ -25,6 +25,8 @@ const state = {
   scrubSchedules: {},      // pool name → ScrubSchedule
   scrubScheduleMode: 'cron',    // "cron" | "periodic"
   scrubThresholdDays: 35,       // FreeBSD periodic threshold (global)
+  autoSnapshot: {},             // dataset name → AutoSnapshotProps
+  selectedSnaps: new Set(),     // full snapshot names checked for batch delete
   schema: null,                 // GET /api/schema response
 };
 
@@ -184,7 +186,7 @@ function buildFormSelects() {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => []),
       api('GET', '/api/poolstatus').catch(() => []),
       api('GET', '/api/version').catch(() => null),
@@ -196,6 +198,7 @@ async function loadAll() {
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => []),
       api('GET', '/api/scrub-schedules').catch(() => []),
+      api('GET', '/api/auto-snapshot-schedules').catch(() => ({})),
       api('GET', '/api/schema').catch(() => null),
     ]);
     state.pools = pools || [];
@@ -213,6 +216,7 @@ async function loadAll() {
     state.scrubScheduleMode = schedData.mode || 'cron';
     state.scrubThresholdDays = schedData.threshold_days || 35;
     state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
+    state.autoSnapshot = autoSnapshotSchedules || {};
     state.schema = schema;
     buildFormSelects();
     renderPools();
@@ -536,6 +540,80 @@ async function removeScrubSchedule() {
   }
 }
 
+// ── Auto-snapshot schedule helpers ────────────────────────────────────────────
+const _autoSnapPeriods = [
+  { prop: 'com.sun:auto-snapshot:frequent', label: 'Frequent (15 min)', id: 'autosnap-frequent' },
+  { prop: 'com.sun:auto-snapshot:hourly',   label: 'Hourly',            id: 'autosnap-hourly'   },
+  { prop: 'com.sun:auto-snapshot:daily',    label: 'Daily',             id: 'autosnap-daily'    },
+  { prop: 'com.sun:auto-snapshot:weekly',   label: 'Weekly',            id: 'autosnap-weekly'   },
+  { prop: 'com.sun:auto-snapshot:monthly',  label: 'Monthly',           id: 'autosnap-monthly'  },
+];
+
+let _autoSnapDataset = '';
+
+async function openAutoSnapDialog(name) {
+  _autoSnapDataset = name;
+  document.getElementById('autoSnapDatasetName').textContent = name;
+  // Reset to blank while loading
+  document.getElementById('autosnap-master').value = '';
+  _autoSnapPeriods.forEach(p => {
+    document.getElementById(p.id).value = '';
+    const hint = document.getElementById(p.id + '-hint');
+    if (hint) hint.textContent = '';
+  });
+  document.getElementById('autoSnapDialog').showModal();
+  try {
+    const encodedName = name.split('/').map(encodeURIComponent).join('/');
+    const props = await api('GET', '/api/auto-snapshot/' + encodedName);
+    state.autoSnapshot[name] = props;
+    _populateAutoSnapDialog(props);
+  } catch (e) {
+    document.getElementById('autoSnapDialog').close();
+    toast('Failed to load auto-snapshot config: ' + e.message, 'err');
+  }
+}
+
+function _populateAutoSnapDialog(props) {
+  const master = props['com.sun:auto-snapshot'];
+  const masterEl = document.getElementById('autosnap-master');
+  masterEl.value = master?.source === 'local' ? master.value : '';
+
+  _autoSnapPeriods.forEach(p => {
+    const dp = props[p.prop];
+    const el = document.getElementById(p.id);
+    const hint = document.getElementById(p.id + '-hint');
+    const isLocal = dp?.source === 'local';
+    el.value = isLocal && dp.value !== '-' ? dp.value : '';
+    if (hint) {
+      if (!isLocal && dp?.value && dp.value !== '-') {
+        hint.textContent = 'inherited: ' + dp.value;
+      } else if (!isLocal) {
+        hint.textContent = 'not set';
+      } else {
+        hint.textContent = '';
+      }
+    }
+  });
+}
+
+async function saveAutoSnapSchedule() {
+  const body = {};
+  body['com.sun:auto-snapshot'] = document.getElementById('autosnap-master').value.trim();
+  _autoSnapPeriods.forEach(p => {
+    body[p.prop] = document.getElementById(p.id).value.trim();
+  });
+  document.getElementById('autoSnapDialog').close();
+  showOpLogRunning(`Auto-snapshot: ${_autoSnapDataset}`);
+  try {
+    const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
+    const result = await api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    showOpLog(`Auto-snapshot saved: ${_autoSnapDataset}`, result.tasks, null);
+    toast('Auto-snapshot config saved', 'ok');
+  } catch (err) {
+    showOpLog(`Auto-snapshot save failed`, err.tasks, err.message);
+  }
+}
+
 // ── Render: I/O Stats ─────────────────────────────────────────────────────────
 function renderIOStat() {
   const wrap = document.getElementById('iostat-table-wrap');
@@ -699,6 +777,7 @@ function renderDatasets() {
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
+            <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -751,6 +830,10 @@ function renderDatasets() {
   wrap.querySelectorAll('.btn-smb[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openSMBDialog(btn.dataset.ds));
   });
+
+  wrap.querySelectorAll('.btn-autosnap[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openAutoSnapDialog(btn.dataset.ds));
+  });
 }
 
 function typeBadge(type) {
@@ -764,6 +847,14 @@ document.getElementById('snap-filter').addEventListener('input', e => {
   renderSnapshots();
 });
 
+function _updateMultiDeleteBtn() {
+  const btn = document.getElementById('deleteMultiSnapBtn');
+  if (!btn) return;
+  const n = state.selectedSnaps.size;
+  btn.style.display = n > 0 ? '' : 'none';
+  btn.textContent = `Delete selected (${n})`;
+}
+
 function renderSnapshots() {
   const wrap = document.getElementById('snapshots-table-wrap');
   let items = state.snapshots;
@@ -772,10 +863,15 @@ function renderSnapshots() {
   }
   if (!items.length) {
     wrap.innerHTML = '<div class="loading">No snapshots found.</div>';
+    _updateMultiDeleteBtn();
     return;
   }
-  const rows = items.map(s => `
-    <tr>
+  const allVisible = items.map(s => s.name);
+  const allChecked = allVisible.length > 0 && allVisible.every(n => state.selectedSnaps.has(n));
+  const rows = items.map(s => {
+    const checked = state.selectedSnaps.has(s.name) ? 'checked' : '';
+    return `<tr>
+      <td style="width:1.5rem"><input type="checkbox" class="snap-check" data-snap="${esc(s.name)}" ${checked}></td>
       <td class="mono">${esc(s.dataset)}</td>
       <td class="mono">${esc(s.snap_label)}</td>
       <td>${fmtBytes(s.used)}</td>
@@ -783,11 +879,13 @@ function renderSnapshots() {
       <td class="muted">${fmtDate(s.creation)}</td>
       <td class="muted">${s.clones && s.clones !== '-' ? esc(s.clones) : '—'}</td>
       <td><button class="btn-del" data-snap="${esc(s.name)}">Delete</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   wrap.innerHTML = `
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:1.5rem"><input type="checkbox" id="snapCheckAll" ${allChecked ? 'checked' : ''}></th>
           <th>Dataset</th><th>Snapshot</th><th>Used</th>
           <th>Refer</th><th>Created</th><th>Clones</th><th></th>
         </tr></thead>
@@ -798,6 +896,27 @@ function renderSnapshots() {
   wrap.querySelectorAll('.btn-del').forEach(btn => {
     btn.addEventListener('click', () => deleteSnapshot(btn.dataset.snap));
   });
+
+  wrap.querySelectorAll('.snap-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.selectedSnaps.add(cb.dataset.snap);
+      else state.selectedSnaps.delete(cb.dataset.snap);
+      _updateMultiDeleteBtn();
+      // sync select-all state
+      const all = [...wrap.querySelectorAll('.snap-check')];
+      document.getElementById('snapCheckAll').checked = all.length > 0 && all.every(c => c.checked);
+    });
+  });
+
+  document.getElementById('snapCheckAll').addEventListener('change', e => {
+    items.forEach(s => {
+      if (e.target.checked) state.selectedSnaps.add(s.name);
+      else state.selectedSnaps.delete(s.name);
+    });
+    renderSnapshots();
+  });
+
+  _updateMultiDeleteBtn();
 }
 
 const deleteSnapDialog = document.getElementById('deleteSnapDialog');
@@ -823,6 +942,32 @@ function deleteSnapshot(name) {
   document.getElementById('deleteSnapDisplayName').textContent = name;
   deleteSnapDialog.showModal();
 }
+
+function openDeleteMultiSnapDialog() {
+  const names = [...state.selectedSnaps];
+  document.getElementById('deleteMultiSnapCount').textContent = names.length;
+  document.getElementById('deleteMultiSnapPlural').textContent = names.length === 1 ? '' : 's';
+  document.getElementById('deleteMultiSnapList').innerHTML = names.map(n => `<li>${esc(n)}</li>`).join('');
+  document.getElementById('deleteMultiSnapDialog').showModal();
+}
+
+document.getElementById('deleteMultiSnapBtn').addEventListener('click', openDeleteMultiSnapDialog);
+document.getElementById('deleteMultiSnapCancelBtn').addEventListener('click', () =>
+  document.getElementById('deleteMultiSnapDialog').close());
+document.getElementById('deleteMultiSnapConfirmBtn').addEventListener('click', async () => {
+  const snapshots = [...state.selectedSnaps];
+  document.getElementById('deleteMultiSnapDialog').close();
+  showOpLogRunning(`Deleting ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}…`);
+  try {
+    const result = await api('POST', '/api/snapshots/delete-batch', { snapshots });
+    state.selectedSnaps.clear();
+    state.snapshots = state.snapshots.filter(s => !snapshots.includes(s.name));
+    renderSnapshots();
+    showOpLog(`Deleted ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`, result.tasks, null);
+  } catch (e) {
+    showOpLog('Batch snapshot deletion failed', e.tasks, e.message);
+  }
+});
 
 // ── New Snapshot dialog ───────────────────────────────────────────────────────
 const dialog = document.getElementById('newSnapDialog');
@@ -2072,7 +2217,8 @@ document.getElementById('smbDisableBtn').addEventListener('click', async () => {
 const sseTopicMap = {
   'pool.query':     { key: 'pools',        render: renderPools },
   'poolstatus':     { key: 'poolStatuses', render: renderPools },
-  'dataset.query':  { key: 'datasets',     render: renderDatasets },
+  'dataset.query':      { key: 'datasets',     render: renderDatasets },
+  'autosnapshot.query': { key: 'autoSnapshot', render: renderDatasets },
   'snapshot.query': { key: 'snapshots',    render: renderSnapshots },
   'iostat':         { key: 'iostat',       render: renderIOStat },
   'user.query':     { key: 'users',        render: renderUsers },
@@ -2142,6 +2288,27 @@ function startSSE() {
 document.getElementById('scrubScheduleSaveBtn').addEventListener('click', saveScrubSchedule);
 document.getElementById('scrubScheduleRemoveBtn').addEventListener('click', removeScrubSchedule);
 document.getElementById('scrubScheduleCancelBtn').addEventListener('click', () => document.getElementById('scrubScheduleDialog').close());
+
+async function removeAutoSnapSchedule() {
+  const body = {};
+  body['com.sun:auto-snapshot'] = '';
+  _autoSnapPeriods.forEach(p => { body[p.prop] = ''; });
+  document.getElementById('autoSnapDialog').close();
+  showOpLogRunning(`Remove auto-snapshot: ${_autoSnapDataset}`);
+  try {
+    const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
+    const result = await api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    showOpLog(`Auto-snapshot removed: ${_autoSnapDataset}`, result.tasks, null);
+    toast('Auto-snapshot config removed', 'ok');
+  } catch (err) {
+    showOpLog(`Auto-snapshot remove failed`, err.tasks, err.message);
+  }
+}
+
+// ── Auto-snapshot dialog wiring ───────────────────────────────────────────────
+document.getElementById('autoSnapSaveBtn').addEventListener('click', saveAutoSnapSchedule);
+document.getElementById('autoSnapRemoveBtn').addEventListener('click', removeAutoSnapSchedule);
+document.getElementById('autoSnapCancelBtn').addEventListener('click', () => document.getElementById('autoSnapDialog').close());
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 // Perform an immediate REST load so the UI is populated on first paint,
