@@ -2101,6 +2101,11 @@ function startSSE() {
   es.onopen = () => {
     stopPolling();
     if (_sseRetryTimer) { clearTimeout(_sseRetryTimer); _sseRetryTimer = null; }
+    // Always re-fetch all REST-only data (sysinfo, version, schema, smb config)
+    // on every SSE (re)connect. SSE topics self-populate from the broker cache,
+    // but endpoints not backed by SSE would otherwise stay stale/empty across
+    // server restarts and post-reboot reconnects.
+    loadAll();
   };
 
   es.addEventListener('ansible.progress', e => {
