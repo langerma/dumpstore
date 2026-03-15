@@ -21,6 +21,10 @@
 - [x] **`zfs.go`: `GetMountpointOwnership` symlink behavior undocumented** — Added `-L` flag explicitly and documented the follow-symlink choice in the function comment.
 - [x] **`handlers.go`: Insufficient error context on playbook failure** — `lastTaskName` tracked during NDJSON scan; included in the fallback non-zero-exit error message.
 
+## Features
+
+- [ ] **`app.js`: Reactive store micro-layer** — Replace the single `state` object + manual `renderX()` calls with a ~50-line `createStore` / `subscribe` pattern. `store.set('datasets', data)` automatically calls all subscribers for that key; eliminates the full-tab re-render on every SSE tick, fixes the innerHTML clobber problem (open dialogs, focused inputs, scroll position get destroyed on each poll), and makes future feature tabs self-contained. Do before adding more tabs — migration cost grows linearly with tab count.
+
 ## High (round 2)
 
 - [ ] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
