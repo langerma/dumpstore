@@ -21,8 +21,20 @@
 - [x] **`zfs.go`: `GetMountpointOwnership` symlink behavior undocumented** — Added `-L` flag explicitly and documented the follow-symlink choice in the function comment.
 - [x] **`handlers.go`: Insufficient error context on playbook failure** — `lastTaskName` tracked during NDJSON scan; included in the fallback non-zero-exit error message.
 
-## Low
+## High (round 2)
+
+- [ ] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
+
+## Medium (round 2)
+
+- [ ] **`broker.go`: SSE subscriber channel is only 8 deep; slow clients silently drop messages** — `internal/broker/broker.go` allocates a `chan []byte` of capacity 8 per subscriber. When a client is slow the channel fills and new events are dropped with a warn log only. The frontend never knows it missed an update and shows stale state. Either increase the buffer, close lagging subscribers, or add a sequence number so the client can detect a gap and force a full refresh.
+- [ ] **`handlers.go`: `createISCSITarget` allows CHAP password through `safePropertyValue` but user/SMB passwords don't** — Inconsistency: iSCSI CHAP password is validated with `safePropertyValue` (`handlers.go:2061`) but Unix and SMB passwords are not. Unify by running all password fields through the same validator.
+
+## Low (round 2)
 
 - [ ] **No audit logging** — User/group/dataset mutations aren't logged with any operator identity. Compliance gap.
 - [ ] **ACL remove doesn't verify entry exists first** — Calling `setfacl -x` on a nonexistent entry fails silently. Pre-check with `GetDatasetACL()`.
 - [ ] **`handlers.go`: Confusing error messages for missing datasets** — Many handlers let the playbook surface the error; a pre-existence check would give cleaner UX.
+- [ ] **`handlers.go`: No upper-bound validation on numeric ZFS properties** — `quota`, `recordsize`, etc. accept arbitrary strings like `"99999999999T"` that are syntactically valid but fail at the ZFS layer with a cryptic error. Parse and range-check numeric property values before sending to the playbook.
+- [ ] **`app.js`: No client-side name validation in create dialogs** — Dataset and snapshot create dialogs send the name to the backend without checking it against the allowed regex first. Results in a round-trip error instead of immediate inline feedback. Mirror `reZFSName` / `reSnapLabel` in the JS dialog submit handler.
+- [ ] **`app.js`: No visual indicator when SSE degrades to polling** — When `EventSource` fails and the client falls back to 30 s REST polling (`startSSE` fallback path), there is no UI indicator. Users see stale data with no explanation. Add a subtle status badge (e.g. "live" vs "polling") in the header.
