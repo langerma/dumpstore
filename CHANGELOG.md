@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented here.
 
+## [Unreleased]
+
+### Added
+- **Code of Conduct**, **Contributing guidelines**, and **GitHub issue templates** (bug report + feature request) — community health score to 100%
+
+### Fixed
+- Critical scanner buffer exhaustion under high Ansible output — raised from 64 KB to 4 MB
+- Nil slices in SSE payloads serialized as `null` instead of `[]`, causing silent frontend render failures
+- Multiple code review findings: input validation tightening, error handling gaps, and minor race conditions
+
+---
+
+## [v0.1.4] — 2026-03-15
+
+### Added
+- **iSCSI target management** — expose zvols as iSCSI targets on Linux (`targetcli`/LIO) and FreeBSD (`ctld`); dialog with IQN, portal configuration, CHAP authentication, and initiator ACL management
+
+---
+
+## [v0.1.3] — 2026-03-15
+
+### Added
+- **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset from the UI; integrates with `zfs-auto-snapshot` on Linux and `zfstools` on FreeBSD
+- **Multi-snapshot delete** — checkbox selection for batch snapshot deletion
+
+### Fixed
+- Pools and datasets now render immediately on connect after server restart or host reboot instead of waiting for the first poll cycle
+
+---
+
+## [v0.1.2] — 2026-03-13
+
+### Added
+- **Pool scrub scheduling** — configure periodic scrub schedules per pool (Linux: `zfsutils-linux` monthly cron; FreeBSD: `periodic.conf` configurable threshold)
+- **Schema-driven UI** — ZFS property allowed values and user shells defined once in `schema.go`, compiled into Ansible vars files at startup; eliminates duplication between frontend, backend, and playbooks
+- CI workflow to enforce docs updates on every PR (`check-docs.yml`)
+
+---
+
+## [v0.1.1] — 2026-03-10
+
+### Added
+- **Pool scrub management** — trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool
+- **Live Ansible task streaming** — task results streamed over SSE as they complete; op-log dialog updates in real time without waiting for the playbook to finish
+- **GitHub Pages landing page** — project homepage at `langerma.github.io/dumpstore`
+- Per-playbook timeout in the Ansible runner (default 5 minutes)
+- System user/group toggle in Users & Groups tab — show/hide accounts below `UID_MIN`
+
+### Security
+- Input validation migrated from character denylist to whitelist regexes across all handlers
+
+### Fixed
+- Op-log overlay now appears immediately when a write operation starts, before the first Ansible task result arrives
+- Active navigation tab highlighted correctly on click
+
+---
+
 ## [v0.1.0] — 2026-03-07
 
 ### Added
