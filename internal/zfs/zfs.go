@@ -3,10 +3,12 @@ package zfs
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Pool represents a ZFS storage pool.
@@ -476,10 +478,19 @@ func parsePoolStatuses(out string) []PoolDetail {
 	return pools
 }
 
+// cmdTimeout is the maximum time a ZFS/zpool CLI command may run before being
+// killed. Under heavy I/O load these commands can block on pool locks for a
+// long time; the timeout prevents the poller (and REST handlers) from stalling
+// indefinitely, which would starve the SSE stream and cause the UI to lose data.
+const cmdTimeout = 30 * time.Second
+
 // run executes a command and returns its stdout as a string.
+// The command is killed if it does not complete within cmdTimeout.
 func run(name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

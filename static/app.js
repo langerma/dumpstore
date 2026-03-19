@@ -187,40 +187,46 @@ function buildFormSelects() {
 async function loadAll() {
   setRefreshing(true);
   try {
+    // Use null as the sentinel for failed fetches so we can distinguish
+    // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
     const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
-      api('GET', '/api/pools').catch(() => []),
-      api('GET', '/api/poolstatus').catch(() => []),
+      api('GET', '/api/pools').catch(() => null),
+      api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
       api('GET', '/api/sysinfo').catch(() => null),
-      api('GET', '/api/datasets').catch(() => []),
-      api('GET', '/api/snapshots').catch(() => []),
-      api('GET', '/api/users').catch(() => []),
-      api('GET', '/api/groups').catch(() => []),
+      api('GET', '/api/datasets').catch(() => null),
+      api('GET', '/api/snapshots').catch(() => null),
+      api('GET', '/api/users').catch(() => null),
+      api('GET', '/api/groups').catch(() => null),
       api('GET', '/api/smb-users').catch(() => null),
-      api('GET', '/api/smb-shares').catch(() => []),
-      api('GET', '/api/iscsi-targets').catch(() => []),
-      api('GET', '/api/scrub-schedules').catch(() => []),
-      api('GET', '/api/auto-snapshot-schedules').catch(() => ({})),
+      api('GET', '/api/smb-shares').catch(() => null),
+      api('GET', '/api/iscsi-targets').catch(() => null),
+      api('GET', '/api/scrub-schedules').catch(() => null),
+      api('GET', '/api/auto-snapshot-schedules').catch(() => null),
       api('GET', '/api/schema').catch(() => null),
     ]);
-    state.pools = pools || [];
-    state.poolStatuses = poolStatuses || [];
-    state.version = version?.version || '';
-    state.sysinfo = sysinfo || null;
-    state.datasets = datasets || [];
-    state.snapshots = snapshots || [];
-    state.users = users || [];
-    state.groups = groups || [];
-    state.sambaAvailable = smbData?.available ?? false;
-    state.sambaUsers = smbData?.users || [];
-    state.smbShares = smbShares || [];
-    state.iscsiTargets = iscsiTargets || [];
-    const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
-    state.scrubScheduleMode = schedData.mode || 'cron';
-    state.scrubThresholdDays = schedData.threshold_days || 35;
-    state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
-    state.autoSnapshot = autoSnapshotSchedules || {};
-    state.schema = schema;
+    if (pools !== null) state.pools = pools;
+    if (poolStatuses !== null) state.poolStatuses = poolStatuses;
+    if (version !== null) state.version = version?.version || '';
+    if (sysinfo !== null) state.sysinfo = sysinfo;
+    if (datasets !== null) state.datasets = datasets;
+    if (snapshots !== null) state.snapshots = snapshots;
+    if (users !== null) state.users = users;
+    if (groups !== null) state.groups = groups;
+    if (smbData !== null) {
+      state.sambaAvailable = smbData?.available ?? false;
+      state.sambaUsers = smbData?.users || [];
+    }
+    if (smbShares !== null) state.smbShares = smbShares;
+    if (iscsiTargets !== null) state.iscsiTargets = iscsiTargets;
+    if (scrubSchedules !== null) {
+      const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
+      state.scrubScheduleMode = schedData.mode || 'cron';
+      state.scrubThresholdDays = schedData.threshold_days || 35;
+      state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
+    }
+    if (autoSnapshotSchedules !== null) state.autoSnapshot = autoSnapshotSchedules;
+    if (schema !== null) state.schema = schema;
     buildFormSelects();
     renderPools();
     renderSysInfo();
@@ -243,11 +249,11 @@ async function loadAll() {
 // Loads iostat (~1 s) and SMART (drive scans) without blocking the main render.
 async function loadSlowMetrics() {
   const [iostat, smart] = await Promise.all([
-    api('GET', '/api/iostat').catch(() => []),
+    api('GET', '/api/iostat').catch(() => null),
     api('GET', '/api/smart').catch(() => null),
   ]);
-  state.iostat = iostat || [];
-  state.smart = smart || null;
+  if (iostat !== null) state.iostat = iostat;
+  if (smart !== null) state.smart = smart;
   renderIOStat();
   renderSMART();
 }
