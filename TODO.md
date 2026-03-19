@@ -27,9 +27,17 @@
 
 ## High (round 2)
 
+- [ ] **No test coverage** — Zero `*_test.go` files exist. Add unit tests for regex validators (`reZFSName`, `reUnixName`, `reSnapLabel`), NDJSON parser in `runner.go`, and ZFS CLI output parsing in `zfs.go`. Then add integration tests for at least one create/delete cycle (dataset or user). This is the single biggest quality gap.
+
+- [ ] **No CI build/lint pipeline** — Only `check-docs.yml` runs in CI. Add a workflow that runs `go build ./...`, `go vet ./...`, and optionally `golangci-lint`. Prevents broken merges and catches issues early.
+
 - [ ] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
 
 ## Medium (round 2)
+
+- [ ] **`handlers.go`: Split into domain-specific files** — At 2,150 LOC with 54 handlers, `handlers.go` is a monolith. Split into `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go` etc. No logic changes — just file boundaries for navigability.
+
+- [ ] **`app.js`: Split into per-tab modules** — At 2,460 LOC with 77 functions, `app.js` is hard to navigate. Group render functions and event handlers by tab/feature into separate files or ES modules.
 
 - [ ] **Request ID correlation in logs** — HTTP middleware generates a UUID per request and stores it in context; all `slog` calls inside handlers use `slog.InfoContext` so every log line carries `req_id`. Lets you reconstruct a full request lifecycle from logs when concurrent requests overlap. No new dependencies — stdlib `context` + `log/slog` only.
 
@@ -46,3 +54,4 @@
 - [ ] **`handlers.go`: No upper-bound validation on numeric ZFS properties** — `quota`, `recordsize`, etc. accept arbitrary strings like `"99999999999T"` that are syntactically valid but fail at the ZFS layer with a cryptic error. Parse and range-check numeric property values before sending to the playbook.
 - [ ] **`app.js`: No client-side name validation in create dialogs** — Dataset and snapshot create dialogs send the name to the backend without checking it against the allowed regex first. Results in a round-trip error instead of immediate inline feedback. Mirror `reZFSName` / `reSnapLabel` in the JS dialog submit handler.
 - [ ] **`app.js`: No visual indicator when SSE degrades to polling** — When `EventSource` fails and the client falls back to 30 s REST polling (`startSSE` fallback path), there is no UI indicator. Users see stale data with no explanation. Add a subtle status badge (e.g. "live" vs "polling") in the header.
+- [ ] **Consistent dataset pre-checks across handlers** — Some handlers call `datasetExists()` before the playbook, others let Ansible surface the error. Standardize so all mutating handlers pre-check and return a clear 404.
