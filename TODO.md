@@ -27,9 +27,9 @@
 
 ## High (round 2)
 
-- [ ] **No test coverage** — Zero `*_test.go` files exist. Add unit tests for regex validators (`reZFSName`, `reUnixName`, `reSnapLabel`), NDJSON parser in `runner.go`, and ZFS CLI output parsing in `zfs.go`. Then add integration tests for at least one create/delete cycle (dataset or user). This is the single biggest quality gap.
+- [x] **No test coverage** — Zero `*_test.go` files exist. Add unit tests for regex validators (`reZFSName`, `reUnixName`, `reSnapLabel`), NDJSON parser in `runner.go`, and ZFS CLI output parsing in `zfs.go`. Then add integration tests for at least one create/delete cycle (dataset or user). This is the single biggest quality gap.
 
-- [ ] **No CI build/lint pipeline** — Only `check-docs.yml` runs in CI. Add a workflow that runs `go build ./...`, `go vet ./...`, and optionally `golangci-lint`. Prevents broken merges and catches issues early.
+- [x] **No CI build/lint pipeline** — Only `check-docs.yml` runs in CI. Add a workflow that runs `go build ./...`, `go vet ./...`, and optionally `golangci-lint`. Prevents broken merges and catches issues early.
 
 - [ ] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
 

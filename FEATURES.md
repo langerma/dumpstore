@@ -38,7 +38,7 @@
 | ZFS native encryption    | High     | Load/unload keys, encryption status per dataset, keyformat/keylocation support   |
 | Dataset rename           | Medium   | Rename a dataset or volume in place                                              |
 | Snapshot clone           | Medium   | Create a new dataset from an existing snapshot                                   |
-| Pool import/export       | Medium   | Import available pools from attached devices; export pools safely                |
+| Pool create/import/export| High     | Import available pools from attached devices; export pools safely                |
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
