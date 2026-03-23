@@ -31,6 +31,44 @@ const state = {
   schema: null,                 // GET /api/schema response
 };
 
+// ── Reactive store ──────────────────────────────────────────────────────────
+const _subs = {};          // key → Set<fn>
+let _batching = false;
+let _dirty = new Set();
+
+function subscribe(keys, fn) {
+  for (const k of keys) {
+    if (!_subs[k]) _subs[k] = new Set();
+    _subs[k].add(fn);
+  }
+}
+
+function storeSet(key, value) {
+  if (state[key] === value) return;
+  state[key] = value;
+  if (_batching) { _dirty.add(key); return; }
+  _flush(new Set([key]));
+}
+
+function storeBatch(fn) {
+  _batching = true;
+  _dirty = new Set();
+  try { fn(); } finally {
+    _batching = false;
+    const keys = _dirty;
+    _dirty = new Set();
+    if (keys.size) _flush(keys);
+  }
+}
+
+function _flush(keys) {
+  const fns = new Set();
+  for (const k of keys) {
+    if (_subs[k]) for (const fn of _subs[k]) fns.add(fn);
+  }
+  for (const fn of fns) fn();
+}
+
 // ── API helpers ───────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -205,37 +243,30 @@ async function loadAll() {
       api('GET', '/api/auto-snapshot-schedules').catch(() => null),
       api('GET', '/api/schema').catch(() => null),
     ]);
-    if (pools !== null) state.pools = pools;
-    if (poolStatuses !== null) state.poolStatuses = poolStatuses;
-    if (version !== null) state.version = version?.version || '';
-    if (sysinfo !== null) state.sysinfo = sysinfo;
-    if (datasets !== null) state.datasets = datasets;
-    if (snapshots !== null) state.snapshots = snapshots;
-    if (users !== null) state.users = users;
-    if (groups !== null) state.groups = groups;
-    if (smbData !== null) {
-      state.sambaAvailable = smbData?.available ?? false;
-      state.sambaUsers = smbData?.users || [];
-    }
-    if (smbShares !== null) state.smbShares = smbShares;
-    if (iscsiTargets !== null) state.iscsiTargets = iscsiTargets;
-    if (scrubSchedules !== null) {
-      const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
-      state.scrubScheduleMode = schedData.mode || 'cron';
-      state.scrubThresholdDays = schedData.threshold_days || 35;
-      state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
-    }
-    if (autoSnapshotSchedules !== null) state.autoSnapshot = autoSnapshotSchedules;
-    if (schema !== null) state.schema = schema;
-    buildFormSelects();
-    renderPools();
-    renderSysInfo();
-    renderSoftware();
-    renderDatasets();
-    renderSnapshots();
-    renderUsers();
-    renderGroups();
-    renderSambaUsers();
+    storeBatch(() => {
+      if (pools !== null) storeSet('pools', pools);
+      if (poolStatuses !== null) storeSet('poolStatuses', poolStatuses);
+      if (version !== null) storeSet('version', version?.version || '');
+      if (sysinfo !== null) storeSet('sysinfo', sysinfo);
+      if (datasets !== null) storeSet('datasets', datasets);
+      if (snapshots !== null) storeSet('snapshots', snapshots);
+      if (users !== null) storeSet('users', users);
+      if (groups !== null) storeSet('groups', groups);
+      if (smbData !== null) {
+        storeSet('sambaAvailable', smbData?.available ?? false);
+        storeSet('sambaUsers', smbData?.users || []);
+      }
+      if (smbShares !== null) storeSet('smbShares', smbShares);
+      if (iscsiTargets !== null) storeSet('iscsiTargets', iscsiTargets);
+      if (scrubSchedules !== null) {
+        const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
+        storeSet('scrubScheduleMode', schedData.mode || 'cron');
+        storeSet('scrubThresholdDays', schedData.threshold_days || 35);
+        storeSet('scrubSchedules', Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s])));
+      }
+      if (autoSnapshotSchedules !== null) storeSet('autoSnapshot', autoSnapshotSchedules);
+      if (schema !== null) storeSet('schema', schema);
+    });
   } catch (e) {
     toast('Load failed: ' + e.message, 'err');
     console.error(e);
@@ -252,10 +283,10 @@ async function loadSlowMetrics() {
     api('GET', '/api/iostat').catch(() => null),
     api('GET', '/api/smart').catch(() => null),
   ]);
-  if (iostat !== null) state.iostat = iostat;
-  if (smart !== null) state.smart = smart;
-  renderIOStat();
-  renderSMART();
+  storeBatch(() => {
+    if (iostat !== null) storeSet('iostat', iostat);
+    if (smart !== null) storeSet('smart', smart);
+  });
 }
 
 // ── Formatting: uptime ────────────────────────────────────────────────────────
@@ -513,10 +544,11 @@ function openScrubScheduleDialog(pool) {
 async function _refreshScrubSchedules() {
   const data = await api('GET', '/api/scrub-schedules').catch(() => null);
   if (data) {
-    state.scrubScheduleMode = data.mode || 'zfsutils';
-    state.scrubThresholdDays = data.threshold_days || 35;
-    state.scrubSchedules = Object.fromEntries((data.schedules || []).map(s => [s.pool, s]));
-    renderPools();
+    storeBatch(() => {
+      storeSet('scrubScheduleMode', data.mode || 'zfsutils');
+      storeSet('scrubThresholdDays', data.threshold_days || 35);
+      storeSet('scrubSchedules', Object.fromEntries((data.schedules || []).map(s => [s.pool, s])));
+    });
   }
 }
 
@@ -943,8 +975,7 @@ document.getElementById('deleteSnapConfirmBtn').addEventListener('click', async 
   showOpLogRunning(`Deleting snapshot…`);
   try {
     const result = await api('DELETE', '/api/snapshots/' + encodeURIComponent(name));
-    state.snapshots = state.snapshots.filter(s => s.name !== name);
-    renderSnapshots();
+    storeSet('snapshots', state.snapshots.filter(s => s.name !== name));
     showOpLog(`Deleted snapshot: ${name}`, result.tasks, null);
   } catch (e) {
     showOpLog('Snapshot deletion failed', e.tasks, e.message);
@@ -975,8 +1006,7 @@ document.getElementById('deleteMultiSnapConfirmBtn').addEventListener('click', a
   try {
     const result = await api('POST', '/api/snapshots/delete-batch', { snapshots });
     state.selectedSnaps.clear();
-    state.snapshots = state.snapshots.filter(s => !snapshots.includes(s.name));
-    renderSnapshots();
+    storeSet('snapshots', state.snapshots.filter(s => !snapshots.includes(s.name)));
     showOpLog(`Deleted ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`, result.tasks, null);
   } catch (e) {
     showOpLog('Batch snapshot deletion failed', e.tasks, e.message);
@@ -1010,8 +1040,7 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
     const result = await api('POST', '/api/snapshots', { dataset, snapname, recursive });
     showOpLog(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
     const snaps = await api('GET', '/api/snapshots');
-    state.snapshots = snaps || [];
-    renderSnapshots();
+    storeSet('snapshots', snaps || []);
   } catch (e) {
     showOpLog('Snapshot creation failed', e.tasks, e.message);
   }
@@ -1056,8 +1085,7 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
     const result = await api('POST', '/api/datasets', body);
     showOpLog(`Dataset created: ${body.name}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
-    state.datasets = datasets || [];
-    renderDatasets();
+    storeSet('datasets', datasets || []);
   } catch (e) {
     showOpLog('Dataset creation failed', e.tasks, e.message);
   }
@@ -1121,9 +1149,8 @@ deleteDatasetBtn.addEventListener('click', async () => {
     const result = await api('DELETE', url);
     showOpLog(`Deleted dataset: ${name}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
-    state.datasets = datasets || [];
     state.collapsedDatasets.delete(name);
-    renderDatasets();
+    storeSet('datasets', datasets || []);
   } catch (e) {
     showOpLog(`Failed to delete ${name}`, e.tasks, e.message);
   }
@@ -1214,8 +1241,7 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
     const result = await api('PATCH', '/api/datasets/' + encodedName, body);
     showOpLog(`Properties updated: ${_editDatasetName}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
-    state.datasets = datasets || [];
-    renderDatasets();
+    storeSet('datasets', datasets || []);
   } catch (e) {
     showOpLog(`Failed to update ${_editDatasetName}`, e.tasks, e.message);
   }
@@ -1351,11 +1377,11 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
       api('GET', '/api/users'),
       api('GET', '/api/smb-users').catch(() => null),
     ]);
-    state.users = users || [];
-    state.sambaAvailable = smbData?.available ?? false;
-    state.sambaUsers = smbData?.users || [];
-    renderUsers();
-    renderSambaUsers();
+    storeBatch(() => {
+      storeSet('users', users || []);
+      storeSet('sambaAvailable', smbData?.available ?? false);
+      storeSet('sambaUsers', smbData?.users || []);
+    });
   } catch (err) {
     showOpLog('User creation failed', err.tasks, err.message);
   }
@@ -1392,8 +1418,7 @@ deleteUserConfirmBtn.addEventListener('click', async () => {
     const result = await api('DELETE', '/api/users/' + encodeURIComponent(username));
     showOpLog(`Deleted user: ${username}`, result.tasks, null);
     const users = await api('GET', '/api/users');
-    state.users = users || [];
-    renderUsers();
+    storeSet('users', users || []);
   } catch (e) {
     showOpLog(`Failed to delete user: ${username}`, e.tasks, e.message);
   }
@@ -1417,8 +1442,7 @@ document.getElementById('newGroupForm').addEventListener('submit', async e => {
     const result = await api('POST', '/api/groups', { groupname, gid });
     showOpLog(`Group created: ${groupname}`, result.tasks, null);
     const groups = await api('GET', '/api/groups');
-    state.groups = groups || [];
-    renderGroups();
+    storeSet('groups', groups || []);
   } catch (e) {
     showOpLog('Group creation failed', e.tasks, e.message);
   }
@@ -1455,8 +1479,7 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
     const result = await api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
     showOpLog(`Deleted group: ${groupname}`, result.tasks, null);
     const groups = await api('GET', '/api/groups');
-    state.groups = groups || [];
-    renderGroups();
+    storeSet('groups', groups || []);
   } catch (e) {
     showOpLog(`Failed to delete group: ${groupname}`, e.tasks, e.message);
   }
@@ -1513,10 +1536,10 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
     const result = await api('PUT', '/api/users/' + encodeURIComponent(username), { shell, group, user_groups, password });
     showOpLog(`User updated: ${username}`, result.tasks, null);
     const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
-    state.users = users || [];
-    state.groups = groups || [];
-    renderUsers();
-    renderGroups();
+    storeBatch(() => {
+      storeSet('users', users || []);
+      storeSet('groups', groups || []);
+    });
   } catch (err) {
     showOpLog(`Failed to update user: ${username}`, err.tasks, err.message);
   }
@@ -1551,10 +1574,10 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
     const result = await api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
     showOpLog(`Group updated: ${result.groupname}`, result.tasks, null);
     const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
-    state.users = users || [];
-    state.groups = groups || [];
-    renderUsers();
-    renderGroups();
+    storeBatch(() => {
+      storeSet('users', users || []);
+      storeSet('groups', groups || []);
+    });
   } catch (err) {
     showOpLog(`Failed to update group: ${groupname}`, err.tasks, err.message);
   }
@@ -1630,9 +1653,10 @@ document.getElementById('addSmbUserForm').addEventListener('submit', async e => 
     const result = await api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
     showOpLog(`SMB access added: ${username}`, result.tasks, null);
     const smbData = await api('GET', '/api/smb-users').catch(() => null);
-    state.sambaAvailable = smbData?.available ?? false;
-    state.sambaUsers = smbData?.users || [];
-    renderSambaUsers();
+    storeBatch(() => {
+      storeSet('sambaAvailable', smbData?.available ?? false);
+      storeSet('sambaUsers', smbData?.users || []);
+    });
   } catch (err) {
     showOpLog(`Failed to add SMB access: ${username}`, err.tasks, err.message);
   }
@@ -1658,9 +1682,10 @@ document.getElementById('removeSmbUserConfirmBtn').addEventListener('click', asy
     const result = await api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
     showOpLog(`SMB access removed: ${username}`, result.tasks, null);
     const smbData = await api('GET', '/api/smb-users').catch(() => null);
-    state.sambaAvailable = smbData?.available ?? false;
-    state.sambaUsers = smbData?.users || [];
-    renderSambaUsers();
+    storeBatch(() => {
+      storeSet('sambaAvailable', smbData?.available ?? false);
+      storeSet('sambaUsers', smbData?.users || []);
+    });
   } catch (err) {
     showOpLog(`Failed to remove SMB access: ${username}`, err.tasks, err.message);
   }
@@ -1944,8 +1969,7 @@ function renderNFSv4AddForm(_d) {
 
 async function refreshACLStatus() {
   try {
-    state.aclStatus = await api('GET', '/api/acl-status') || {};
-    renderDatasets();
+    storeSet('aclStatus', await api('GET', '/api/acl-status') || {});
   } catch (_) { /* best-effort */ }
 }
 
@@ -2163,7 +2187,7 @@ async function openSMBDialog(dataset) {
       api('GET', '/api/dataset-props/' + encodeURIComponent(dataset).replace(/%2F/g, '/')),
       api('GET', '/api/smb-shares'),
     ]);
-    state.smbShares = shares || [];
+    storeSet('smbShares', shares || []);
     const mountpoint = props.mountpoint?.value ?? '';
     const existing = state.smbShares.find(s => s.path === mountpoint);
     const entriesEl = document.getElementById('smbDialogEntries');
@@ -2191,8 +2215,7 @@ document.getElementById('smb-sharename').addEventListener('input', e => {
 
 async function _refreshSMBShares() {
   const shares = await api('GET', '/api/smb-shares').catch(() => []);
-  state.smbShares = shares || [];
-  renderDatasets();
+  storeSet('smbShares', shares || []);
 }
 
 document.getElementById('smbAddBtn').addEventListener('click', async () => {
@@ -2226,17 +2249,32 @@ document.getElementById('smbDisableBtn').addEventListener('click', async () => {
   }
 });
 
+// ── Store subscriptions ──────────────────────────────────────────────────────
+subscribe(['sysinfo'],                                          renderSysInfo);
+subscribe(['sysinfo'],                                          renderSoftware);
+subscribe(['pools', 'poolStatuses', 'scrubSchedules',
+           'scrubScheduleMode', 'scrubThresholdDays'],          renderPools);
+subscribe(['iostat'],                                           renderIOStat);
+subscribe(['smart'],                                            renderSMART);
+subscribe(['datasets', 'aclStatus', 'smbShares',
+           'iscsiTargets', 'autoSnapshot'],                     renderDatasets);
+subscribe(['snapshots'],                                        renderSnapshots);
+subscribe(['users'],                                            renderUsers);
+subscribe(['groups'],                                           renderGroups);
+subscribe(['sambaUsers', 'sambaAvailable', 'users'],            renderSambaUsers);
+subscribe(['schema'],                                           buildFormSelects);
+
 // ── SSE client ────────────────────────────────────────────────────────────────
-// Maps SSE topic names → state key + render function.
+// Maps SSE topic names → state key (render is handled by store subscriptions).
 const sseTopicMap = {
-  'pool.query':     { key: 'pools',        render: renderPools },
-  'poolstatus':     { key: 'poolStatuses', render: renderPools },
-  'dataset.query':      { key: 'datasets',     render: renderDatasets },
-  'autosnapshot.query': { key: 'autoSnapshot', render: renderDatasets },
-  'snapshot.query': { key: 'snapshots',    render: renderSnapshots },
-  'iostat':         { key: 'iostat',       render: renderIOStat },
-  'user.query':     { key: 'users',        render: renderUsers },
-  'group.query':    { key: 'groups',       render: renderGroups },
+  'pool.query':         'pools',
+  'poolstatus':         'poolStatuses',
+  'dataset.query':      'datasets',
+  'autosnapshot.query': 'autoSnapshot',
+  'snapshot.query':     'snapshots',
+  'iostat':             'iostat',
+  'user.query':         'users',
+  'group.query':        'groups',
 };
 
 let _pollInterval = null;  // setInterval handle; null when SSE is active
@@ -2278,12 +2316,11 @@ function startSSE() {
     } catch (err) { console.warn('[SSE] ansible.progress parse error', err); }
   });
 
-  for (const [topic, { key, render }] of Object.entries(sseTopicMap)) {
+  for (const [topic, key] of Object.entries(sseTopicMap)) {
     es.addEventListener(topic, e => {
       try {
         const v = JSON.parse(e.data);
-        if (v !== null) state[key] = v;
-        render();
+        if (v !== null) storeSet(key, v);
       } catch (err) { console.warn('[SSE] parse error', topic, err); }
     });
   }
@@ -2314,8 +2351,7 @@ document.getElementById('iscsiAuthMode').addEventListener('change', e => {
 
 async function _refreshISCSITargets() {
   const targets = await api('GET', '/api/iscsi-targets').catch(() => []);
-  state.iscsiTargets = targets || [];
-  renderDatasets();
+  storeSet('iscsiTargets', targets || []);
 }
 
 async function openISCSIDialog(dataset) {
@@ -2329,7 +2365,7 @@ async function openISCSIDialog(dataset) {
 
   try {
     const targets = await api('GET', '/api/iscsi-targets');
-    state.iscsiTargets = targets || [];
+    storeSet('iscsiTargets', targets || []);
     const existing = state.iscsiTargets.find(t => t.zvol_name === dataset);
 
     if (existing) {
