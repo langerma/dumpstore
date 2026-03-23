@@ -23,7 +23,7 @@
 
 ## Features
 
-- [ ] **`app.js`: Reactive store micro-layer** — Replace the single `state` object + manual `renderX()` calls with a ~50-line `createStore` / `subscribe` pattern. `store.set('datasets', data)` automatically calls all subscribers for that key; eliminates the full-tab re-render on every SSE tick, fixes the innerHTML clobber problem (open dialogs, focused inputs, scroll position get destroyed on each poll), and makes future feature tabs self-contained. Do before adding more tabs — migration cost grows linearly with tab count.
+- [x] **`app.js`: Reactive store micro-layer** — Replace the single `state` object + manual `renderX()` calls with a ~50-line `createStore` / `subscribe` pattern. `store.set('datasets', data)` automatically calls all subscribers for that key; eliminates the full-tab re-render on every SSE tick, fixes the innerHTML clobber problem (open dialogs, focused inputs, scroll position get destroyed on each poll), and makes future feature tabs self-contained. Do before adding more tabs — migration cost grows linearly with tab count.
 
 ## High (round 2)
 

@@ -65,12 +65,14 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     Browser  (vanilla JS SPA)                       │
-│  state object → render functions → api() helper                     │
+│  state + reactive store → subscribe(keys, renderFn)                 │
+│  storeSet(key, val) auto-dispatches subscribed renderers            │
 │                                                                     │
 │  ┌─ boot ──────────────────────────────────────────────────────┐    │
-│  │  loadAll() → 12 parallel REST fetches (initial paint)       │    │
+│  │  loadAll() → 14 parallel REST fetches (initial paint)       │    │
+│  │    storeBatch() coalesces updates; each render fires once   │    │
 │  │  startSSE() → EventSource /api/events?topics=…              │    │
-│  │    on message: state[key] = data; render()                  │    │
+│  │    on message: storeSet(key, data) → auto render            │    │
 │  │    on close:   fallback to setInterval(loadAll, 30 000)     │    │
 │  │                + retry SSE after 5 s                        │    │
 │  └─────────────────────────────────────────────────────────────┘    │

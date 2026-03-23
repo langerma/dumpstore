@@ -125,11 +125,15 @@ Browser: showOpLog() renders task steps in modal
 
 The frontend is vanilla JS with no build step. All data lives in a single `state` object. Render functions are pure — they read from `state` and write `innerHTML`.
 
+A lightweight reactive store (`storeSet`/`storeBatch`/`subscribe`) automatically dispatches render functions when their subscribed state keys change. Each render function registers the state keys it depends on via `subscribe(keys, fn)`. Writing state via `storeSet(key, value)` triggers only the affected renderers. `storeBatch(fn)` coalesces multiple key updates so each renderer fires at most once per batch.
+
 On boot:
-1. `loadAll()` fetches all fast endpoints in parallel and renders immediately
+1. `loadAll()` fetches all fast endpoints in parallel, wrapped in `storeBatch()` — each render fires once
 2. `loadSlowMetrics()` fires in parallel for `/api/iostat` (~1 s) and `/api/smart` (drive scans), updating the I/O and disk health sections when ready
-3. `startSSE()` opens a persistent `EventSource` connection; on each message `state[key] = data; render()`
+3. `startSSE()` opens a persistent `EventSource` connection; on each message `storeSet(key, data)` auto-dispatches the subscribed renderers
 4. If SSE drops, the client falls back to `setInterval(loadAll, 30_000)` and retries SSE after 5 s
+
+UI-local state (`collapsedDatasets`, `selectedSnaps`, `hideSystemUsers`, `hideSystemGroups`) is mutated directly on `state` with explicit render calls — it is not managed by the store.
 
 ## Playbook conventions
 
