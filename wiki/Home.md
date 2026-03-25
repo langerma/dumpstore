@@ -21,6 +21,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform
 - **SMB share management** — create and remove Samba usershares; manage Samba users; one-click Samba setup
 - **SMB home shares** — enable/configure the Samba `[homes]` section for automatic per-user home directory shares; configurable base path, browseable, read only, create/directory masks
+- **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN, portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — POSIX ACL and NFSv4 ACL entries per dataset; recursive apply supported
 - **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
@@ -29,7 +30,6 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 ## Planned
 
 - **User mgmt extensions** — SSH key management (`authorized_keys`), move home directory
-- **Time Machine shares** — Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB
 - **ZFS native encryption** — load/unload keys, encryption status per dataset, keyformat/keylocation support
 - **Pool import/export** — import available pools from attached devices; export pools safely
 - **ZFS send/receive** — pool replication and off-site backup

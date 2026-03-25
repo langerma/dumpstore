@@ -189,6 +189,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/smb/homes", h.getSMBHomes)
 	mux.HandleFunc("POST /api/smb/homes", h.setSMBHomes)
 	mux.HandleFunc("DELETE /api/smb/homes", h.deleteSMBHomes)
+	mux.HandleFunc("GET /api/smb/timemachine", h.getTimeMachineShares)
+	mux.HandleFunc("POST /api/smb/timemachine", h.createTimeMachineShare)
+	mux.HandleFunc("DELETE /api/smb/timemachine/{sharename}", h.deleteTimeMachineShare)
 	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
 	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
 	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
@@ -1143,6 +1146,107 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 // Removes the [homes] section from smb.conf.
 func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_homes_unset.yml", map[string]string{})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"tasks": out.Steps()})
+}
+
+// getTimeMachineShares handles GET /api/smb/timemachine
+// Returns all Samba shares configured as Time Machine targets.
+func (h *Handler) getTimeMachineShares(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, system.ParseTimeMachineShares())
+}
+
+// createTimeMachineShare handles POST /api/smb/timemachine
+// Body: {"sharename":"TimeMachine","dataset":"tank/tm","path":"/tank/tm","max_size":"500G","valid_users":"@backup"}
+func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Sharename  string `json:"sharename"`
+		Dataset    string `json:"dataset"`
+		Path       string `json:"path"`
+		MaxSize    string `json:"max_size"`
+		ValidUsers string `json:"valid_users"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
+		return
+	}
+
+	if req.Sharename == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		return
+	}
+	if !validSMBShare(req.Sharename) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
+		return
+	}
+
+	// Resolve dataset to path if provided
+	if req.Dataset != "" && req.Path == "" {
+		if !validZFSName(req.Dataset) {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+			return
+		}
+		datasets, err := zfs.ListDatasets()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
+			return
+		}
+		for _, ds := range datasets {
+			if ds.Name == req.Dataset {
+				req.Path = ds.Mountpoint
+				break
+			}
+		}
+		if req.Path == "" || req.Path == "-" || req.Path == "none" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
+			return
+		}
+	}
+
+	if req.Path == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
+		return
+	}
+
+	out, err := h.runOp("smb_timemachine_set.yml", map[string]string{
+		"sharename":   req.Sharename,
+		"path":        req.Path,
+		"max_size":    req.MaxSize,
+		"valid_users": req.ValidUsers,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"shares": system.ParseTimeMachineShares(), "tasks": out.Steps()})
+}
+
+// deleteTimeMachineShare handles DELETE /api/smb/timemachine/{sharename}
+func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request) {
+	sharename := r.PathValue("sharename")
+	if sharename == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		return
+	}
+	if !validSMBShare(sharename) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
+		return
+	}
+
+	out, err := h.runOp("smb_timemachine_unset.yml", map[string]string{
+		"sharename": sharename,
+	})
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

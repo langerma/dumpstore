@@ -46,6 +46,9 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/smb/homes`            | Get current SMB [homes] config |
 | POST   | `/api/smb/homes`            | Enable/update SMB [homes] section |
 | DELETE | `/api/smb/homes`            | Disable/remove SMB [homes] section |
+| GET    | `/api/smb/timemachine`      | List all Time Machine shares |
+| POST   | `/api/smb/timemachine`      | Create/update a Time Machine share |
+| DELETE | `/api/smb/timemachine/{name}` | Remove a Time Machine share |
 | POST   | `/api/scrub/{pool}`         | Start a pool scrub |
 | DELETE | `/api/scrub/{pool}`         | Cancel a running pool scrub |
 | GET    | `/api/scrub-schedules`      | List periodic scrub schedule config |
@@ -399,6 +402,53 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 ### DELETE /api/smb/homes
 
 Remove the `[homes]` section from `smb.conf`. Returns Ansible task steps.
+
+---
+
+## Time Machine Shares
+
+Manage Samba shares configured as macOS Time Machine backup targets using `vfs_fruit` with catia and streams_xattr VFS modules.
+
+### GET /api/smb/timemachine
+
+List all Time Machine shares. Parses `smb.conf` for sections with `fruit:time machine = yes`.
+
+```json
+[
+  {
+    "sharename": "timemachine",
+    "path": "/tank/backups/timemachine",
+    "max_size": "1T",
+    "valid_users": "alice bob"
+  }
+]
+```
+
+### POST /api/smb/timemachine
+
+Create or update a Time Machine share. Returns Ansible task steps.
+
+```json
+{
+  "sharename": "timemachine",
+  "dataset": "tank/backups",
+  "path": "/tank/backups/timemachine",
+  "max_size": "1T",
+  "valid_users": "alice bob"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `sharename` | yes | Samba share name |
+| `dataset` | no | ZFS dataset (alternative to specifying `path` directly) |
+| `path` | yes | Filesystem path for the share |
+| `max_size` | no | Maximum size quota for Time Machine backups |
+| `valid_users` | no | Space-separated list of allowed users |
+
+### DELETE /api/smb/timemachine/{sharename}
+
+Remove a Time Machine share from `smb.conf`. Returns Ansible task steps.
 
 ---
 

@@ -45,8 +45,9 @@
       │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
       │  users, groups, ACLs,             SMB users/shares/config,    │
       │  SMB users/shares/homes,          dataset chown, scrub,       │
-      │  iSCSI targets                    iSCSI targets,              │
-      │                                   SMB homes config            │
+      │  iSCSI targets,                   iSCSI targets,              │
+      │  Time Machine shares              SMB homes config,           │
+      │                                   Time Machine shares         │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐

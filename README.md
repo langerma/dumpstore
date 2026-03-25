@@ -33,6 +33,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
 - **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
 - **SMB home shares** — enable and configure the Samba `[homes]` section in `smb.conf` so each authenticated user automatically gets a personal share mapped to a subdirectory; configurable base path (pick a ZFS dataset or specify a custom path), browseable, read only, create mask, and directory mask
+- **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit` with catia and streams_xattr; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users per share
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN (auto-generated, editable), portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
@@ -111,8 +112,9 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
       │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
       │  users, groups, ACLs,             SMB users/shares/config,    │
       │  SMB users/shares/homes,          dataset chown, scrub,       │
-      │  iSCSI targets                    iSCSI targets,              │
-      │                                   SMB homes config            │
+      │  iSCSI targets,                   iSCSI targets,              │
+      │  Time Machine shares              SMB homes config,           │
+      │                                   Time Machine shares         │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐
@@ -241,6 +243,10 @@ POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
 GET    /api/smb/homes          → parse smb.conf [homes]   (direct)
 POST   /api/smb/homes          → smb_homes_set.yml        (ansible)
 DELETE /api/smb/homes          → smb_homes_unset.yml      (ansible)
+
+GET    /api/smb/timemachine    → parse smb.conf fruit:time machine  (direct)
+POST   /api/smb/timemachine    → smb_timemachine_set.yml  (ansible)
+DELETE /api/smb/timemachine/{n}→ smb_timemachine_unset.yml (ansible)
 
 GET    /api/auto-snapshot/{ds} → zfs get com.sun:auto-snapshot* (direct)
 PUT    /api/auto-snapshot/{ds} → zfs_autosnap_set.yml           (ansible)
@@ -442,6 +448,8 @@ sudo make uninstall
 │   ├── smb_user_remove.yml          # Remove a user from smbpasswd
 │   ├── smb_homes_set.yml            # Enable/update [homes] section in smb.conf
 │   ├── smb_homes_unset.yml          # Remove [homes] section from smb.conf
+│   ├── smb_timemachine_set.yml      # Create/update Time Machine share in smb.conf (vfs_fruit)
+│   ├── smb_timemachine_unset.yml    # Remove Time Machine share from smb.conf
 │   ├── iscsi_target_create.yml      # Create iSCSI target (Linux/targetcli)
 │   ├── iscsi_target_delete.yml      # Remove iSCSI target (Linux/targetcli)
 │   ├── iscsi_target_create_freebsd.yml  # Create iSCSI target (FreeBSD/ctld)
@@ -503,6 +511,9 @@ sudo make uninstall
 | GET    | `/api/smb/homes`            | Get current SMB [homes] config        |
 | POST   | `/api/smb/homes`            | Enable/update SMB [homes] section     |
 | DELETE | `/api/smb/homes`            | Disable/remove SMB [homes] section    |
+| GET    | `/api/smb/timemachine`      | List all Time Machine shares          |
+| POST   | `/api/smb/timemachine`      | Create/update a Time Machine share    |
+| DELETE | `/api/smb/timemachine/{name}` | Remove a Time Machine share         |
 | GET    | `/api/iscsi-targets`        | List all iSCSI targets                |
 | POST   | `/api/iscsi-targets`        | Create an iSCSI target for a zvol     |
 | DELETE | `/api/iscsi-targets`        | Remove an iSCSI target                |
@@ -708,7 +719,7 @@ The browser UI uses `EventSource` to subscribe to all eight topics and falls bac
 | Per-user quota tracking  | Show space usage per user/group (`zfs userspace` / `zfs groupspace`)                          |
 | User mgmt extensions     | SSH key management (`authorized_keys`), move home directory                                   |
 | ~~Samba home shares~~    | ~~Enable/configure `[homes]` section in `smb.conf` for per-user home directory shares~~ — **done** (enable/disable `[homes]` section; configurable base path, browseable, read only, create/directory masks) |
-| Time Machine shares      | Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB                  |
+| ~~Time Machine shares~~  | ~~Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB~~ — **done** (named shares backed by ZFS datasets; configurable max size and valid users; `vfs_fruit` with catia and streams_xattr) |
 | ZFS send/receive         | Pool replication and off-site backup                                                          |
 | Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                  |
 | ~~Pool scrub management~~| ~~Trigger scrubs, view last scrub time/status/progress, schedule periodic scrubs~~ — **done** (start/cancel + periodic schedule; Linux `zfsutils-linux`, FreeBSD `periodic.conf`) |

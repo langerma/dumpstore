@@ -16,6 +16,7 @@ const state = {
   sambaAvailable: false,
   smbShares: [],      // [{name, path}] from net usershare info
   smbHomes: { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' },
+  timeMachineShares: [],  // [{name, path, max_size, valid_users}]
   iscsiTargets: [],   // [{iqn, zvol_name, ...}] from /api/iscsi-targets
   activeTab: 'pools',
   collapsedDatasets: new Set(),
@@ -228,7 +229,7 @@ async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
@@ -240,6 +241,7 @@ async function loadAll() {
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => null),
       api('GET', '/api/smb/homes').catch(() => null),
+      api('GET', '/api/smb/timemachine').catch(() => null),
       api('GET', '/api/iscsi-targets').catch(() => null),
       api('GET', '/api/scrub-schedules').catch(() => null),
       api('GET', '/api/auto-snapshot-schedules').catch(() => null),
@@ -260,6 +262,7 @@ async function loadAll() {
       }
       if (smbShares !== null) storeSet('smbShares', smbShares);
       if (smbHomes !== null) storeSet('smbHomes', smbHomes);
+      if (tmShares !== null) storeSet('timeMachineShares', tmShares);
       if (iscsiTargets !== null) storeSet('iscsiTargets', iscsiTargets);
       if (scrubSchedules !== null) {
         const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
@@ -1707,6 +1710,107 @@ document.getElementById('smbHomesDisableBtn').addEventListener('click', async ()
   }
 });
 
+// ── Render: Time Machine Shares ───────────────────────────────────────────────
+function renderTimeMachine() {
+  const wrap = document.getElementById('tm-shares-wrap');
+  const shares = state.timeMachineShares || [];
+  if (!shares.length) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">No Time Machine shares configured.</div>';
+    return;
+  }
+  const rows = shares.map(s => `
+    <tr>
+      <td class="mono">${esc(s.name)}</td>
+      <td class="mono">${esc(s.path)}</td>
+      <td>${s.max_size ? esc(s.max_size) : '<span class="muted">no limit</span>'}</td>
+      <td>${s.valid_users ? esc(s.valid_users) : '<span class="muted">all</span>'}</td>
+      <td><button class="btn-del btn-small tm-del-btn" data-name="${esc(s.name)}">Delete</button></td>
+    </tr>`).join('');
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Share</th><th>Path</th><th>Max Size</th><th>Valid Users</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  wrap.querySelectorAll('.tm-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteTimeMachineShare(btn.dataset.name));
+  });
+}
+
+async function deleteTimeMachineShare(name) {
+  if (!confirm(`Delete Time Machine share "${name}"?`)) return;
+  showOpLogRunning('Removing Time Machine share…');
+  try {
+    const result = await api('DELETE', '/api/smb/timemachine/' + encodeURIComponent(name));
+    showOpLog(`Time Machine share deleted: ${name}`, result.tasks, null);
+    const shares = await api('GET', '/api/smb/timemachine').catch(() => []);
+    storeSet('timeMachineShares', shares || []);
+  } catch (err) {
+    showOpLog(`Failed to delete Time Machine share: ${name}`, err.tasks, err.message);
+  }
+}
+
+// ── Time Machine dialog ──────────────────────────────────────────────────────
+const timeMachineDialog = document.getElementById('timeMachineDialog');
+
+function openTimeMachineDialog() {
+  document.getElementById('tm-sharename').value = '';
+  document.getElementById('tm-path').value = '';
+  document.getElementById('tm-max-size').value = '';
+  document.getElementById('tm-valid-users').value = '';
+
+  // Populate dataset picker
+  const sel = document.getElementById('tm-dataset');
+  sel.innerHTML = '<option value="">— custom path —</option>';
+  const fsList = (state.datasets || []).filter(d => d.type === 'filesystem' && d.mountpoint && d.mountpoint !== '-' && d.mountpoint !== 'none');
+  fsList.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.mountpoint;
+    opt.textContent = d.name + ' (' + d.mountpoint + ')';
+    sel.appendChild(opt);
+  });
+  sel.value = '';
+
+  timeMachineDialog.showModal();
+  document.getElementById('tm-sharename').focus();
+}
+
+document.getElementById('tmAddBtn').addEventListener('click', openTimeMachineDialog);
+
+document.getElementById('tm-dataset').addEventListener('change', function() {
+  const pathInput = document.getElementById('tm-path');
+  if (this.value) {
+    pathInput.value = this.value;
+  } else {
+    pathInput.value = '';
+  }
+});
+
+document.getElementById('tmCancelBtn').addEventListener('click', () => timeMachineDialog.close());
+
+document.getElementById('tmCreateBtn').addEventListener('click', async () => {
+  const sharename = document.getElementById('tm-sharename').value.trim();
+  const path = document.getElementById('tm-path').value.trim();
+  if (!sharename) { toast('Share name is required', 'err'); return; }
+  if (!path) { toast('Path is required', 'err'); return; }
+  const body = {
+    sharename,
+    path,
+    max_size: document.getElementById('tm-max-size').value.trim(),
+    valid_users: document.getElementById('tm-valid-users').value.trim(),
+  };
+  timeMachineDialog.close();
+  showOpLogRunning('Creating Time Machine share…');
+  try {
+    const result = await api('POST', '/api/smb/timemachine', body);
+    showOpLog('Time Machine share created', result.tasks, null);
+    storeSet('timeMachineShares', result.shares || []);
+  } catch (err) {
+    showOpLog('Failed to create Time Machine share', err.tasks, err.message);
+  }
+});
+
 // ── Render: SMB Users ─────────────────────────────────────────────────────────
 function renderSambaUsers() {
   const wrap = document.getElementById('smb-users-wrap');
@@ -2387,6 +2491,7 @@ subscribe(['users'],                                            renderUsers);
 subscribe(['groups'],                                           renderGroups);
 subscribe(['sambaUsers', 'sambaAvailable', 'users'],            renderSambaUsers);
 subscribe(['smbHomes', 'datasets'],                             renderSMBHomes);
+subscribe(['timeMachineShares'],                                renderTimeMachine);
 subscribe(['schema'],                                           buildFormSelects);
 
 // ── SSE client ────────────────────────────────────────────────────────────────

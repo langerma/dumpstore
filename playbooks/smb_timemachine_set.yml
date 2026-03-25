@@ -1,0 +1,71 @@
+---
+# Creates or updates a Samba share configured as a macOS Time Machine backup
+# target using the vfs_fruit VFS module.
+#
+# Required extra vars:
+#   sharename   – Samba share name, e.g. "TimeMachine"
+#   path        – absolute path to the backup directory, e.g. /tank/timemachine
+#
+# Optional extra vars:
+#   max_size    – quota for Time Machine backups, e.g. "500G" (default: no limit)
+#   valid_users – space-separated list of users/groups, e.g. "@backup alice" (default: all)
+
+- name: Create Time Machine share
+  hosts: localhost
+  gather_facts: true
+  tasks:
+    - name: Set OS-specific smb.conf path
+      ansible.builtin.set_fact:
+        smb_conf: >-
+          {{ '/usr/local/etc/smb4.conf'
+             if ansible_os_family == 'FreeBSD'
+             else '/etc/samba/smb.conf' }}
+
+    - name: Set defaults for optional variables
+      ansible.builtin.set_fact:
+        max_size: "{{ max_size | default('') }}"
+        valid_users: "{{ valid_users | default('') }}"
+
+    - name: Assert required variables
+      ansible.builtin.assert:
+        that:
+          - sharename is defined and sharename | length > 0
+          - path is defined and path | length > 0
+        fail_msg: "sharename and path are required"
+
+    - name: Check smb.conf exists
+      ansible.builtin.stat:
+        path: "{{ smb_conf }}"
+      register: smb_conf_stat
+
+    - name: Fail if smb.conf not found
+      ansible.builtin.fail:
+        msg: "{{ smb_conf }} not found — is Samba installed?"
+      when: not smb_conf_stat.stat.exists
+
+    - name: Build share configuration block
+      ansible.builtin.set_fact:
+        tm_block: |
+          [{{ sharename }}]
+             comment = Time Machine backup
+             path = {{ path }}
+             vfs objects = catia fruit streams_xattr
+             fruit:time machine = yes
+             {% if max_size | length > 0 %}fruit:time machine max size = {{ max_size }}
+             {% endif %}browseable = yes
+             read only = no
+             {% if valid_users | length > 0 %}valid users = {{ valid_users }}
+             {% endif %}
+
+    - name: Insert or update Time Machine share
+      ansible.builtin.blockinfile:
+        path: "{{ smb_conf }}"
+        marker: "# {mark} DUMPSTORE TM {{ sharename }}"
+        block: "{{ tm_block }}"
+      notify: Reload samba
+
+  handlers:
+    - name: Reload samba
+      ansible.builtin.command:
+        cmd: smbcontrol smbd reload-config
+      failed_when: false

@@ -221,6 +221,70 @@ func ParseSMBHomes() SMBHomesConfig {
 	return cfg
 }
 
+// TimeMachineShare describes a single Time Machine backup share in smb.conf.
+type TimeMachineShare struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	MaxSize    string `json:"max_size"`
+	ValidUsers string `json:"valid_users"`
+}
+
+// ParseTimeMachineShares reads smb.conf and returns all shares configured
+// as Time Machine targets (sections containing "fruit:time machine = yes").
+func ParseTimeMachineShares() []TimeMachineShare {
+	data, err := os.ReadFile(smbConfPath())
+	if err != nil {
+		return []TimeMachineShare{}
+	}
+
+	var result []TimeMachineShare
+	var cur *TimeMachineShare
+	isTM := false
+
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			if cur != nil && isTM {
+				result = append(result, *cur)
+			}
+			name := trimmed[1 : len(trimmed)-1]
+			if strings.EqualFold(name, "global") || strings.EqualFold(name, "homes") || strings.EqualFold(name, "printers") {
+				cur = nil
+				isTM = false
+				continue
+			}
+			cur = &TimeMachineShare{Name: name}
+			isTM = false
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		parts := strings.SplitN(trimmed, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		switch strings.ToLower(key) {
+		case "path":
+			cur.Path = val
+		case "fruit:time machine":
+			if strings.EqualFold(val, "yes") {
+				isTM = true
+			}
+		case "fruit:time machine max size":
+			cur.MaxSize = val
+		case "valid users":
+			cur.ValidUsers = val
+		}
+	}
+	if cur != nil && isTM {
+		result = append(result, *cur)
+	}
+	return result
+}
+
 // ListShells reads /etc/shells and returns all valid login shells.
 // Falls back to a minimal list if the file is not present.
 func ListShells() []string {

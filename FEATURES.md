@@ -29,6 +29,7 @@
 | Auto-snapshot scheduling | v0.1.3 | Manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) / `zfstools` (FreeBSD) |
 | iSCSI target management  | v0.1.4 | Expose zvols as iSCSI targets (`targetcli`/LIO on Linux, `ctld` on FreeBSD); dialog with IQN, portal, CHAP auth, initiator ACLs |
 | SMB home shares          | v0.1.5 | Enable/configure `[homes]` section in `smb.conf`; dataset picker or custom path; per-user auto-shares                           |
+| Time Machine shares      | v0.1.6 | Samba `vfs_fruit` Time Machine backup targets; named shares backed by ZFS datasets; configurable max size and valid users         |
 
 ---
 
@@ -44,7 +45,7 @@
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
 | User mgmt extensions     | Medium   | SSH key management (`authorized_keys`), move home directory                      |
 | ~~Samba home shares~~    | ~~Medium~~ | ~~Implemented in v0.1.5~~                                                     |
-| Time Machine shares      | Medium   | Samba `vfs_fruit` share config for macOS Time Machine backups over SMB           |
+| ~~Time Machine shares~~  | ~~Medium~~ | ~~Implemented in v0.1.6~~                                                     |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
 | Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
 

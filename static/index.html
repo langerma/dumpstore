@@ -109,6 +109,13 @@
         <div class="loading">Loading home share config…</div>
       </div>
       <div class="section-header" style="margin-top:2rem">
+        <h2>Time Machine Shares</h2>
+        <button class="btn-primary btn-small" id="tmAddBtn">+ Add</button>
+      </div>
+      <div id="tm-shares-wrap">
+        <div class="loading">Loading Time Machine shares…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
         <h2>SMB Users</h2>
         <button class="btn-secondary" id="smbConfigPamBtn">Configure Samba</button>
       </div>
@@ -656,6 +663,41 @@
         <button type="button" id="smbHomesCancelBtn" class="btn-secondary">Cancel</button>
         <button type="button" id="smbHomesDisableBtn" class="btn-danger" style="display:none">Disable</button>
         <button type="button" id="smbHomesApplyBtn" class="btn-primary">Enable</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- TIME MACHINE SHARE DIALOG -->
+  <dialog id="timeMachineDialog">
+    <h3>Add Time Machine Share</h3>
+    <div class="dialog-body">
+      <p class="muted" style="margin:0 0 1rem">Create a Samba share configured as a macOS Time Machine backup target using <code>vfs_fruit</code>.</p>
+      <fieldset class="form-section">
+        <legend>Share settings</legend>
+        <label>Share name
+          <input type="text" id="tm-sharename" placeholder="TimeMachine" autocomplete="off" spellcheck="false" required>
+        </label>
+        <label>Dataset
+          <select id="tm-dataset">
+            <option value="">— custom path —</option>
+          </select>
+        </label>
+        <label>Path
+          <input type="text" id="tm-path" placeholder="/tank/timemachine" autocomplete="off" spellcheck="false">
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Options</legend>
+        <label>Max size <span class="field-note">(optional, e.g. 500G)</span>
+          <input type="text" id="tm-max-size" placeholder="no limit" autocomplete="off">
+        </label>
+        <label>Valid users <span class="field-note">(optional, e.g. @backup alice)</span>
+          <input type="text" id="tm-valid-users" placeholder="all users" autocomplete="off">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="tmCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="tmCreateBtn" class="btn-primary">Create</button>
       </div>
     </div>
   </dialog>
