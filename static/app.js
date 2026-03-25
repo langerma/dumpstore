@@ -15,6 +15,7 @@ const state = {
   sambaUsers: [],
   sambaAvailable: false,
   smbShares: [],      // [{name, path}] from net usershare info
+  smbHomes: { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' },
   iscsiTargets: [],   // [{iqn, zvol_name, ...}] from /api/iscsi-targets
   activeTab: 'pools',
   collapsedDatasets: new Set(),
@@ -227,7 +228,7 @@ async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
@@ -238,6 +239,7 @@ async function loadAll() {
       api('GET', '/api/groups').catch(() => null),
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => null),
+      api('GET', '/api/smb/homes').catch(() => null),
       api('GET', '/api/iscsi-targets').catch(() => null),
       api('GET', '/api/scrub-schedules').catch(() => null),
       api('GET', '/api/auto-snapshot-schedules').catch(() => null),
@@ -257,6 +259,7 @@ async function loadAll() {
         storeSet('sambaUsers', smbData?.users || []);
       }
       if (smbShares !== null) storeSet('smbShares', smbShares);
+      if (smbHomes !== null) storeSet('smbHomes', smbHomes);
       if (iscsiTargets !== null) storeSet('iscsiTargets', iscsiTargets);
       if (scrubSchedules !== null) {
         const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
@@ -1583,6 +1586,127 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   }
 });
 
+// ── Render: SMB Home Shares ───────────────────────────────────────────────────
+function renderSMBHomes() {
+  const wrap = document.getElementById('smb-homes-wrap');
+  const cfg = state.smbHomes;
+  if (!cfg.enabled) {
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.5rem 0">
+        <span class="muted">Home shares are disabled.</span>
+        <button class="btn-primary btn-small" id="smbHomesEnableBtn">Enable</button>
+      </div>`;
+    document.getElementById('smbHomesEnableBtn').addEventListener('click', openSMBHomesDialog);
+  } else {
+    wrap.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>Browseable</th><th>Read Only</th><th>Create Mask</th><th>Dir Mask</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">${esc(cfg.path)}</td>
+              <td>${esc(cfg.browseable)}</td>
+              <td>${esc(cfg.read_only)}</td>
+              <td class="mono">${esc(cfg.create_mask)}</td>
+              <td class="mono">${esc(cfg.directory_mask)}</td>
+              <td><button class="btn-secondary btn-small smb-homes-edit-btn">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+    wrap.querySelector('.smb-homes-edit-btn').addEventListener('click', openSMBHomesDialog);
+  }
+}
+
+// ── SMB Home Shares dialog ───────────────────────────────────────────────────
+const smbHomesDialog = document.getElementById('smbHomesDialog');
+
+function openSMBHomesDialog() {
+  const cfg = state.smbHomes;
+
+  // Populate dataset picker
+  const sel = document.getElementById('smb-homes-dataset');
+  sel.innerHTML = '<option value="">— custom path —</option>';
+  const fsList = (state.datasets || []).filter(d => d.type === 'filesystem' && d.mountpoint && d.mountpoint !== '-' && d.mountpoint !== 'none');
+  fsList.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.mountpoint;
+    opt.textContent = d.name + ' (' + d.mountpoint + ')';
+    sel.appendChild(opt);
+  });
+
+  // Pre-fill from current config
+  const pathInput = document.getElementById('smb-homes-path');
+  if (cfg.enabled && cfg.path) {
+    pathInput.value = cfg.path;
+    // Try to match dataset
+    const base = cfg.path.replace(/\/%U$/, '');
+    const matchOpt = Array.from(sel.options).find(o => o.value === base);
+    if (matchOpt) sel.value = base;
+  } else {
+    pathInput.value = '';
+    sel.value = '';
+  }
+
+  document.getElementById('smb-homes-browseable').value = cfg.browseable || 'no';
+  document.getElementById('smb-homes-readonly').value = cfg.read_only || 'no';
+  document.getElementById('smb-homes-create-mask').value = cfg.create_mask || '0644';
+  document.getElementById('smb-homes-directory-mask').value = cfg.directory_mask || '0755';
+
+  // Show/hide disable button
+  const disableBtn = document.getElementById('smbHomesDisableBtn');
+  const applyBtn = document.getElementById('smbHomesApplyBtn');
+  disableBtn.style.display = cfg.enabled ? '' : 'none';
+  applyBtn.textContent = cfg.enabled ? 'Apply' : 'Enable';
+
+  smbHomesDialog.showModal();
+}
+
+// Dataset picker → auto-fill path
+document.getElementById('smb-homes-dataset').addEventListener('change', function() {
+  const pathInput = document.getElementById('smb-homes-path');
+  if (this.value) {
+    pathInput.value = this.value + '/%U';
+  } else {
+    pathInput.value = '';
+  }
+});
+
+document.getElementById('smbHomesCancelBtn').addEventListener('click', () => smbHomesDialog.close());
+
+document.getElementById('smbHomesApplyBtn').addEventListener('click', async () => {
+  const path = document.getElementById('smb-homes-path').value.trim();
+  if (!path) { toast('Path is required', 'err'); return; }
+  const body = {
+    path,
+    browseable: document.getElementById('smb-homes-browseable').value,
+    read_only: document.getElementById('smb-homes-readonly').value,
+    create_mask: document.getElementById('smb-homes-create-mask').value.trim(),
+    directory_mask: document.getElementById('smb-homes-directory-mask').value.trim(),
+  };
+  smbHomesDialog.close();
+  showOpLogRunning('Configuring home shares…');
+  try {
+    const result = await api('POST', '/api/smb/homes', body);
+    showOpLog('Home shares enabled', result.tasks, null);
+    storeSet('smbHomes', result.config);
+  } catch (err) {
+    showOpLog('Failed to enable home shares', err.tasks, err.message);
+  }
+});
+
+document.getElementById('smbHomesDisableBtn').addEventListener('click', async () => {
+  smbHomesDialog.close();
+  showOpLogRunning('Disabling home shares…');
+  try {
+    const result = await api('DELETE', '/api/smb/homes');
+    showOpLog('Home shares disabled', result.tasks, null);
+    storeSet('smbHomes', { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' });
+  } catch (err) {
+    showOpLog('Failed to disable home shares', err.tasks, err.message);
+  }
+});
+
 // ── Render: SMB Users ─────────────────────────────────────────────────────────
 function renderSambaUsers() {
   const wrap = document.getElementById('smb-users-wrap');
@@ -2262,6 +2386,7 @@ subscribe(['snapshots'],                                        renderSnapshots)
 subscribe(['users'],                                            renderUsers);
 subscribe(['groups'],                                           renderGroups);
 subscribe(['sambaUsers', 'sambaAvailable', 'users'],            renderSambaUsers);
+subscribe(['smbHomes', 'datasets'],                             renderSMBHomes);
 subscribe(['schema'],                                           buildFormSelects);
 
 // ── SSE client ────────────────────────────────────────────────────────────────

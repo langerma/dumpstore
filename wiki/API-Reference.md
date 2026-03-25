@@ -43,6 +43,9 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd |
 | POST   | `/api/smb-config/pam`       | Run Samba setup playbook |
+| GET    | `/api/smb/homes`            | Get current SMB [homes] config |
+| POST   | `/api/smb/homes`            | Enable/update SMB [homes] section |
+| DELETE | `/api/smb/homes`            | Disable/remove SMB [homes] section |
 | POST   | `/api/scrub/{pool}`         | Start a pool scrub |
 | DELETE | `/api/scrub/{pool}`         | Cancel a running pool scrub |
 | GET    | `/api/scrub-schedules`      | List periodic scrub schedule config |
@@ -347,6 +350,55 @@ Remove an ACL entry. The `entry` query parameter:
 - **NFSv4**: full ACE string to match
 
 Append `&recursive=true` (POSIX only) to remove recursively.
+
+---
+
+## SMB Home Shares
+
+Manage the Samba `[homes]` section in `smb.conf`. When enabled, each authenticated user automatically gets a personal share mapped to a subdirectory under the configured base path.
+
+### GET /api/smb/homes
+
+Returns the current `[homes]` configuration. If the section is not present, `enabled` is `false` and all fields are empty.
+
+```json
+{
+  "enabled": true,
+  "path": "/tank/homes/%S",
+  "browseable": true,
+  "read_only": false,
+  "create_mask": "0644",
+  "directory_mask": "0755"
+}
+```
+
+### POST /api/smb/homes
+
+Enable or update the `[homes]` section. Returns Ansible task steps.
+
+```json
+{
+  "path": "/tank/homes/%S",
+  "dataset": "tank/homes",
+  "browseable": true,
+  "read_only": false,
+  "create_mask": "0644",
+  "directory_mask": "0755"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `path` | yes | Base path for home directories (may include `%S` for username substitution) |
+| `dataset` | no | ZFS dataset to use as base path (alternative to specifying `path` directly) |
+| `browseable` | no | Whether the share is visible in browse lists (default `true`) |
+| `read_only` | no | Whether the share is read-only (default `false`) |
+| `create_mask` | no | File creation mask (default `"0644"`) |
+| `directory_mask` | no | Directory creation mask (default `"0755"`) |
+
+### DELETE /api/smb/homes
+
+Remove the `[homes]` section from `smb.conf`. Returns Ansible task steps.
 
 ---
 

@@ -1,0 +1,37 @@
+---
+# Removes the [homes] section from smb.conf, disabling automatic home shares.
+# No extra vars required.
+
+- name: Disable Samba home shares
+  hosts: localhost
+  gather_facts: true
+  tasks:
+    - name: Set OS-specific smb.conf path
+      ansible.builtin.set_fact:
+        smb_conf: >-
+          {{ '/usr/local/etc/smb4.conf'
+             if ansible_os_family == 'FreeBSD'
+             else '/etc/samba/smb.conf' }}
+
+    - name: Check smb.conf exists
+      ansible.builtin.stat:
+        path: "{{ smb_conf }}"
+      register: smb_conf_stat
+
+    - name: Fail if smb.conf not found
+      ansible.builtin.fail:
+        msg: "{{ smb_conf }} not found — is Samba installed?"
+      when: not smb_conf_stat.stat.exists
+
+    - name: Remove [homes] section
+      ansible.builtin.blockinfile:
+        path: "{{ smb_conf }}"
+        marker: "# {mark} DUMPSTORE HOMES"
+        state: absent
+      notify: Reload samba
+
+  handlers:
+    - name: Reload samba
+      ansible.builtin.command:
+        cmd: smbcontrol smbd reload-config
+      failed_when: false
