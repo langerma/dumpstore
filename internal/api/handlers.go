@@ -48,6 +48,9 @@ var (
 
 	// reIQN matches a valid iSCSI Qualified Name (RFC 3720).
 	reIQN = regexp.MustCompile(`^iqn\.\d{4}-\d{2}\.[a-z0-9.-]+:[a-zA-Z0-9._:-]+$`)
+
+	// reOctalMask matches a 3- or 4-digit octal permission mask.
+	reOctalMask = regexp.MustCompile(`^[0-7]{3,4}$`)
 )
 
 // validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
@@ -183,6 +186,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/smb-shares", h.getSMBShares)
 	mux.HandleFunc("POST /api/smb-share/{dataset...}", h.setSMBShare)
 	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)
+	mux.HandleFunc("GET /api/smb/homes", h.getSMBHomes)
+	mux.HandleFunc("POST /api/smb/homes", h.setSMBHomes)
+	mux.HandleFunc("DELETE /api/smb/homes", h.deleteSMBHomes)
 	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
 	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
 	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
@@ -1019,6 +1025,124 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 // Applies usershare + PAM passthrough settings to /etc/samba/smb.conf and restarts smbd/nmbd.
 func (h *Handler) configureSambaPAM(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_setup.yml", map[string]string{})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"tasks": out.Steps()})
+}
+
+// getSMBHomes handles GET /api/smb/homes
+// Returns the current [homes] section config from smb.conf.
+func (h *Handler) getSMBHomes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, system.ParseSMBHomes())
+}
+
+// setSMBHomes handles POST /api/smb/homes
+// Body: {"path":"/tank/homes/%U","browseable":"no","read_only":"no","create_mask":"0644","directory_mask":"0755"}
+// The "path" field is required. If "dataset" is provided instead, its mountpoint is resolved and /%U is appended.
+func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Dataset       string `json:"dataset"`
+		Path          string `json:"path"`
+		Browseable    string `json:"browseable"`
+		ReadOnly      string `json:"read_only"`
+		CreateMask    string `json:"create_mask"`
+		DirectoryMask string `json:"directory_mask"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
+		return
+	}
+
+	// Resolve dataset to path if provided
+	if req.Dataset != "" && req.Path == "" {
+		if !validZFSName(req.Dataset) {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+			return
+		}
+		datasets, err := zfs.ListDatasets()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
+			return
+		}
+		var mp string
+		for _, ds := range datasets {
+			if ds.Name == req.Dataset {
+				mp = ds.Mountpoint
+				break
+			}
+		}
+		if mp == "" || mp == "-" || mp == "none" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
+			return
+		}
+		req.Path = mp + "/%U"
+	}
+
+	if req.Path == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
+		return
+	}
+
+	// Defaults
+	if req.Browseable == "" {
+		req.Browseable = "no"
+	}
+	if req.ReadOnly == "" {
+		req.ReadOnly = "no"
+	}
+	if req.CreateMask == "" {
+		req.CreateMask = "0644"
+	}
+	if req.DirectoryMask == "" {
+		req.DirectoryMask = "0755"
+	}
+
+	// Validate
+	if req.Browseable != "yes" && req.Browseable != "no" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("browseable must be yes or no"), nil)
+		return
+	}
+	if req.ReadOnly != "yes" && req.ReadOnly != "no" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("read_only must be yes or no"), nil)
+		return
+	}
+	if !reOctalMask.MatchString(req.CreateMask) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("create_mask must be a 3- or 4-digit octal value"), nil)
+		return
+	}
+	if !reOctalMask.MatchString(req.DirectoryMask) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("directory_mask must be a 3- or 4-digit octal value"), nil)
+		return
+	}
+
+	out, err := h.runOp("smb_homes_set.yml", map[string]string{
+		"path":           req.Path,
+		"browseable":     req.Browseable,
+		"read_only":      req.ReadOnly,
+		"create_mask":    req.CreateMask,
+		"directory_mask": req.DirectoryMask,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"config": system.ParseSMBHomes(), "tasks": out.Steps()})
+}
+
+// deleteSMBHomes handles DELETE /api/smb/homes
+// Removes the [homes] section from smb.conf.
+func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
+	out, err := h.runOp("smb_homes_unset.yml", map[string]string{})
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

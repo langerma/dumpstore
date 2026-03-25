@@ -153,6 +153,74 @@ func ListSambaUsers() ([]string, error) {
 	return users, nil
 }
 
+// SMBHomesConfig describes the current state of the [homes] section in smb.conf.
+type SMBHomesConfig struct {
+	Enabled       bool   `json:"enabled"`
+	Path          string `json:"path"`
+	Browseable    string `json:"browseable"`
+	ReadOnly      string `json:"read_only"`
+	CreateMask    string `json:"create_mask"`
+	DirectoryMask string `json:"directory_mask"`
+}
+
+// smbConfPath returns the platform-specific path to smb.conf.
+func smbConfPath() string {
+	if runtime.GOOS == "freebsd" {
+		return "/usr/local/etc/smb4.conf"
+	}
+	return "/etc/samba/smb.conf"
+}
+
+// ParseSMBHomes reads smb.conf and returns the current [homes] configuration.
+// Returns Enabled=false if smb.conf is missing or has no [homes] section.
+func ParseSMBHomes() SMBHomesConfig {
+	cfg := SMBHomesConfig{
+		Browseable:    "no",
+		ReadOnly:      "no",
+		CreateMask:    "0644",
+		DirectoryMask: "0755",
+	}
+	data, err := os.ReadFile(smbConfPath())
+	if err != nil {
+		return cfg
+	}
+	lines := strings.Split(string(data), "\n")
+	inHomes := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.EqualFold(trimmed, "[homes]") {
+			inHomes = true
+			cfg.Enabled = true
+			continue
+		}
+		if inHomes && strings.HasPrefix(trimmed, "[") {
+			break // next section
+		}
+		if !inHomes {
+			continue
+		}
+		parts := strings.SplitN(trimmed, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		switch strings.ToLower(key) {
+		case "path":
+			cfg.Path = val
+		case "browseable", "browsable":
+			cfg.Browseable = val
+		case "read only":
+			cfg.ReadOnly = val
+		case "create mask", "create mode":
+			cfg.CreateMask = val
+		case "directory mask", "directory mode":
+			cfg.DirectoryMask = val
+		}
+	}
+	return cfg
+}
+
 // ListShells reads /etc/shells and returns all valid login shells.
 // Falls back to a minimal list if the file is not present.
 func ListShells() []string {

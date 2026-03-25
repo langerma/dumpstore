@@ -44,8 +44,9 @@
       │  iostat, status, props,           datasets, snapshots,        │
       │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
       │  users, groups, ACLs,             SMB users/shares/config,    │
-      │  SMB users/shares, chown,         dataset chown, scrub,       │
-      │  iSCSI targets                    iSCSI targets               │
+      │  SMB users/shares/homes,          dataset chown, scrub,       │
+      │  iSCSI targets                    iSCSI targets,              │
+      │                                   SMB homes config            │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐

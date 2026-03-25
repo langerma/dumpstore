@@ -103,6 +103,12 @@
         <div class="loading">Loading groups…</div>
       </div>
       <div class="section-header" style="margin-top:2rem">
+        <h2>SMB Home Shares</h2>
+      </div>
+      <div id="smb-homes-wrap">
+        <div class="loading">Loading home share config…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
         <h2>SMB Users</h2>
         <button class="btn-secondary" id="smbConfigPamBtn">Configure Samba</button>
       </div>
@@ -605,6 +611,51 @@
       <div class="dialog-actions">
         <button type="button" id="configureSambaCancelBtn" class="btn-secondary">Cancel</button>
         <button type="button" id="configureSambaConfirmBtn" class="btn-primary">Apply</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- SMB HOME SHARES DIALOG -->
+  <dialog id="smbHomesDialog">
+    <h3>SMB Home Shares</h3>
+    <div class="dialog-body">
+      <p class="muted" style="margin:0 0 1rem">The <code>[homes]</code> section auto-creates a personal share for each authenticated user, mapped to a subdirectory under the chosen path.</p>
+      <fieldset class="form-section">
+        <legend>Base path</legend>
+        <label>Dataset
+          <select id="smb-homes-dataset">
+            <option value="">— custom path —</option>
+          </select>
+        </label>
+        <label>Path <span class="field-note">(%U = connecting username)</span>
+          <input type="text" id="smb-homes-path" placeholder="/tank/homes/%U" autocomplete="off" spellcheck="false">
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
+        <legend>Options</legend>
+        <label>Browseable
+          <select id="smb-homes-browseable">
+            <option value="no">no</option>
+            <option value="yes">yes</option>
+          </select>
+        </label>
+        <label>Read only
+          <select id="smb-homes-readonly">
+            <option value="no">no</option>
+            <option value="yes">yes</option>
+          </select>
+        </label>
+        <label>Create mask
+          <input type="text" id="smb-homes-create-mask" value="0644" maxlength="4" autocomplete="off">
+        </label>
+        <label>Directory mask
+          <input type="text" id="smb-homes-directory-mask" value="0755" maxlength="4" autocomplete="off">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="smbHomesCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="smbHomesDisableBtn" class="btn-danger" style="display:none">Disable</button>
+        <button type="button" id="smbHomesApplyBtn" class="btn-primary">Enable</button>
       </div>
     </div>
   </dialog>
