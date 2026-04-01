@@ -1494,11 +1494,38 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
 // ── Edit User dialog ──────────────────────────────────────────────────────────
 const editUserDialog = document.getElementById('editUserDialog');
 let _editUserTarget = '';
+let _editUserCurrentKeys = [];
+let _editUserRemovedKeys = new Set();
 
-function openEditUserDialog(username) {
+function renderEditUserSSHKeys() {
+  const list = document.getElementById('edit-user-sshkeys-list');
+  if (!_editUserCurrentKeys.length) {
+    list.innerHTML = '<span class="muted" style="font-size:12px">No authorized keys</span>';
+    return;
+  }
+  list.innerHTML = _editUserCurrentKeys.map((key, i) => {
+    const staged = _editUserRemovedKeys.has(key);
+    return `<div class="sshkey-entry${staged ? ' staged-remove' : ''}" data-idx="${i}">
+      <span class="sshkey-text" title="${esc(key)}">${esc(key)}</span>
+      <button type="button" class="btn-small btn-secondary sshkey-toggle-remove" data-idx="${i}">${staged ? 'Undo' : '×'}</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.sshkey-toggle-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = _editUserCurrentKeys[parseInt(btn.dataset.idx)];
+      if (_editUserRemovedKeys.has(key)) _editUserRemovedKeys.delete(key);
+      else _editUserRemovedKeys.add(key);
+      renderEditUserSSHKeys();
+    });
+  });
+}
+
+async function openEditUserDialog(username) {
   const user = state.users.find(u => u.username === username);
   if (!user) return;
   _editUserTarget = username;
+  _editUserRemovedKeys = new Set();
+  _editUserCurrentKeys = [];
   document.getElementById('editUserDisplayName').textContent = username;
 
   const shellSel = document.getElementById('edit-user-shell');
@@ -1512,6 +1539,9 @@ function openEditUserDialog(username) {
     shellSel.value = user.shell;
   }
 
+  document.getElementById('edit-user-home').value = user.home || '';
+  document.getElementById('edit-user-move-home').checked = false;
+
   // Primary group: find group whose gid matches user's gid
   const primaryGroup = state.groups.find(g => g.gid === user.gid);
   document.getElementById('edit-user-group').value = primaryGroup ? primaryGroup.name : '';
@@ -1524,30 +1554,66 @@ function openEditUserDialog(username) {
   document.getElementById('edit-user-groups').value = suppGroups;
 
   document.getElementById('edit-user-password').value = '';
+  document.getElementById('edit-user-smb-sync').checked = false;
+  const isSambaUser = (state.sambaUsers || []).includes(username);
+  document.getElementById('edit-user-smb-sync-row').style.display = isSambaUser ? '' : 'none';
+  document.getElementById('edit-user-sshkey-new').value = '';
+
+  // Show dialog immediately, load SSH keys async
+  document.getElementById('edit-user-sshkeys-list').innerHTML =
+    '<span class="muted" style="font-size:12px">Loading…</span>';
   editUserDialog.showModal();
+
+  try {
+    const data = await api('GET', '/api/users/' + encodeURIComponent(username) + '/sshkeys');
+    _editUserCurrentKeys = data.keys || [];
+  } catch (_) {
+    _editUserCurrentKeys = [];
+  }
+  renderEditUserSSHKeys();
 }
 
 document.getElementById('editUserCancelBtn').addEventListener('click', () => editUserDialog.close());
 
 document.getElementById('editUserForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const username   = _editUserTarget;
-  const shell      = document.getElementById('edit-user-shell').value;
-  const group      = document.getElementById('edit-user-group').value.trim();
+  const username    = _editUserTarget;
+  const shell       = document.getElementById('edit-user-shell').value;
+  const group       = document.getElementById('edit-user-group').value.trim();
   const user_groups = document.getElementById('edit-user-groups').value.trim();
-  const password   = document.getElementById('edit-user-password').value;
+  const password    = document.getElementById('edit-user-password').value;
+  const smb_sync    = document.getElementById('edit-user-smb-sync').checked;
+  const home        = document.getElementById('edit-user-home').value.trim();
+  const move_home   = document.getElementById('edit-user-move-home').checked;
+  const newKey      = document.getElementById('edit-user-sshkey-new').value.trim();
+  const removedKeys = [..._editUserRemovedKeys];
   editUserDialog.close();
   showOpLogRunning('Updating user…');
+
+  const allTasks = [];
   try {
-    const result = await api('PUT', '/api/users/' + encodeURIComponent(username), { shell, group, user_groups, password });
-    showOpLog(`User updated: ${username}`, result.tasks, null);
+    const result = await api('PUT', '/api/users/' + encodeURIComponent(username),
+      { shell, group, user_groups, password, home, move_home, smb_sync });
+    allTasks.push(...(result.tasks || []));
+
+    for (const key of removedKeys) {
+      const r = await api('DELETE', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key });
+      allTasks.push(...(r.tasks || []));
+    }
+
+    if (newKey) {
+      const r = await api('POST', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key: newKey });
+      allTasks.push(...(r.tasks || []));
+    }
+
+    showOpLog(`User updated: ${username}`, allTasks, null);
     const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
     storeBatch(() => {
       storeSet('users', users || []);
       storeSet('groups', groups || []);
     });
   } catch (err) {
-    showOpLog(`Failed to update user: ${username}`, err.tasks, err.message);
+    showOpLog(`Failed to update user: ${username}`, [...allTasks, ...(err.tasks || [])], err.message);
   }
 });
 

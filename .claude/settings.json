@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcp-logseq__list_pages",
+      "mcp__mcp-logseq__create_page",
+      "mcp__mcp-logseq__get_pages_tree_from_namespace",
+      "mcp__mcp-logseq__get_page_content",
+      "mcp__mcp-logseq__update_page",
+      "mcp__mcp-logseq__query",
+      "mcp__mcp-logseq__find_pages_by_property",
+      "mcp__mcp-logseq__search",
+      "mcp__mcp-logseq__rename_page"
+    ]
+  }
+}

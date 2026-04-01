@@ -1,0 +1,21 @@
+---
+# Required extra vars:
+#   home - absolute path to user's home directory
+#   key  - full SSH public key string to remove
+
+- name: Remove SSH authorized key
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - home is defined and home != ""
+          - key is defined and key != ""
+        fail_msg: "home and key are both required"
+
+    - name: Remove key from authorized_keys
+      ansible.builtin.lineinfile:
+        path: "{{ home }}/.ssh/authorized_keys"
+        line: "{{ key }}"
+        state: absent

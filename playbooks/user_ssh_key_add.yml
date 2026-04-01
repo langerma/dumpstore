@@ -1,0 +1,41 @@
+---
+# Required extra vars:
+#   username - login name of the user (for .ssh dir ownership)
+#   home     - absolute path to user's home directory
+#   key      - full SSH public key string to add
+
+- name: Add SSH authorized key
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - username is defined and username != ""
+          - home is defined and home != ""
+          - key is defined and key != ""
+        fail_msg: "username, home, and key are all required"
+
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "{{ home }}/.ssh"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0700"
+
+    - name: Ensure authorized_keys file exists
+      ansible.builtin.file:
+        path: "{{ home }}/.ssh/authorized_keys"
+        state: touch
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+        modification_time: preserve
+        access_time: preserve
+
+    - name: Add key to authorized_keys
+      ansible.builtin.lineinfile:
+        path: "{{ home }}/.ssh/authorized_keys"
+        line: "{{ key }}"
+        state: present

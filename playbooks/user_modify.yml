@@ -6,7 +6,10 @@
 #   shell         - new login shell
 #   primary_group - new primary group name (must already exist)
 #   user_groups   - comma-separated supplementary groups (replaces existing; empty = clear all)
-#   password      - pre-hashed password string (e.g. from openssl passwd -6); empty = no change
+#   password      - plaintext password; empty = no change; set via chpasswd (no passlib needed)
+#   home          - new home directory path; empty = no change
+#   move_home     - "true" to copy existing home contents (incl. dotfiles) to new path
+#   smb_sync      - "true" to also update Samba password (requires smbpasswd in PATH)
 
 - name: Modify local user
   hosts: localhost
@@ -16,6 +19,9 @@
     primary_group: ""
     user_groups: ""
     password: ""
+    home: ""
+    move_home: "false"
+    smb_sync: "false"
   tasks:
     - name: Assert required vars and safety
       ansible.builtin.assert:
@@ -26,18 +32,58 @@
           - username not in ['nobody', 'nfsnobody']
         fail_msg: "username is required, uid must be >= 1000, and protected accounts cannot be modified"
 
-    - name: Modify user
+    - name: Look up current home directory
+      ansible.builtin.command: "getent passwd {{ username | quote }}"
+      register: passwd_entry
+      changed_when: false
+      when: home != '' and move_home == 'true'
+
+    - name: Modify user (update passwd entry only, no move_home)
       ansible.builtin.user:
         name: "{{ username }}"
         shell: "{{ shell if shell != '' else omit }}"
         group: "{{ primary_group if primary_group != '' else omit }}"
         groups: "{{ user_groups }}"
         append: false
-        password: "{{ password if password != '' else omit }}"
-        update_password: always
+        home: "{{ home if home != '' else omit }}"
         state: present
       register: user_result
       retries: 5
       delay: 2
       until: user_result is not failed
       changed_when: user_result.changed
+
+    - name: Set user password
+      ansible.builtin.command:
+        cmd: chpasswd
+        stdin: "{{ username }}:{{ password }}"
+      no_log: true
+      changed_when: true
+      when: password != ""
+
+    - name: Create new home directory
+      ansible.builtin.file:
+        path: "{{ home }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ primary_group if primary_group != '' else username }}"
+        mode: "0700"
+      when: home != ''
+
+    - name: Copy home contents (including dotfiles) to new location
+      ansible.builtin.shell: >
+        cp -a "{{ (passwd_entry.stdout.split(':')[5]) }}/." "{{ home }}/" &&
+        rm -rf "{{ (passwd_entry.stdout.split(':')[5]) }}"
+      when: >
+        home != '' and move_home == 'true' and
+        passwd_entry.stdout is defined and
+        (passwd_entry.stdout.split(':')[5]) != home and
+        (passwd_entry.stdout.split(':')[5]) != ''
+
+    - name: Sync Samba password
+      ansible.builtin.command:
+        cmd: "smbpasswd -s {{ username | quote }}"
+        stdin: "{{ password }}\n{{ password }}\n"
+      no_log: true
+      changed_when: true
+      when: smb_sync == "true" and password != ""

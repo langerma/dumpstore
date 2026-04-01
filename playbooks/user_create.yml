@@ -6,7 +6,7 @@
 #   uid         - explicit UID (omit for auto-assignment)
 #   group       - primary group name (created if it does not exist)
 #   groups      - comma-separated supplementary groups
-#   password    - pre-hashed password string (e.g. from openssl passwd)
+#   password    - plaintext password; set via chpasswd (hashed by the OS, no passlib needed)
 #   create_group - "true" to ensure a group named <username> is created first
 #   smb_user    - "true" to also register the user in Samba's tdbsam database
 #                 (requires smbpasswd; uses the same plaintext password field)
@@ -64,7 +64,6 @@
         uid: "{{ uid | default(omit) if uid != '' else omit }}"
         group: "{{ group if group != '' else (username if create_group == 'true' else omit) }}"
         groups: "{{ user_groups if user_groups != '' else omit }}"
-        password: "{{ password if password != '' else omit }}"
         create_home: true
         state: present
       register: user_result
@@ -72,6 +71,14 @@
       delay: 2
       until: user_result is not failed
       changed_when: user_result.changed
+
+    - name: Set user password
+      ansible.builtin.command:
+        cmd: chpasswd
+        stdin: "{{ username }}:{{ password }}"
+      no_log: true
+      changed_when: true
+      when: password != ""
 
     - name: Register user with Samba smbpasswd
       ansible.builtin.command:

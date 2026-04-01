@@ -403,6 +403,13 @@
         <label>Shell
           <select id="edit-user-shell"></select>
         </label>
+        <label>Home directory
+          <input type="text" id="edit-user-home" placeholder="/home/username" autocomplete="off">
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="edit-user-move-home">
+          Move existing files to new home
+        </label>
       </fieldset>
       <fieldset class="form-section">
         <legend>Groups</legend>
@@ -415,9 +422,20 @@
         </label>
       </fieldset>
       <fieldset class="form-section">
+        <legend>SSH Keys</legend>
+        <div id="edit-user-sshkeys-list" class="sshkeys-list"></div>
+        <label>Add key <span class="field-note">(paste full public key)</span>
+          <textarea id="edit-user-sshkey-new" rows="3" placeholder="ssh-ed25519 AAAA..." autocomplete="off"></textarea>
+        </label>
+      </fieldset>
+      <fieldset class="form-section">
         <legend>Password</legend>
         <label>New password <span class="field-note">(leave blank to keep current)</span>
           <input type="password" id="edit-user-password" autocomplete="new-password">
+        </label>
+        <label class="checkbox-row" id="edit-user-smb-sync-row" style="display:none">
+          <input type="checkbox" id="edit-user-smb-sync">
+          Also update Samba password
         </label>
       </fieldset>
       <div class="dialog-actions">
