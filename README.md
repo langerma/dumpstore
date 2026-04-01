@@ -28,7 +28,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
-- **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
+- **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
 - **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
@@ -212,10 +212,13 @@ DELETE /api/datasets/{n}      → zfs_dataset_destroy.yml   (ansible)
 POST   /api/snapshots         → zfs_snapshot_create.yml   (ansible)
 DELETE /api/snapshots/{n}     → zfs_snapshot_destroy.yml  (ansible)
 
-GET    /api/users             → /etc/passwd               (direct)
-POST   /api/users             → user_create.yml           (ansible)
-PUT    /api/users/{name}      → user_modify.yml           (ansible)
-DELETE /api/users/{name}      → user_delete.yml           (ansible)
+GET    /api/users                    → /etc/passwd               (direct)
+POST   /api/users                    → user_create.yml           (ansible)
+PUT    /api/users/{name}             → user_modify.yml           (ansible)
+DELETE /api/users/{name}             → user_delete.yml           (ansible)
+GET    /api/users/{name}/sshkeys     → ~/.ssh/authorized_keys    (direct)
+POST   /api/users/{name}/sshkeys     → user_ssh_key_add.yml      (ansible)
+DELETE /api/users/{name}/sshkeys     → user_ssh_key_remove.yml   (ansible)
 
 GET    /api/groups            → /etc/group                (direct)
 POST   /api/groups            → group_create.yml          (ansible)
