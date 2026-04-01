@@ -489,6 +489,13 @@ dialog label select {
 dialog label select:focus { border-color: var(--accent); }
 .checkbox-label { display: flex; align-items: center; gap: 8px; color: var(--text); margin-bottom: 0.5rem; }
 .checkbox-label input[type=checkbox] { width: auto; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; flex-direction: row; font-size: 13px; color: var(--text-muted); margin-top: 0.25rem; }
+.checkbox-row input[type=checkbox] { width: auto; margin: 0; }
+.sshkeys-list { margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 4px; }
+.sshkey-entry { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: var(--font); }
+.sshkey-entry .sshkey-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.sshkey-entry.staged-remove .sshkey-text { text-decoration: line-through; color: var(--danger, #c0392b); opacity: 0.6; }
+.sshkey-entry button { flex-shrink: 0; }
 
 /* FIELDSET sections inside dialog */
 .form-section {

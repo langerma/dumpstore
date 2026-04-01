@@ -51,6 +51,9 @@ var (
 
 	// reOctalMask matches a 3- or 4-digit octal permission mask.
 	reOctalMask = regexp.MustCompile(`^[0-7]{3,4}$`)
+
+	// reSSHKeyType matches the key-type prefix of an SSH public key.
+	reSSHKeyType = regexp.MustCompile(`^(ssh-|ecdsa-sha2-|sk-)`)
 )
 
 // validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
@@ -67,6 +70,11 @@ func validSMBShare(s string) bool { return reSMBShare.MatchString(s) }
 
 // validShellPath returns true if s is a safe absolute path.
 func validShellPath(s string) bool { return reShellPath.MatchString(s) }
+
+// validSSHKey returns true if s looks like an SSH public key (single line, known prefix).
+func validSSHKey(s string) bool {
+	return !strings.ContainsAny(s, "\n\r") && reSSHKeyType.MatchString(s)
+}
 
 // safePropertyValue returns true if s contains no shell-dangerous or control
 // characters. Used for dataset property values which are legitimately complex
@@ -175,6 +183,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users", h.createUser)
 	mux.HandleFunc("PUT /api/users/{name}", h.modifyUser)
 	mux.HandleFunc("DELETE /api/users/{name}", h.deleteUser)
+	mux.HandleFunc("GET /api/users/{name}/sshkeys", h.listSSHKeys)
+	mux.HandleFunc("POST /api/users/{name}/sshkeys", h.addSSHKey)
+	mux.HandleFunc("DELETE /api/users/{name}/sshkeys", h.removeSSHKey)
 	mux.HandleFunc("GET /api/groups", h.getGroups)
 	mux.HandleFunc("POST /api/groups", h.createGroup)
 	mux.HandleFunc("PUT /api/groups/{name}", h.modifyGroup)
@@ -1397,7 +1408,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // modifyUser handles PUT /api/users/{name}
-// Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"$6$..."}
+// Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"$6$...","home":"/home/foo","move_home":true}
 func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
@@ -1413,6 +1424,9 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		Group      string `json:"group"`
 		UserGroups string `json:"user_groups"`
 		Password   string `json:"password"`
+		Home       string `json:"home"`
+		MoveHome   bool   `json:"move_home"`
+		SMBSync    bool   `json:"smb_sync"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
@@ -1428,6 +1442,10 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validUnixNameList(req.UserGroups) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
+		return
+	}
+	if req.Home != "" && !validShellPath(req.Home) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid home directory path"), nil)
 		return
 	}
 
@@ -1456,6 +1474,15 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	moveHome := "false"
+	if req.MoveHome {
+		moveHome = "true"
+	}
+	smbSync := "false"
+	if req.SMBSync {
+		smbSync = "true"
+	}
+
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
 	out, err := h.runOp("user_modify.yml", map[string]string{
@@ -1465,6 +1492,9 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		"primary_group": req.Group,
 		"user_groups":   req.UserGroups,
 		"password":      req.Password,
+		"home":          req.Home,
+		"move_home":     moveHome,
+		"smb_sync":      smbSync,
 	})
 	if err != nil {
 		var steps []ansible.TaskStep
@@ -1476,6 +1506,152 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishUserGroup()
 	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+}
+
+// listSSHKeys handles GET /api/users/{name}/sshkeys
+func (h *Handler) listSSHKeys(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		return
+	}
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.User
+	for i := range users {
+		if users[i].Username == name {
+			target = &users[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	keys, err := system.ListAuthorizedKeys(target.Home)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, map[string]any{"keys": keys})
+}
+
+// addSSHKey handles POST /api/users/{name}/sshkeys
+// Body: {"key":"ssh-ed25519 AAAA..."}
+func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		return
+	}
+	var req struct {
+		Key string `json:"key"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if !validSSHKey(req.Key) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid SSH public key"), nil)
+		return
+	}
+
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.User
+	for i := range users {
+		if users[i].Username == name {
+			target = &users[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	if target.UID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
+		return
+	}
+
+	out, err := h.runOp("user_ssh_key_add.yml", map[string]string{
+		"username": name,
+		"home":     target.Home,
+		"key":      req.Key,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"tasks": out.Steps()})
+}
+
+// removeSSHKey handles DELETE /api/users/{name}/sshkeys
+// Body: {"key":"ssh-ed25519 AAAA..."}
+func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		return
+	}
+	var req struct {
+		Key string `json:"key"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if req.Key == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("key is required"), nil)
+		return
+	}
+
+	users, err := system.ListUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var target *system.User
+	for i := range users {
+		if users[i].Username == name {
+			target = &users[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	if target.UID < system.UIDMin() {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
+		return
+	}
+
+	out, err := h.runOp("user_ssh_key_remove.yml", map[string]string{
+		"home": target.Home,
+		"key":  req.Key,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"tasks": out.Steps()})
 }
 
 // createGroup handles POST /api/groups
