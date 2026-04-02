@@ -283,7 +283,12 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	merged := make(chan sseEvent, 16)
 	var wg sync.WaitGroup
-	ctx := r.Context()
+
+	// cancel lets any goroutine terminate the whole SSE connection (e.g. when
+	// the broker closes a subscriber channel because the client is too slow).
+	// The client's EventSource will auto-reconnect and get fresh cached state.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
 
 	for topic, ch := range channels {
 		wg.Add(1)
@@ -293,6 +298,9 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 				select {
 				case data, ok := <-ch:
 					if !ok {
+						// Broker dropped this subscriber (lagging client).
+						// Cancel the whole connection so EventSource reconnects.
+						cancel()
 						return
 					}
 					select {
