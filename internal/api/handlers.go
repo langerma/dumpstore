@@ -38,6 +38,11 @@ var (
 	// reSMBShare matches a valid SMB share name (max 80 chars).
 	reSMBShare = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,80}$`)
 
+	// reZFSSize matches a valid ZFS size value: a positive integer with an
+	// optional K/M/G/T/P/E suffix (case-insensitive), optionally followed by B.
+	// Capped at 18 digits to reject values that are astronomically large.
+	reZFSSize = regexp.MustCompile(`(?i)^[1-9][0-9]{0,17}[KMGTPE]?B?$`)
+
 	// reShellPath matches a safe absolute filesystem path.
 	reShellPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.-]+$`)
 
@@ -82,6 +87,12 @@ func safePropertyValue(s string) bool {
 // Newlines corrupt the chpasswd and smbpasswd stdin input which is line-delimited.
 func safePassword(s string) bool {
 	return !strings.ContainsAny(s, "\n\r")
+}
+
+// validZFSSize returns true if s is a valid ZFS size string (e.g. "10G", "500M", "1TB")
+// or the special value "none" (which clears quota/reservation properties).
+func validZFSSize(s string) bool {
+	return s == "none" || reZFSSize.MatchString(s)
 }
 
 // validUnixNameList returns true if s is empty or a comma-separated list of valid POSIX names.

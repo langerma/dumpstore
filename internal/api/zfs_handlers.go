@@ -94,6 +94,11 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		allowedSet[p] = true
 	}
 
+	sizeProps := map[string]bool{
+		"quota": true, "refquota": true,
+		"reservation": true, "refreservation": true,
+	}
+
 	// Start with just the dataset name; add only allowed, validated properties.
 	vars := map[string]string{"name": name}
 	for prop, val := range body {
@@ -102,6 +107,10 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		}
 		if !safePropertyValue(val) {
 			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in value for %s", prop), nil)
+			return
+		}
+		if sizeProps[prop] && val != "" && !validZFSSize(val) {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid value for %s: must be a positive size value (e.g. 10G) or 'none'", prop), nil)
 			return
 		}
 		vars[prop] = val
@@ -183,6 +192,14 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		req.Exec + req.Sync + req.Dedup + req.Copies + req.Xattr
 	if !safePropertyValue(propFields) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+		return
+	}
+	if req.VolSize != "" && !validZFSSize(req.VolSize) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid volsize: must be a positive size value (e.g. 10G)"), nil)
+		return
+	}
+	if req.Quota != "" && !validZFSSize(req.Quota) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid quota: must be a positive size value (e.g. 10G) or 'none'"), nil)
 		return
 	}
 
