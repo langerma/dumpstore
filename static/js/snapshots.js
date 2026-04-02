@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, fmtBytes, fmtDate, showOpLog, showOpLogRunning } from './utils.js';
+import { api, esc, fmtBytes, fmtDate, showOpLog, showOpLogRunning, toast } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -144,11 +144,22 @@ document.getElementById('newSnapBtn').addEventListener('click', () => {
 });
 document.getElementById('snapCancelBtn').addEventListener('click', () => dialog.close());
 
+const reZFSName  = /^[a-zA-Z][a-zA-Z0-9_.:-]*(\/[a-zA-Z][a-zA-Z0-9_.:-]*)*$/;
+const reSnapLabel = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/;
+
 document.getElementById('newSnapForm').addEventListener('submit', async e => {
   e.preventDefault();
   const dataset = document.getElementById('snap-dataset').value.trim();
   const snapname = document.getElementById('snap-label').value.trim();
   const recursive = document.getElementById('snap-recursive').checked;
+  if (!reZFSName.test(dataset)) {
+    toast('Invalid dataset name', 'error');
+    return;
+  }
+  if (!reSnapLabel.test(snapname)) {
+    toast('Invalid snapshot label', 'error');
+    return;
+  }
   dialog.close();
   showOpLogRunning(`Creating snapshot…`);
   try {

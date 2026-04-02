@@ -156,6 +156,8 @@ document.getElementById('newDatasetBtn').addEventListener('click', () => {
 });
 document.getElementById('datasetCancelBtn').addEventListener('click', () => datasetDialog.close());
 
+const reZFSName = /^[a-zA-Z][a-zA-Z0-9_.:-]*(\/[a-zA-Z][a-zA-Z0-9_.:-]*)*$/;
+
 document.getElementById('newDatasetForm').addEventListener('submit', async e => {
   e.preventDefault();
   const body = {
@@ -164,6 +166,10 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
     volsize: document.getElementById('ds-volsize').value.trim(),
     sparse:  document.getElementById('ds-sparse').checked,
   };
+  if (!reZFSName.test(body.name)) {
+    toast('Invalid dataset name', 'error');
+    return;
+  }
   for (const p of (state.schema?.dataset_properties || [])) {
     if (!p.create) continue;
     const el = document.getElementById('ds-' + p.name);

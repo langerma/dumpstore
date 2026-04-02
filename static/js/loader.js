@@ -125,13 +125,22 @@ let _pollInterval = null;  // setInterval handle; null when SSE is active
 let _sseRetryTimer = null; // setTimeout handle for SSE reconnect attempts
 let _es = null;            // active EventSource instance
 
+function setSseBadge(state) {
+  const el = document.getElementById('sseStatus');
+  if (!el) return;
+  el.className = 'sse-badge ' + state;
+  el.textContent = state;
+}
+
 function startPolling() {
   if (_pollInterval) return;
   _pollInterval = setInterval(loadAll, 30_000);
+  setSseBadge('polling');
 }
 
 function stopPolling() {
   if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+  setSseBadge('live');
 }
 
 export function startSSE() {
