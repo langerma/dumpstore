@@ -421,7 +421,12 @@ sudo make uninstall
 │   ├── zfs/zfs.go                   # Direct zpool/zfs command execution (reads)
 │   ├── zfs/acl.go                   # GetDatasetACL — getfacl/nfs4_getfacl parsing
 │   ├── ansible/runner.go            # Ansible playbook execution + JSON output parsing
-│   ├── api/handlers.go              # REST API handlers + input validation
+│   ├── api/handlers.go              # Shared infra: validation helpers, Handler struct, RegisterRoutes, SSE
+│   ├── api/zfs_handlers.go          # ZFS handlers: pools, datasets, snapshots, scrub, chown, auto-snapshot
+│   ├── api/user_handlers.go         # User + group handlers, SSH key management
+│   ├── api/acl_handlers.go          # ACL handlers (POSIX + NFSv4)
+│   ├── api/smb_handlers.go          # SMB handlers: shares, users, homes, Time Machine
+│   ├── api/iscsi_handlers.go        # iSCSI target handlers
 │   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
 │   ├── broker/poller.go             # Background poller (ZFS + users/groups) → publishes changes to broker
 │   ├── system/system.go             # Host + process info, ListUsers, ListGroups (/proc, /etc/passwd, /etc/group)

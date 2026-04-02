@@ -363,6 +363,57 @@ func TestValidPort(t *testing.T) {
 	}
 }
 
+func TestSafePassword(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"simple password", "hunter2", true},
+		{"with spaces", "my secret pass", true},
+		{"with special chars", "P@$$w0rd!", true},
+		{"with tab", "pass\tword", true},
+		{"empty string", "", true},
+		{"with newline", "pass\nword", false},
+		{"newline only", "\n", false},
+		{"carriage return", "pass\rword", false},
+		{"crlf", "pass\r\nword", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := safePassword(tt.input); got != tt.want {
+				t.Errorf("safePassword(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidSSHKey(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"ed25519 key", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI comment", true},
+		{"rsa key", "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB comment", true},
+		{"ecdsa key", "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAA comment", true},
+		{"sk-ed25519 key", "sk-ssh-ed25519@openssh.com AAAA comment", true},
+		{"sk-ecdsa key", "sk-ecdsa-sha2-nistp256@openssh.com AAAA comment", true},
+		{"empty string", "", false},
+		{"unknown prefix", "dsa-sha1 AAAA comment", false},
+		{"with newline", "ssh-ed25519 AAAA\nmalicious", false},
+		{"with carriage return", "ssh-ed25519 AAAA\rmalicious", false},
+		{"plain text", "not a key", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validSSHKey(tt.input); got != tt.want {
+				t.Errorf("validSSHKey(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDecodeJSON(t *testing.T) {
 	type payload struct {
 		Name string `json:"name"`
