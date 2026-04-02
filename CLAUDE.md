@@ -119,7 +119,12 @@ Do not change this split without a good reason — it exists to avoid Ansible's 
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
 | `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
-| `internal/api/handlers.go` | All HTTP handlers + input validation + `writeJSON` / `writeError` helpers |
+| `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct, `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
+| `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot |
+| `internal/api/user_handlers.go` | User + group handlers, SSH key management |
+| `internal/api/acl_handlers.go` | ACL handlers (POSIX + NFSv4) |
+| `internal/api/smb_handlers.go` | SMB handlers: shares, users, homes, Time Machine |
+| `internal/api/iscsi_handlers.go` | iSCSI target handlers |
 | `internal/api/httpmetrics.go` | HTTP middleware for request count/latency metrics |
 | `internal/api/metrics.go` | `/metrics` handler (Prometheus exposition) |
 | `internal/system/system.go` | `ListUsers`, `ListGroups`, `UIDMin` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` |
