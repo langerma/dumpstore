@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -103,9 +105,25 @@ func main() {
 	}
 }
 
+// newReqID returns a random 16-character hex string for request correlation.
+func newReqID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
 // requestLogger wraps a handler and emits one logfmt line per request.
+// It generates a unique req_id, stores it in the request context, and includes
+// it on the request log line so downstream slog calls can be correlated.
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = newReqID()
+		}
+		r = r.WithContext(api.WithReqID(r.Context(), id))
+		w.Header().Set("X-Request-ID", id)
+
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
@@ -118,6 +136,7 @@ func requestLogger(next http.Handler) http.Handler {
 			level = slog.LevelWarn
 		}
 		slog.Log(r.Context(), level, "request",
+			"req_id", id,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rw.status,
@@ -183,6 +202,10 @@ func (h *journalHandler) Enabled(_ context.Context, l slog.Level) bool {
 }
 
 func (h *journalHandler) Handle(ctx context.Context, r slog.Record) error {
+	// Inject req_id from context if present (set by requestLogger middleware).
+	if id := api.ReqIDFromContext(ctx); id != "" {
+		r.AddAttrs(slog.String("req_id", id))
+	}
 	// Build the formatted line into a buffer using a temporary TextHandler.
 	// WithAttrs/WithGroup calls are replayed on each Handle so attrs are included.
 	var buf bytes.Buffer

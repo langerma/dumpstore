@@ -14,20 +14,20 @@ import (
 func (h *Handler) getUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, users)
+	writeJSON(r.Context(), w, users)
 }
 
 // getGroups handles GET /api/groups
 func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
 	groups, err := system.ListGroups()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, groups)
+	writeJSON(r.Context(), w, groups)
 }
 
 // createUser handles POST /api/users
@@ -44,34 +44,34 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		SMBUser     bool   `json:"smb_user"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Username == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username is required"), nil)
 		return
 	}
 	if req.Shell == "" {
 		req.Shell = "/bin/bash"
 	}
 	if !validUnixName(req.Username) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	if !validShellPath(req.Shell) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
 		return
 	}
 	if req.Group != "" && !validUnixName(req.Group) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 	if !validUnixNameList(req.Groups) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
 		return
 	}
 	if req.Password != "" && !safePassword(req.Password) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishUserGroup()
@@ -121,17 +121,17 @@ var protectedGroups = map[string]bool{"nogroup": true, "nobody": true, "nfsnobod
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.User
@@ -142,15 +142,15 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
 		return
 	}
 	if protectedUsers[name] {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete protected user %q", name), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete protected user %q", name), nil)
 		return
 	}
 	if target.UID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
 		return
 	}
 
@@ -165,11 +165,11 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishUserGroup()
-	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
 }
 
 // modifyUser handles PUT /api/users/{name}
@@ -177,11 +177,11 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
@@ -194,33 +194,33 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		SMBSync    bool   `json:"smb_sync"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Shell != "" && !validShellPath(req.Shell) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
 		return
 	}
 	if req.Group != "" && !validUnixName(req.Group) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 	if !validUnixNameList(req.UserGroups) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
 		return
 	}
 	if req.Home != "" && !validShellPath(req.Home) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid home directory path"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid home directory path"), nil)
 		return
 	}
 	if req.Password != "" && !safePassword(req.Password) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
 		return
 	}
 
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.User
@@ -231,15 +231,15 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
 		return
 	}
 	if protectedUsers[name] {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name), nil)
 		return
 	}
 	if target.UID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
 		return
 	}
 
@@ -270,23 +270,23 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishUserGroup()
-	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
 }
 
 // listSSHKeys handles GET /api/users/{name}/sshkeys
 func (h *Handler) listSSHKeys(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.User
@@ -297,15 +297,15 @@ func (h *Handler) listSSHKeys(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
 		return
 	}
 	keys, err := system.ListAuthorizedKeys(target.Home)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, map[string]any{"keys": keys})
+	writeJSON(r.Context(), w, map[string]any{"keys": keys})
 }
 
 // addSSHKey handles POST /api/users/{name}/sshkeys
@@ -313,25 +313,25 @@ func (h *Handler) listSSHKeys(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
 		Key string `json:"key"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	if !validSSHKey(req.Key) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid SSH public key"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid SSH public key"), nil)
 		return
 	}
 
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.User
@@ -342,11 +342,11 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
 		return
 	}
 	if target.UID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
 		return
 	}
 
@@ -360,10 +360,10 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
 // removeSSHKey handles DELETE /api/users/{name}/sshkeys
@@ -371,25 +371,25 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
 		Key string `json:"key"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	if req.Key == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("key is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("key is required"), nil)
 		return
 	}
 
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.User
@@ -400,11 +400,11 @@ func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
 		return
 	}
 	if target.UID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
 		return
 	}
 
@@ -417,10 +417,10 @@ func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
 // createGroup handles POST /api/groups
@@ -431,15 +431,15 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		GID       string `json:"gid"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Groupname == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname is required"), nil)
 		return
 	}
 	if !validUnixName(req.Groupname) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 
@@ -454,7 +454,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -468,17 +468,17 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 
 	groups, err := system.ListGroups()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.Group
@@ -489,15 +489,15 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
 		return
 	}
 	if protectedGroups[name] {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete protected group %q", name), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete protected group %q", name), nil)
 		return
 	}
 	if target.GID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
 		return
 	}
 
@@ -512,11 +512,11 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishUserGroup()
-	writeJSON(w, map[string]any{"groupname": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"groupname": name, "tasks": out.Steps()})
 }
 
 // modifyGroup handles PUT /api/groups/{name}
@@ -524,11 +524,11 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 	var req struct {
@@ -537,21 +537,21 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		Members string `json:"members"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.NewName != "" && !validUnixName(req.NewName) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid new group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid new group name"), nil)
 		return
 	}
 	if !validUnixNameList(req.Members) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid member name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid member name"), nil)
 		return
 	}
 
 	groups, err := system.ListGroups()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	var target *system.Group
@@ -562,22 +562,22 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
 		return
 	}
 	if protectedGroups[name] {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify protected group %q", name), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify protected group %q", name), nil)
 		return
 	}
 	if target.GID < system.UIDMin() {
-		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
+		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
 		return
 	}
 
 	if req.Members != "" {
 		users, err := system.ListUsers()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err, nil)
+			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 			return
 		}
 		knownUsers := make(map[string]bool, len(users))
@@ -592,7 +592,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(unknown) > 0 {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("unknown member(s): %s", strings.Join(unknown, ", ")), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unknown member(s): %s", strings.Join(unknown, ", ")), nil)
 			return
 		}
 	}
@@ -617,11 +617,11 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishUserGroup()
-	writeJSON(w, map[string]any{"groupname": resultName, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"groupname": resultName, "tasks": out.Steps()})
 }
 
 // publishUserGroup re-reads /etc/passwd and /etc/group and immediately pushes

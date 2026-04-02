@@ -34,11 +34,11 @@
 
 ## Medium (round 2)
 
-- [ ] **`handlers.go`: Split into domain-specific files** — At 2,150 LOC with 54 handlers, `handlers.go` is a monolith. Split into `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go` etc. No logic changes — just file boundaries for navigability.
+- [x] **`handlers.go`: Split into domain-specific files** — At 2,150 LOC with 54 handlers, `handlers.go` is a monolith. Split into `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go` etc. No logic changes — just file boundaries for navigability.
 
 - [ ] **`app.js`: Split into per-tab modules** — At 2,460 LOC with 77 functions, `app.js` is hard to navigate. Group render functions and event handlers by tab/feature into separate files or ES modules.
 
-- [ ] **Request ID correlation in logs** — HTTP middleware generates a UUID per request and stores it in context; all `slog` calls inside handlers use `slog.InfoContext` so every log line carries `req_id`. Lets you reconstruct a full request lifecycle from logs when concurrent requests overlap. No new dependencies — stdlib `context` + `log/slog` only.
+- [x] **Request ID correlation in logs** — HTTP middleware generates a UUID per request and stores it in context; all `slog` calls inside handlers use `slog.InfoContext` so every log line carries `req_id`. Lets you reconstruct a full request lifecycle from logs when concurrent requests overlap. No new dependencies — stdlib `context` + `log/slog` only.
 
 - [ ] **`broker.go`: SSE subscriber channel is only 8 deep; slow clients silently drop messages** — `internal/broker/broker.go` allocates a `chan []byte` of capacity 8 per subscriber. When a client is slow the channel fills and new events are dropped with a warn log only. The frontend never knows it missed an update and shows stale state. Either increase the buffer, close lagging subscribers, or add a sequence number so the client can detect a gap and force a full refresh.
 

@@ -18,52 +18,52 @@ import (
 func (h *Handler) getPoolStatuses(w http.ResponseWriter, r *http.Request) {
 	statuses, err := zfs.PoolStatuses()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, statuses)
+	writeJSON(r.Context(), w, statuses)
 }
 
 func (h *Handler) getPools(w http.ResponseWriter, r *http.Request) {
 	pools, err := zfs.ListPools()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, pools)
+	writeJSON(r.Context(), w, pools)
 }
 
 func (h *Handler) getDatasets(w http.ResponseWriter, r *http.Request) {
 	datasets, err := zfs.ListDatasets()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, datasets)
+	writeJSON(r.Context(), w, datasets)
 }
 
 // getSMART handles GET /api/smart
 func (h *Handler) getSMART(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, smart.Collect())
+	writeJSON(r.Context(), w, smart.Collect())
 }
 
 // getDatasetProps handles GET /api/dataset-props/{name...}
 func (h *Handler) getDatasetProps(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	props, err := zfs.GetDatasetProps(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, props)
+	writeJSON(r.Context(), w, props)
 }
 
 // setDatasetProps handles PATCH /api/datasets/{name...}
@@ -74,17 +74,17 @@ func (h *Handler) getDatasetProps(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
 	var body map[string]string
 	if err := decodeJSON(r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 
@@ -101,22 +101,22 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if !safePropertyValue(val) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in value for %s", prop), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in value for %s", prop), nil)
 			return
 		}
 		vars[prop] = val
 	}
 	if len(vars) == 1 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("no recognised properties to update"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("no recognised properties to update"), nil)
 		return
 	}
 	ok, err := datasetExists(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -126,11 +126,11 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishDatasets()
-	writeJSON(w, map[string]any{"name": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"name": name, "tasks": out.Steps()})
 }
 
 // createDataset handles POST /api/datasets
@@ -155,34 +155,34 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		Xattr        string `json:"xattr"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Name == "" || req.Type == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("name and type are required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("name and type are required"), nil)
 		return
 	}
 	if req.Type != "filesystem" && req.Type != "volume" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("type must be filesystem or volume"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("type must be filesystem or volume"), nil)
 		return
 	}
 	if req.Type == "volume" && req.VolSize == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("volsize is required for volumes"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("volsize is required for volumes"), nil)
 		return
 	}
 	if !validZFSName(req.Name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if req.Mountpoint != "" && !validShellPath(req.Mountpoint) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid mountpoint path"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid mountpoint path"), nil)
 		return
 	}
 	propFields := req.VolSize + req.VolBlockSize + req.Compression +
 		req.Quota + req.RecordSize + req.Atime +
 		req.Exec + req.Sync + req.Dedup + req.Copies + req.Xattr
 	if !safePropertyValue(propFields) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
 		return
 	}
 
@@ -213,7 +213,7 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 
@@ -229,19 +229,19 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getSnapshots(w http.ResponseWriter, r *http.Request) {
 	snaps, err := zfs.ListSnapshots()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, snaps)
+	writeJSON(r.Context(), w, snaps)
 }
 
 func (h *Handler) getIOStat(w http.ResponseWriter, r *http.Request) {
 	stats, err := zfs.IOStats()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, stats)
+	writeJSON(r.Context(), w, stats)
 }
 
 // createSnapshot handles POST /api/snapshots
@@ -253,19 +253,19 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		Recursive bool   `json:"recursive"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Dataset == "" || req.SnapName == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset and snapname are required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset and snapname are required"), nil)
 		return
 	}
 	if !validZFSName(req.Dataset) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if !validSnapLabel(req.SnapName) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot label"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot label"), nil)
 		return
 	}
 
@@ -284,7 +284,7 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 
@@ -304,24 +304,24 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if !strings.Contains(name, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("refusing to destroy a pool root"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("refusing to destroy a pool root"), nil)
 		return
 	}
 	ok, err := datasetExists(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -339,23 +339,23 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 
-	writeJSON(w, map[string]any{"name": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"name": name, "tasks": out.Steps()})
 }
 
 // deleteSnapshot handles DELETE /api/snapshots/{dataset@snapname}
 func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	snapshot := r.PathValue("snapshot")
 	if snapshot == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("snapshot path required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshot path required"), nil)
 		return
 	}
 	parts := strings.SplitN(snapshot, "@", 2)
 	if len(parts) != 2 || !validZFSName(parts[0]) || !validSnapLabel(parts[1]) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name (expected dataset@label)"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name (expected dataset@label)"), nil)
 		return
 	}
 
@@ -373,11 +373,11 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 
-	writeJSON(w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
 }
 
 // deleteSnapshotBatch handles POST /api/snapshots/delete-batch
@@ -387,28 +387,28 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 		Snapshots []string `json:"snapshots"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
 		return
 	}
 	if len(body.Snapshots) == 0 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("snapshots list is empty"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshots list is empty"), nil)
 		return
 	}
 	if len(body.Snapshots) > 100 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("too many snapshots (max 100)"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("too many snapshots (max 100)"), nil)
 		return
 	}
 	for _, snap := range body.Snapshots {
 		parts := strings.SplitN(snap, "@", 2)
 		if len(parts) != 2 || !validZFSName(parts[0]) || !validSnapLabel(parts[1]) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name %q (expected dataset@label)", snap), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name %q (expected dataset@label)", snap), nil)
 			return
 		}
 	}
 
 	snapsJSON, err := json.Marshal(body.Snapshots)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("encoding snapshots: %w", err), nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("encoding snapshots: %w", err), nil)
 		return
 	}
 
@@ -420,10 +420,10 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"snapshots": body.Snapshots, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"snapshots": body.Snapshots, "tasks": out.Steps()})
 }
 
 // getDatasetOwnership handles GET /api/chown/{dataset...}
@@ -431,29 +431,29 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	props, err := zfs.GetDatasetProps(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	mp := props["mountpoint"].Value
 	if mp == "none" || mp == "-" || mp == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
 		return
 	}
 	owner, group, err := zfs.GetMountpointOwnership(mp)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, map[string]string{
+	writeJSON(r.Context(), w, map[string]string{
 		"dataset":    name,
 		"mountpoint": mp,
 		"owner":      owner,
@@ -466,18 +466,18 @@ func (h *Handler) getDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if ok, err := datasetExists(name); err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	} else if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -487,26 +487,26 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		Recursive bool   `json:"recursive"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Owner == "" || req.Group == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("owner and group are required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("owner and group are required"), nil)
 		return
 	}
 	if !validUnixName(req.Owner) || !validUnixName(req.Group) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid owner or group name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid owner or group name"), nil)
 		return
 	}
 
 	props, err := zfs.GetDatasetProps(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	mp := props["mountpoint"].Value
 	if mp == "none" || mp == "-" || mp == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
 		return
 	}
 
@@ -526,10 +526,10 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"dataset": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"dataset": name, "tasks": out.Steps()})
 }
 
 // publishDatasets re-reads the dataset list and immediately pushes
@@ -545,11 +545,11 @@ func (h *Handler) publishDatasets() {
 func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	if pool == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
 		return
 	}
 	if !validZFSName(pool) || strings.Contains(pool, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
 	out, err := h.runOp("zfs_scrub_start.yml", map[string]string{"pool": pool})
@@ -558,10 +558,10 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
 // cancelScrub handles DELETE /api/scrub/{pool}
@@ -569,11 +569,11 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	if pool == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("pool name required"), nil)
 		return
 	}
 	if !validZFSName(pool) || strings.Contains(pool, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
 	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
@@ -582,10 +582,10 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
 // listScrubSchedules handles GET /api/scrub-schedules
@@ -594,10 +594,10 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listScrubSchedules(w http.ResponseWriter, r *http.Request) {
 	list, err := zfs.ScrubSchedules()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("reading scrub schedules: %w", err), nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("reading scrub schedules: %w", err), nil)
 		return
 	}
-	writeJSON(w, list)
+	writeJSON(r.Context(), w, list)
 }
 
 // setScrubSchedule handles PUT /api/scrub-schedule/{pool}
@@ -608,7 +608,7 @@ func (h *Handler) listScrubSchedules(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	if pool == "" || !validZFSName(pool) || strings.Contains(pool, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
 
@@ -629,10 +629,10 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 			if out != nil {
 				steps = out.Steps()
 			}
-			writeError(w, http.StatusInternalServerError, err, steps)
+			writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 			return
 		}
-		writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+		writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 		return
 	}
 
@@ -643,10 +643,10 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
 // deleteScrubSchedule handles DELETE /api/scrub-schedule/{pool}
@@ -655,7 +655,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	if pool == "" || !validZFSName(pool) || strings.Contains(pool, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
 
@@ -670,20 +670,20 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
 // listAutoSnapshotSchedules handles GET /api/auto-snapshot-schedules
 func (h *Handler) listAutoSnapshotSchedules(w http.ResponseWriter, r *http.Request) {
 	props, err := zfs.ListAutoSnapshotProps()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, props)
+	writeJSON(r.Context(), w, props)
 }
 
 // publishAutoSnapshot re-reads all auto-snapshot props and pushes autosnapshot.query
@@ -723,28 +723,28 @@ func validAutoSnapValue(prop, val string) bool {
 func (h *Handler) getAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	props, err := zfs.GetAutoSnapshotProps(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, props)
+	writeJSON(r.Context(), w, props)
 }
 
 // setAutoSnapshotProps handles PUT /api/auto-snapshot/{name...}
 func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
 	var body map[string]string
 	if err := decodeJSON(r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
 		return
 	}
 
@@ -761,7 +761,7 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 			continue // not provided — playbook default (__skip__) applies
 		}
 		if !validAutoSnapValue(ap.prop, val) {
-			writeError(w, http.StatusBadRequest,
+			writeError(r.Context(), w, http.StatusBadRequest,
 				fmt.Errorf("invalid value %q for property %s", val, ap.prop), nil)
 			return
 		}
@@ -774,10 +774,10 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
 	h.publishDatasets()
 	h.publishAutoSnapshot()
-	writeJSON(w, map[string]any{"name": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"name": name, "tasks": out.Steps()})
 }

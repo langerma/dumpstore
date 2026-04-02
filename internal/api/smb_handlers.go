@@ -16,10 +16,10 @@ import (
 func (h *Handler) getSMBShares(w http.ResponseWriter, r *http.Request) {
 	shares, err := system.ListSMBUsershares()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, shares)
+	writeJSON(r.Context(), w, shares)
 }
 
 // setSMBShare handles POST /api/smb-share/{dataset...}
@@ -28,26 +28,26 @@ func (h *Handler) getSMBShares(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 	dataset := r.PathValue("dataset")
 	if dataset == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(dataset) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	var req struct {
 		Sharename string `json:"sharename"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Sharename == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
 		return
 	}
 	if !validSMBShare(req.Sharename) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
 	out, err := h.runOp("smb_usershare_set.yml", map[string]string{
@@ -59,10 +59,10 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"dataset": dataset, "sharename": req.Sharename, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"dataset": dataset, "sharename": req.Sharename, "tasks": out.Steps()})
 }
 
 // deleteSMBShare handles DELETE /api/smb-share/{dataset...}?name=<sharename>
@@ -70,16 +70,16 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 	dataset := r.PathValue("dataset")
 	if dataset == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	sharename := r.URL.Query().Get("name")
 	if sharename == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("name query parameter required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("name query parameter required"), nil)
 		return
 	}
 	if !validSMBShare(sharename) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
 	out, err := h.runOp("smb_usershare_unset.yml", map[string]string{
@@ -90,10 +90,10 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"dataset": dataset, "sharename": sharename, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"dataset": dataset, "sharename": sharename, "tasks": out.Steps()})
 }
 
 // getSambaUsers handles GET /api/smb-users
@@ -102,17 +102,17 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getSambaUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := system.ListSambaUsers()
 	if errors.Is(err, system.ErrSambaNotAvailable) {
-		writeJSON(w, map[string]any{"available": false, "users": []string{}})
+		writeJSON(r.Context(), w, map[string]any{"available": false, "users": []string{}})
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	if users == nil {
 		users = []string{}
 	}
-	writeJSON(w, map[string]any{"available": true, "users": users})
+	writeJSON(r.Context(), w, map[string]any{"available": true, "users": users})
 }
 
 // addSambaUser handles POST /api/smb-users/{name}
@@ -120,26 +120,26 @@ func (h *Handler) getSambaUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
 		Password string `json:"password"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.Password == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("password is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password is required"), nil)
 		return
 	}
 	if !safePassword(req.Password) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
 		return
 	}
 	h.userMu.Lock()
@@ -153,21 +153,21 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
 }
 
 // removeSambaUser handles DELETE /api/smb-users/{name}
 func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
 	if !validUnixName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	h.userMu.Lock()
@@ -180,10 +180,10 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"username": name, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
 }
 
 // configureSambaPAM handles POST /api/smb-config/pam
@@ -195,16 +195,16 @@ func (h *Handler) configureSambaPAM(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
 // getSMBHomes handles GET /api/smb/homes
 // Returns the current [homes] section config from smb.conf.
 func (h *Handler) getSMBHomes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, system.ParseSMBHomes())
+	writeJSON(r.Context(), w, system.ParseSMBHomes())
 }
 
 // setSMBHomes handles POST /api/smb/homes
@@ -220,19 +220,19 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 		DirectoryMask string `json:"directory_mask"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
 		return
 	}
 
 	// Resolve dataset to path if provided
 	if req.Dataset != "" && req.Path == "" {
 		if !validZFSName(req.Dataset) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 			return
 		}
 		datasets, err := zfs.ListDatasets()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
+			writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
 			return
 		}
 		var mp string
@@ -243,14 +243,14 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if mp == "" || mp == "-" || mp == "none" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
 			return
 		}
 		req.Path = mp + "/%U"
 	}
 
 	if req.Path == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
 		return
 	}
 
@@ -270,19 +270,19 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 
 	// Validate
 	if req.Browseable != "yes" && req.Browseable != "no" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("browseable must be yes or no"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("browseable must be yes or no"), nil)
 		return
 	}
 	if req.ReadOnly != "yes" && req.ReadOnly != "no" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("read_only must be yes or no"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("read_only must be yes or no"), nil)
 		return
 	}
 	if !reOctalMask.MatchString(req.CreateMask) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("create_mask must be a 3- or 4-digit octal value"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("create_mask must be a 3- or 4-digit octal value"), nil)
 		return
 	}
 	if !reOctalMask.MatchString(req.DirectoryMask) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("directory_mask must be a 3- or 4-digit octal value"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("directory_mask must be a 3- or 4-digit octal value"), nil)
 		return
 	}
 
@@ -298,10 +298,10 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"config": system.ParseSMBHomes(), "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"config": system.ParseSMBHomes(), "tasks": out.Steps()})
 }
 
 // deleteSMBHomes handles DELETE /api/smb/homes
@@ -313,16 +313,16 @@ func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
 // getTimeMachineShares handles GET /api/smb/timemachine
 // Returns all Samba shares configured as Time Machine targets.
 func (h *Handler) getTimeMachineShares(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, system.ParseTimeMachineShares())
+	writeJSON(r.Context(), w, system.ParseTimeMachineShares())
 }
 
 // createTimeMachineShare handles POST /api/smb/timemachine
@@ -336,28 +336,28 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		ValidUsers string `json:"valid_users"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
 		return
 	}
 
 	if req.Sharename == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
 		return
 	}
 	if !validSMBShare(req.Sharename) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
 		return
 	}
 
 	// Resolve dataset to path if provided
 	if req.Dataset != "" && req.Path == "" {
 		if !validZFSName(req.Dataset) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 			return
 		}
 		datasets, err := zfs.ListDatasets()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
+			writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to list datasets: %w", err), nil)
 			return
 		}
 		for _, ds := range datasets {
@@ -367,13 +367,13 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		if req.Path == "" || req.Path == "-" || req.Path == "none" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %q has no mountpoint", req.Dataset), nil)
 			return
 		}
 	}
 
 	if req.Path == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"), nil)
 		return
 	}
 
@@ -388,21 +388,21 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"shares": system.ParseTimeMachineShares(), "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"shares": system.ParseTimeMachineShares(), "tasks": out.Steps()})
 }
 
 // deleteTimeMachineShare handles DELETE /api/smb/timemachine/{sharename}
 func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request) {
 	sharename := r.PathValue("sharename")
 	if sharename == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
 		return
 	}
 	if !validSMBShare(sharename) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid share name"), nil)
 		return
 	}
 
@@ -414,8 +414,8 @@ func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }

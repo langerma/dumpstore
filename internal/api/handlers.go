@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -222,16 +223,16 @@ func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
 		AppVersion string `json:"app_version"`
 		system.Info
 	}
-	writeJSON(w, response{AppVersion: h.version, Info: system.Get()})
+	writeJSON(r.Context(), w, response{AppVersion: h.version, Info: system.Get()})
 }
 
 func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) {
 	v, err := zfs.Version()
 	if err != nil {
-		slog.Warn("zpool version failed", "err", err)
+		slog.WarnContext(r.Context(), "zpool version failed", "err", err)
 		v = ""
 	}
-	writeJSON(w, map[string]string{"version": v})
+	writeJSON(r.Context(), w, map[string]string{"version": v})
 }
 
 // getEvents handles GET /api/events?topics=pool.query,dataset.query,...
@@ -239,7 +240,7 @@ func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("streaming not supported by this transport"), nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("streaming not supported by this transport"), nil)
 		return
 	}
 
@@ -252,7 +253,7 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(topics) == 0 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("no valid topics requested"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("no valid topics requested"), nil)
 		return
 	}
 
@@ -327,15 +328,15 @@ func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, v any) {
+func writeJSON(ctx context.Context, w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("writeJSON encode failed", "err", err)
+		slog.ErrorContext(ctx, "writeJSON encode failed", "err", err)
 	}
 }
 
-func writeError(w http.ResponseWriter, code int, err error, steps []ansible.TaskStep) {
-	slog.Error("api error", "status", code, "err", err)
+func writeError(ctx context.Context, w http.ResponseWriter, code int, err error, steps []ansible.TaskStep) {
+	slog.ErrorContext(ctx, "api error", "status", code, "err", err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(apiError{Error: err.Error(), Tasks: steps})
@@ -344,7 +345,7 @@ func writeError(w http.ResponseWriter, code int, err error, steps []ansible.Task
 // getSchema handles GET /api/schema
 // Returns property definitions and system metadata filtered for the current OS.
 func (h *Handler) getSchema(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{
+	writeJSON(r.Context(), w, map[string]any{
 		"os":                 runtime.GOOS,
 		"dataset_properties": schema.ForOS(runtime.GOOS),
 		"user_shells":        system.ListShells(),

@@ -63,7 +63,7 @@ var aclSafeRe = func() func(string) bool {
 func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
 	datasets, err := zfs.ListDatasets()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	status := make(map[string]bool, len(datasets))
@@ -75,33 +75,33 @@ func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
 		// when getfacl / nfs4_getfacl are not available.
 		hasACL, aclErr := zfs.DatasetHasACL(d.Mountpoint)
 		if aclErr != nil {
-			slog.Warn("DatasetHasACL failed, falling back to acltype", "dataset", d.Name, "err", aclErr)
+			slog.WarnContext(r.Context(), "DatasetHasACL failed, falling back to acltype", "dataset", d.Name, "err", aclErr)
 			hasACL = d.ACLType != "" && d.ACLType != "off"
 		} else if !hasACL {
 			hasACL = d.ACLType != "" && d.ACLType != "off"
 		}
 		status[d.Name] = hasACL
 	}
-	writeJSON(w, status)
+	writeJSON(r.Context(), w, status)
 }
 
 // getDatasetACL handles GET /api/acl/{dataset...}
 func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	acl, err := zfs.GetDatasetACL(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, acl)
+	writeJSON(r.Context(), w, acl)
 }
 
 // setACLEntry handles POST /api/acl/{dataset...}
@@ -111,18 +111,18 @@ func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if ok, err := datasetExists(name); err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	} else if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -131,29 +131,29 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		Recursive bool   `json:"recursive"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 	if req.ACE == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("ace is required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace is required"), nil)
 		return
 	}
 	if !aclSafeRe(req.ACE) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("ace contains invalid characters"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace contains invalid characters"), nil)
 		return
 	}
 
 	acl, err := zfs.GetDatasetACL(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	if acl.ACLType == "off" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name), nil)
 		return
 	}
 	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	case "nfsv4":
 		playbook = "acl_set_nfs4.yml"
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
 		return
 	}
 
@@ -185,10 +185,10 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
 }
 
 // removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
@@ -197,28 +197,28 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("dataset")
 	if name == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
 	if !validZFSName(name) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
 	entry := r.URL.Query().Get("entry")
 	if entry == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("entry query parameter required"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("entry query parameter required"), nil)
 		return
 	}
 	if !aclSafeRe(entry) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"), nil)
 		return
 	}
 	if ok, err := datasetExists(name); err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	} else if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -226,11 +226,11 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 
 	acl, err := zfs.GetDatasetACL(name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
 	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
 		return
 	}
 
@@ -251,7 +251,7 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	case "nfsv4":
 		playbook = "acl_remove_nfs4.yml"
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
 		return
 	}
 
@@ -261,8 +261,8 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"dataset": name, "entry": entry, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"dataset": name, "entry": entry, "tasks": out.Steps()})
 }

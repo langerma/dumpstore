@@ -28,10 +28,10 @@ func validIQN(s string) bool { return reIQN.MatchString(s) }
 func (h *Handler) getISCSITargets(w http.ResponseWriter, r *http.Request) {
 	targets, err := iscsi.ListTargets()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, nil)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	writeJSON(w, targets)
+	writeJSON(r.Context(), w, targets)
 }
 
 // createISCSITarget handles POST /api/iscsi-targets
@@ -48,56 +48,56 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		Initiators   []string `json:"initiators"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
 
 	if !validZFSName(req.Zvol) || !strings.Contains(req.Zvol, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
 		return
 	}
 	if !validIQN(req.IQN) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid IQN format"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid IQN format"), nil)
 		return
 	}
 	if req.PortalIP == "" {
 		req.PortalIP = "0.0.0.0"
 	}
 	if !validPortalIP(req.PortalIP) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid portal IP address"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid portal IP address"), nil)
 		return
 	}
 	if req.PortalPort == "" {
 		req.PortalPort = "3260"
 	}
 	if !validPort(req.PortalPort) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid portal port"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid portal port"), nil)
 		return
 	}
 	if req.AuthMode != "none" && req.AuthMode != "chap" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("auth_mode must be 'none' or 'chap'"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("auth_mode must be 'none' or 'chap'"), nil)
 		return
 	}
 	if req.AuthMode == "chap" {
 		if req.CHAPUser == "" || req.CHAPPassword == "" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("chap_user and chap_password required when auth_mode is 'chap'"), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("chap_user and chap_password required when auth_mode is 'chap'"), nil)
 			return
 		}
 		if !safePropertyValue(req.CHAPUser) || !safePropertyValue(req.CHAPPassword) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP credentials"), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP credentials"), nil)
 			return
 		}
 	}
 	for _, ini := range req.Initiators {
 		if !validIQN(ini) {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid initiator IQN: %s", ini), nil)
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid initiator IQN: %s", ini), nil)
 			return
 		}
 	}
 
 	backend := iscsi.Backend()
 	if backend == "" {
-		writeError(w, http.StatusNotImplemented,
+		writeError(r.Context(), w, http.StatusNotImplemented,
 			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"), nil)
 		return
 	}
@@ -121,10 +121,10 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"zvol": req.Zvol, "iqn": req.IQN, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"zvol": req.Zvol, "iqn": req.IQN, "tasks": out.Steps()})
 }
 
 // deleteISCSITarget handles DELETE /api/iscsi-targets?iqn=...&zvol=...
@@ -133,17 +133,17 @@ func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 	zvol := r.URL.Query().Get("zvol")
 
 	if !validIQN(iqn) {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid IQN"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid IQN"), nil)
 		return
 	}
 	if !validZFSName(zvol) || !strings.Contains(zvol, "/") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
 		return
 	}
 
 	backend := iscsi.Backend()
 	if backend == "" {
-		writeError(w, http.StatusNotImplemented,
+		writeError(r.Context(), w, http.StatusNotImplemented,
 			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"), nil)
 		return
 	}
@@ -158,8 +158,8 @@ func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 		if out != nil {
 			steps = out.Steps()
 		}
-		writeError(w, http.StatusInternalServerError, err, steps)
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
-	writeJSON(w, map[string]any{"iqn": iqn, "zvol": zvol, "tasks": out.Steps()})
+	writeJSON(r.Context(), w, map[string]any{"iqn": iqn, "zvol": zvol, "tasks": out.Steps()})
 }
