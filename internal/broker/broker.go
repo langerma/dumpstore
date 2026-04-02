@@ -68,22 +68,27 @@ func (b *Broker) Unsubscribe(topic string, ch chan []byte) {
 	}
 }
 
-// trySend attempts a non-blocking send on ch. Returns true if sent, false if
-// the channel was full or already closed. The recover guard handles the race
-// where two concurrent Publish calls both detect the same full channel and one
-// of them closes it (via Unsubscribe) before the other can send.
-func trySend(ch chan []byte, data []byte) (sent bool) {
-	defer func() {
-		if recover() != nil {
-			sent = false // channel was closed concurrently; treat as drop
+// publishLocked delivers payload to every subscriber of topic, closing and
+// removing any whose buffer is full. Must be called with b.mu held.
+// Sends are non-blocking (select/default) so holding the lock is safe.
+func (b *Broker) publishLocked(topic string, payload []byte) {
+	subs := b.subs[topic]
+	n := 0
+	for _, ch := range subs {
+		select {
+		case ch <- payload:
+			subs[n] = ch
+			n++
+		default:
+			slog.Warn("broker: subscriber slow, closing connection", "topic", topic)
+			close(ch)
 		}
-	}()
-	select {
-	case ch <- data:
-		return true
-	default:
-		return false
 	}
+	// Clear dropped slots to avoid memory leaks, then trim the slice.
+	for i := n; i < len(subs); i++ {
+		subs[i] = nil
+	}
+	b.subs[topic] = subs[:n]
 }
 
 // Publish JSON-encodes data, updates the per-topic cache, and delivers the
@@ -96,20 +101,10 @@ func (b *Broker) Publish(topic string, data any) {
 		slog.Error("broker: marshal failed", "topic", topic, "err", err)
 		return
 	}
-	// Update cache and snapshot subscriber list under the same lock so a
-	// Subscribe call racing with Publish cannot miss the update.
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.cache[topic] = payload
-	snapshot := make([]chan []byte, len(b.subs[topic]))
-	copy(snapshot, b.subs[topic])
-	b.mu.Unlock()
-
-	for _, ch := range snapshot {
-		if !trySend(ch, payload) {
-			slog.Warn("broker: subscriber slow, closing connection", "topic", topic)
-			b.Unsubscribe(topic, ch)
-		}
-	}
+	b.publishLocked(topic, payload)
 }
 
 // PublishNoCache delivers data to current subscribers without updating the cache.
@@ -122,14 +117,6 @@ func (b *Broker) PublishNoCache(topic string, data any) {
 		return
 	}
 	b.mu.Lock()
-	snapshot := make([]chan []byte, len(b.subs[topic]))
-	copy(snapshot, b.subs[topic])
-	b.mu.Unlock()
-
-	for _, ch := range snapshot {
-		if !trySend(ch, payload) {
-			slog.Warn("broker: subscriber slow, closing connection", "topic", topic)
-			b.Unsubscribe(topic, ch)
-		}
-	}
+	defer b.mu.Unlock()
+	b.publishLocked(topic, payload)
 }
