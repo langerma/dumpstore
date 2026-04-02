@@ -125,6 +125,20 @@ func datasetExists(name string) (bool, error) {
 	return false, nil
 }
 
+// snapshotExists reports whether a snapshot with the given name exists.
+func snapshotExists(name string) (bool, error) {
+	snaps, err := zfs.ListSnapshots()
+	if err != nil {
+		return false, err
+	}
+	for _, s := range snaps {
+		if s.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // apiError is returned as JSON for all non-2xx responses.
 // Tasks is populated for Ansible-backed operations so the UI can show the op-log
 // even when the request fails.
