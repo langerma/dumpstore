@@ -11,7 +11,6 @@
 - [x] **`handlers.go`: Dataset existence not checked before playbook** — `datasetExists` helper added; `deleteDataset`, `setDatasetProps`, `setDatasetOwnership`, `setACLEntry`, `removeACLEntry` all return 404 before running the playbook.
 - [x] **`handlers.go`: ACL principal regex too loose** — `aclSafeRe` now enforces per-field `@` rules: at most one, not leading, trailing only for all-uppercase NFSv4 well-known principals (OWNER@, GROUP@, EVERYONE@).
 - [x] **`acl.go`: `DatasetHasACL` silently returns false when tools missing** — Signature changed to `(bool, error)`; both tool errors are now propagated. Call site in `getACLStatus` logs `slog.Warn` and falls back to `acltype` property.
-- [ ] **`playbooks/user_create.yml`: No rollback on partial failure** — skipped; Ansible lacks native rollback and the orphaned-group risk is low enough to defer.
 - [x] **`handlers.go`: Group members not verified to exist** — `modifyGroup` now calls `system.ListUsers()` and rejects unknown member names with a 400 listing the offenders.
 
 ## Medium
@@ -31,7 +30,7 @@
 
 - [x] **No CI build/lint pipeline** — Only `check-docs.yml` runs in CI. Add a workflow that runs `go build ./...`, `go vet ./...`, and optionally `golangci-lint`. Prevents broken merges and catches issues early.
 
-- [ ] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
+- [x] **`handlers.go`: Password fields bypass `safePropertyValue`** — `createUser`, `modifyUser`, and `setSMBPassword` pass the `password` field directly to Ansible extra-vars without calling `safePropertyValue`. A password containing newlines corrupts the `smbpasswd` stdin input (`playbooks/user_create.yml:79`) because the `stdin:` field splits on newlines. Validate password fields reject `\n` / `\r` before use.
 
 ## Medium (round 2)
 
@@ -42,6 +41,7 @@
 - [ ] **Request ID correlation in logs** — HTTP middleware generates a UUID per request and stores it in context; all `slog` calls inside handlers use `slog.InfoContext` so every log line carries `req_id`. Lets you reconstruct a full request lifecycle from logs when concurrent requests overlap. No new dependencies — stdlib `context` + `log/slog` only.
 
 - [ ] **`broker.go`: SSE subscriber channel is only 8 deep; slow clients silently drop messages** — `internal/broker/broker.go` allocates a `chan []byte` of capacity 8 per subscriber. When a client is slow the channel fills and new events are dropped with a warn log only. The frontend never knows it missed an update and shows stale state. Either increase the buffer, close lagging subscribers, or add a sequence number so the client can detect a gap and force a full refresh.
+
 - [ ] **`handlers.go`: `createISCSITarget` allows CHAP password through `safePropertyValue` but user/SMB passwords don't** — Inconsistency: iSCSI CHAP password is validated with `safePropertyValue` (`handlers.go:2061`) but Unix and SMB passwords are not. Unify by running all password fields through the same validator.
 
 ## Low (round 2)
