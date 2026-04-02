@@ -268,6 +268,13 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot label"), nil)
 		return
 	}
+	if ok, err := datasetExists(req.Dataset); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", req.Dataset), nil)
+		return
+	}
 
 	recursive := "false"
 	if req.Recursive {
@@ -356,6 +363,13 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	parts := strings.SplitN(snapshot, "@", 2)
 	if len(parts) != 2 || !validZFSName(parts[0]) || !validSnapLabel(parts[1]) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name (expected dataset@label)"), nil)
+		return
+	}
+	if ok, err := snapshotExists(snapshot); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", snapshot), nil)
 		return
 	}
 
@@ -739,6 +753,13 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if !validZFSName(name) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 

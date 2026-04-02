@@ -191,6 +191,47 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
 }
 
+// aclEntryExists reports whether the given ACL removal spec matches at least one
+// entry in the dataset's current ACL. This prevents setfacl -x / nfs4_setfacl -x
+// from silently succeeding on a nonexistent entry.
+//
+// For POSIX the spec is "tag:qualifier" or "default:tag:qualifier".
+// For NFSv4 the spec is "type:flags:principal:perms"; we match on type+principal (parts[0] and [2]).
+func aclEntryExists(acl *zfs.DatasetACL, entry string) bool {
+	switch acl.ACLType {
+	case "posix":
+		isDefault := false
+		s := entry
+		if strings.HasPrefix(s, "default:") {
+			isDefault = true
+			s = strings.TrimPrefix(s, "default:")
+		}
+		parts := strings.SplitN(s, ":", 2)
+		tag := parts[0]
+		qualifier := ""
+		if len(parts) == 2 {
+			qualifier = parts[1]
+		}
+		for _, e := range acl.Entries {
+			if e.Tag == tag && e.Qualifier == qualifier && e.Default == isDefault {
+				return true
+			}
+		}
+	case "nfsv4":
+		parts := strings.SplitN(entry, ":", 4)
+		if len(parts) < 3 {
+			return false
+		}
+		typ, principal := parts[0], parts[2]
+		for _, e := range acl.Entries {
+			if e.Tag == typ && e.Qualifier == principal {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
 // For POSIX: entry is the removal spec (e.g. "user:alice", "default:group:storage")
 // For NFSv4: entry is the full ACE string to remove
@@ -231,6 +272,10 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		return
+	}
+	if !aclEntryExists(acl, entry) {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("ACL entry %q not found on dataset %s", entry, name), nil)
 		return
 	}
 
