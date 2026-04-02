@@ -87,7 +87,9 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  • startup: checks ansible-playbook in PATH,                        │
 │             playbooks/ and static/ dirs exist                       │
 │  • signal.NotifyContext → graceful shutdown on SIGTERM/SIGINT       │
-│  • requestLogger middleware (method/path/status/ms)                 │
+│  • requestLogger middleware (method/path/status/ms/req_id)          │
+│    ↳ reads X-Request-ID from proxy, generates one if absent,        │
+│      echoes it back on the response, stores in ctx for slog         │
 │  • GET /      → http.FileServer  (static/)                          │
 │  • /api/*     → api.Handler                                         │
 └───────────────────┬─────────────────────────────────────────────────┘

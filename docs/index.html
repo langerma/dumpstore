@@ -585,6 +585,13 @@
         </div>
         <p>Go runtime, HTTP request counters &amp; latency histograms, and Ansible playbook run metrics out of the box.</p>
       </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">Request ID correlation</span>
+          <span class="health-badge badge-green">logging</span>
+        </div>
+        <p>Every request gets a unique <code>req_id</code> that appears on all log lines for that request — errors, warnings, and the access log line — so you can reconstruct the full lifecycle of any concurrent request. Reads <code>X-Request-ID</code> from upstream proxies (nginx, Traefik) and echoes it back on the response.</p>
+      </div>
     </div>
 
     <div class="section-header" style="margin-top:2rem;">
