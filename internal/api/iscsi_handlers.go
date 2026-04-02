@@ -83,8 +83,12 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("chap_user and chap_password required when auth_mode is 'chap'"), nil)
 			return
 		}
-		if !safePropertyValue(req.CHAPUser) || !safePropertyValue(req.CHAPPassword) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP credentials"), nil)
+		if !safePropertyValue(req.CHAPUser) {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP username"), nil)
+			return
+		}
+		if !safePassword(req.CHAPPassword) {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("CHAP password must not contain newline characters"), nil)
 			return
 		}
 	}
