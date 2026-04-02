@@ -214,9 +214,29 @@ main {
 .load-high { color: var(--red); }
 .sw-na { color: var(--text-muted); }
 
+/* SSE connection status badge */
+.sse-badge {
+  font-size: 10px;
+  font-family: var(--font);
+  padding: 2px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+  margin-left: auto;
+}
+.sse-badge::before {
+  content: '● ';
+}
+.sse-badge.live {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+}
+.sse-badge.polling {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+}
+
 /* Header version badge */
 .app-version {
-  margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font);
