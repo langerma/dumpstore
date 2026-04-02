@@ -44,8 +44,6 @@
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
 | ~~User mgmt extensions~~ | ~~Medium~~ | ~~SSH key management (`authorized_keys`), home directory change with optional move — in progress~~ |
-| ~~Samba home shares~~    | ~~Medium~~ | ~~Implemented in v0.1.5~~                                                     |
-| ~~Time Machine shares~~  | ~~Medium~~ | ~~Implemented in v0.1.6~~                                                     |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
 | Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
 
