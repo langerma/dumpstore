@@ -83,6 +83,12 @@ func safePropertyValue(s string) bool {
 	return !strings.ContainsAny(s, ";\n\r`|&$*()?!~{}\\\"'")
 }
 
+// safePassword returns true if s contains no newline or carriage-return characters.
+// Newlines corrupt the chpasswd and smbpasswd stdin input which is line-delimited.
+func safePassword(s string) bool {
+	return !strings.ContainsAny(s, "\n\r")
+}
+
 // validUnixNameList returns true if s is empty or a comma-separated list of valid POSIX names.
 func validUnixNameList(s string) bool {
 	if s == "" {
@@ -991,6 +997,10 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("password is required"), nil)
 		return
 	}
+	if !safePassword(req.Password) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
+		return
+	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
 	out, err := h.runOp("smb_user_add.yml", map[string]string{
@@ -1309,6 +1319,10 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
 		return
 	}
+	if req.Password != "" && !safePassword(req.Password) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
+		return
+	}
 
 	createGroup := "false"
 	if req.CreateGroup {
@@ -1446,6 +1460,10 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Home != "" && !validShellPath(req.Home) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid home directory path"), nil)
+		return
+	}
+	if req.Password != "" && !safePassword(req.Password) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
 		return
 	}
 
