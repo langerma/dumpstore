@@ -4,28 +4,6 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-### Added
-- **Audit logging** — all mutating API operations (dataset, snapshot, user, group, ACL, SMB, iSCSI) now emit a structured `slog` audit record with operation, target, actor IP, and outcome
-- **Client-side name validation** — dataset and snapshot create dialogs validate names against `reZFSName` / `reSnapLabel` before submitting; inline error shown immediately instead of a round-trip
-- **SSE status badge** — header badge shows "live" (SSE connected) vs "polling" (30 s REST fallback) so users know when they are seeing stale data
-- **Feature roadmap** — full planned feature backlog tracked in `FEATURES.md` with linked GitHub issues; covers authentication, TLS, UPS/NUT, drive replacement, scheduled replication, pool lifecycle, UI overhaul, lldap integration, and more
-- **Code of Conduct**, **Contributing guidelines**, and **GitHub issue templates** (bug report + feature request) — community health score to 100%
-
-### Fixed
-- `auditLog` was writing outcome to `args[5]` (the target value slot) instead of `args[7]` — error cases logged `outcome=ok` and corrupted the target field
-- `toast()` calls throughout the dataset and snapshot tabs used `'error'` instead of `'err'`; only `.toast.err` exists in CSS so error toasts were unstyled
-- `reZFSName` / `reSnapLabel` validation regexes were defined identically in both `datasets.js` and `snapshots.js`; consolidated into `utils.js`
-- Numeric ZFS properties (`quota`, `recordsize`, `volsize`, etc.) now validated for upper-bound sanity before being sent to Ansible — prevents cryptic ZFS errors for values like `99999999999T`
-- Dataset, snapshot, and ACL handlers now pre-check existence and return a clean 404 before running a playbook
-- CHAP password validated with `safePassword` (same rules as Unix/SMB passwords) instead of the looser `safePropertyValue`
-- Lagging SSE subscribers are now closed instead of silently dropping messages — frontend detects the disconnect and falls back to polling
-- Critical scanner buffer exhaustion under high Ansible output — raised from 64 KB to 4 MB
-- Nil slices in SSE payloads serialized as `null` instead of `[]`, causing silent frontend render failures
-
-### Changed
-- `app.js` split into per-tab ES modules — `datasets.js`, `snapshots.js`, `users.js`, `pools.js`, etc.; no logic changes
-- `handlers.go` split into domain-specific files — `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go`; no logic changes
-
 ---
 
 ## [v0.1.9] — 2026-04-03
@@ -33,6 +11,26 @@ All notable changes to this project will be documented here.
 ### Added
 - **Authentication** — session-based login with bcrypt-hashed password stored in `/etc/dumpstore/dumpstore.conf`; `--set-password` CLI subcommand; per-IP login rate limiting (10 attempts/60 s); reverse proxy delegation via `X-Remote-User` from configured trusted CIDRs; login page matches dark monospace theme; logout button and username badge in header; `/metrics` excluded from auth by default; no-password startup binds to loopback only with a warning
 - **Auth settings UI** — Change Password and Change Username dialogs in Users & Groups tab; both go through Ansible playbooks and show the operation log
+- **Audit logging** — all mutating API operations (dataset, snapshot, user, group, ACL, SMB, iSCSI) now emit a structured `slog` audit record with operation, target, actor IP, and outcome
+- **Client-side name validation** — dataset and snapshot create dialogs validate names against `reZFSName` / `reSnapLabel` before submitting; inline error shown immediately instead of a round-trip
+- **SSE status badge** — header badge shows "live" (SSE connected) vs "polling" (30 s REST fallback) so users know when they are seeing stale data
+- **Feature roadmap** — full planned feature backlog tracked in `FEATURES.md` with linked GitHub issues
+- **Code of Conduct**, **Contributing guidelines**, and **GitHub issue templates** (bug report + feature request)
+
+### Fixed
+- `auditLog` was writing outcome to `args[5]` instead of `args[7]` — error cases logged `outcome=ok` and corrupted the target field
+- `toast()` calls used `'error'` instead of `'err'`; only `.toast.err` exists in CSS so error toasts were unstyled
+- `reZFSName` / `reSnapLabel` validation regexes duplicated across `datasets.js` and `snapshots.js`; consolidated into `utils.js`
+- Numeric ZFS properties (`quota`, `recordsize`, `volsize`, etc.) now validated for upper-bound sanity before being sent to Ansible
+- Dataset, snapshot, and ACL handlers now pre-check existence and return a clean 404 before running a playbook
+- CHAP password validated with `safePassword` instead of the looser `safePropertyValue`
+- Lagging SSE subscribers are now closed instead of silently dropping messages — frontend detects the disconnect and falls back to polling
+- Critical scanner buffer exhaustion under high Ansible output — raised from 64 KB to 4 MB
+- Nil slices in SSE payloads serialized as `null` instead of `[]`, causing silent frontend render failures
+
+### Changed
+- `app.js` split into per-tab ES modules — `datasets.js`, `snapshots.js`, `users.js`, `pools.js`, etc.; no logic changes
+- `handlers.go` split into domain-specific files — `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go`; no logic changes
 
 ---
 
