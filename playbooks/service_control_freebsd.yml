@@ -1,0 +1,32 @@
+---
+# Required vars:
+#   service_name  — rc.d service name (e.g. samba_server, nfsd, ctld)
+#   action        — one of: start, stop, restart, enable, disable
+- name: Control rc.d service
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - service_name is defined and service_name != ""
+          - action in ['start', 'stop', 'restart', 'enable', 'disable']
+        fail_msg: "service_name and a valid action are required"
+
+    - name: "Enable {{ service_name }} in rc.conf"
+      ansible.builtin.command:
+        argv: ["sysrc", "{{ service_name }}_enable=YES"]
+      when: action == 'enable'
+      changed_when: true
+
+    - name: "Disable {{ service_name }} in rc.conf"
+      ansible.builtin.command:
+        argv: ["sysrc", "{{ service_name }}_enable=NO"]
+      when: action == 'disable'
+      changed_when: true
+
+    - name: "{{ action | capitalize }} {{ service_name }}"
+      ansible.builtin.command:
+        argv: ["service", "{{ service_name }}", "{{ action }}"]
+      when: action in ['start', 'stop', 'restart']
+      changed_when: true

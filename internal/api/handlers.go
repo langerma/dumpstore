@@ -266,6 +266,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/schema", h.getSchema)
 	mux.HandleFunc("POST /api/auth/change-password", h.changePassword)
 	mux.HandleFunc("POST /api/auth/change-username", h.changeUsername)
+	mux.HandleFunc("GET /api/services", h.getServices)
+	mux.HandleFunc("POST /api/services/{service}/{action}", h.mutateService)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {

@@ -34,6 +34,7 @@
 | Request ID correlation   | v0.1.8 | Per-request `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on response |
 | Authentication           | v0.1.9 | Session-based login, bcrypt password, `--set-password` CLI, trusted proxy delegation (`X-Remote-User`), per-IP rate limiting   |
 | Network interface overview | v0.1.10 | Read-only view of all interfaces: state badge, MAC, MTU, IPs, link speed, RX/TX counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a` |
+| Service management         | v0.1.11 | Start/stop/restart/enable/disable Samba, NFS, iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations |
 
 ---
 

@@ -16,6 +16,7 @@
         <button class="tab-btn" data-tab="datasets">Datasets</button>
         <button class="tab-btn" data-tab="snapshots">Snapshots</button>
         <button class="tab-btn" data-tab="users">Users &amp; Groups</button>
+        <button class="tab-btn" data-tab="services">Services</button>
       </nav>
       <span id="sseStatus" class="sse-badge live">live</span>
       <span id="appVersion" class="app-version"></span>
@@ -138,6 +139,17 @@
       </div>
       <div id="smb-users-wrap">
         <div class="loading">Loading SMB users…</div>
+      </div>
+    </section>
+
+    <!-- SERVICES TAB -->
+    <section class="tab-pane" id="tab-services">
+      <div class="section-header">
+        <h2>Services</h2>
+        <span class="muted">Manage sharing services (Samba, NFS, iSCSI)</span>
+      </div>
+      <div id="services-wrap">
+        <div class="loading">Loading services…</div>
       </div>
     </section>
   </main>

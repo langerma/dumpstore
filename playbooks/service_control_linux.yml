@@ -1,0 +1,25 @@
+---
+# Required vars:
+#   service_name  — systemd unit name (e.g. smbd, nfs-kernel-server, iscsid)
+#   action        — one of: start, stop, restart, enable, disable
+- name: Control systemd service
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - service_name is defined and service_name != ""
+          - action in ['start', 'stop', 'restart', 'enable', 'disable']
+        fail_msg: "service_name and a valid action are required"
+
+    - name: "{{ action | capitalize }} {{ service_name }}"
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: >-
+          {{ 'started' if action == 'start' else
+             ('stopped' if action == 'stop' else
+             ('restarted' if action == 'restart' else omit)) }}
+        enabled: >-
+          {{ true if action == 'enable' else
+             (false if action == 'disable' else omit) }}

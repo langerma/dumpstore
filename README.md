@@ -563,6 +563,8 @@ sudo make uninstall
 | GET    | `/api/iscsi-targets`        | List all iSCSI targets                |
 | POST   | `/api/iscsi-targets`        | Create an iSCSI target for a zvol     |
 | DELETE | `/api/iscsi-targets`        | Remove an iSCSI target                |
+| GET    | `/api/services`             | List status of managed services (Samba, NFS, iSCSI) |
+| POST   | `/api/services/{name}/{action}` | Control a service (start/stop/restart/enable/disable) |
 
 ### POST /api/datasets
 
@@ -732,6 +734,7 @@ Server-Sent Events stream. The server pushes named events whenever data changes,
 | `iostat`             | Same JSON as `GET /api/iostat`                  | Pushed every 10 s always                  |
 | `user.query`         | Same JSON as `GET /api/users`                   | Pushed on write op + every 10 s on change |
 | `group.query`        | Same JSON as `GET /api/groups`                  | Pushed on write op + every 10 s on change |
+| `service.query`      | Same JSON as `GET /api/services`                | Pushed every 10 s on change               |
 
 Each event follows the SSE wire format:
 

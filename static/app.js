@@ -4,6 +4,7 @@ import { renderSysInfo, renderSoftware, renderNetwork, renderPools, renderIOStat
 import { renderDatasets } from './js/datasets.js';
 import { renderSnapshots } from './js/snapshots.js';
 import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine } from './js/users.js';
+import { renderServices } from './js/services.js';
 import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ subscribe(['groups'],                                           renderGroups);
 subscribe(['sambaUsers', 'sambaAvailable', 'users'],            renderSambaUsers);
 subscribe(['smbHomes', 'datasets'],                             renderSMBHomes);
 subscribe(['timeMachineShares'],                                renderTimeMachine);
+subscribe(['services'],                                         renderServices);
 subscribe(['schema'],                                           buildFormSelects);
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────

@@ -131,5 +131,7 @@ func pollOnce(publish func(string, any)) bool {
 		slog.Warn("poller: ListGroups failed", "err", err)
 	}
 
+	publish("service.query", system.ListServices())
+
 	return zfsOK
 }

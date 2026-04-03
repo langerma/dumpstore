@@ -5,6 +5,7 @@ All notable changes to this project will be documented here.
 ## [Unreleased]
 
 ### Added
+- **Service management** — new Services tab with start/stop/restart/enable/disable controls for Samba, NFS, and iSCSI; `GET /api/services` returns live status for all three; mutations go through `service_control_linux.yml` (systemd) or `service_control_freebsd.yml` (rc.d) with full op-log display; status updates via SSE every 10 s; NFS stop shows a client-disconnect warning
 - **Network interface overview** — `GET /api/network` returns all interfaces with name, state (up/down), MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; displayed as a Network section in the Pools tab with state badges and muted virtual/loopback rows; Linux reads speed and counters from `/sys/class/net`; FreeBSD parses a single `ifconfig -a` call for speed
 
 ---

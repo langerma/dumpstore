@@ -60,6 +60,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/iscsi-targets`           | List all iSCSI targets |
 | POST   | `/api/iscsi-targets`           | Create an iSCSI target for a zvol |
 | DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |
+| GET    | `/api/services`                | List status of all managed services |
+| POST   | `/api/services/{name}/{action}` | Control a service (start/stop/restart/enable/disable) |
 
 ---
 
@@ -300,6 +302,39 @@ Returns Ansible task steps.
 ### DELETE /api/iscsi-targets?iqn=\<iqn\>&zvol=\<zvol\>
 
 Remove an iSCSI target and its backstore. Both query parameters are required.
+
+Returns Ansible task steps.
+
+---
+
+## Services
+
+Manage the sharing daemons dumpstore controls (Samba, NFS, iSCSI). Status reads happen directly via `systemctl`/`service` — no Ansible overhead. Mutations (start/stop/restart/enable/disable) go through playbooks with op-log.
+
+Logical service names: `samba`, `nfs`, `iscsi`.
+
+### GET /api/services
+
+Returns the status of all managed services.
+
+```json
+[
+  {
+    "name": "samba",
+    "display_name": "Samba (SMB)",
+    "unit_name": "smbd",
+    "active": true,
+    "enabled": true,
+    "state": "active"
+  }
+]
+```
+
+`state` values: `active`, `inactive`, `failed`, `unknown`.
+
+### POST /api/services/{name}/{action}
+
+Control a service. Valid actions: `start`, `stop`, `restart`, `enable`, `disable`.
 
 Returns Ansible task steps.
 

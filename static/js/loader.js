@@ -42,7 +42,7 @@ export async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
@@ -60,6 +60,7 @@ export async function loadAll() {
       api('GET', '/api/scrub-schedules').catch(() => null),
       api('GET', '/api/auto-snapshot-schedules').catch(() => null),
       api('GET', '/api/schema').catch(() => null),
+      api('GET', '/api/services').catch(() => null),
     ]);
     storeBatch(() => {
       if (pools !== null) storeSet('pools', pools);
@@ -87,6 +88,7 @@ export async function loadAll() {
       }
       if (autoSnapshotSchedules !== null) storeSet('autoSnapshot', autoSnapshotSchedules);
       if (schema !== null) storeSet('schema', schema);
+      if (services !== null) storeSet('services', services);
     });
   } catch (e) {
     toast('Load failed: ' + e.message, 'err');
@@ -121,6 +123,7 @@ const sseTopicMap = {
   'iostat':             'iostat',
   'user.query':         'users',
   'group.query':        'groups',
+  'service.query':      'services',
 };
 
 let _pollInterval = null;  // setInterval handle; null when SSE is active
