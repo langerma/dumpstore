@@ -12,6 +12,9 @@ All notable changes to this project will be documented here.
 - **Code of Conduct**, **Contributing guidelines**, and **GitHub issue templates** (bug report + feature request) — community health score to 100%
 
 ### Fixed
+- `auditLog` was writing outcome to `args[5]` (the target value slot) instead of `args[7]` — error cases logged `outcome=ok` and corrupted the target field
+- `toast()` calls throughout the dataset and snapshot tabs used `'error'` instead of `'err'`; only `.toast.err` exists in CSS so error toasts were unstyled
+- `reZFSName` / `reSnapLabel` validation regexes were defined identically in both `datasets.js` and `snapshots.js`; consolidated into `utils.js`
 - Numeric ZFS properties (`quota`, `recordsize`, `volsize`, etc.) now validated for upper-bound sanity before being sent to Ansible — prevents cryptic ZFS errors for values like `99999999999T`
 - Dataset, snapshot, and ACL handlers now pre-check existence and return a clean 404 before running a playbook
 - CHAP password validated with `safePassword` (same rules as Unix/SMB passwords) instead of the looser `safePropertyValue`

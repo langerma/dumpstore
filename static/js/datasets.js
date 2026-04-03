@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, fmtBytes, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
 
 // ── Render: Datasets ──────────────────────────────────────────────────────────
 let datasetFilter = '';
@@ -156,7 +156,6 @@ document.getElementById('newDatasetBtn').addEventListener('click', () => {
 });
 document.getElementById('datasetCancelBtn').addEventListener('click', () => datasetDialog.close());
 
-const reZFSName = /^[a-zA-Z][a-zA-Z0-9_.:-]*(\/[a-zA-Z][a-zA-Z0-9_.:-]*)*$/;
 
 document.getElementById('newDatasetForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -167,7 +166,7 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
     sparse:  document.getElementById('ds-sparse').checked,
   };
   if (!reZFSName.test(body.name)) {
-    toast('Invalid dataset name', 'error');
+    toast('Invalid dataset name', 'err');
     return;
   }
   for (const p of (state.schema?.dataset_properties || [])) {
@@ -577,7 +576,7 @@ function renderNFSv4AddForm(_d) {
   document.getElementById('aclNfs4AddBtn').addEventListener('click', async () => {
     const type = document.getElementById('aclNfs4Type').value;
     const principal = document.getElementById('aclNfs4Principal').value.trim();
-    if (!principal) { toast('Principal is required', 'error'); return; }
+    if (!principal) { toast('Principal is required', 'err'); return; }
 
     const flags = [
       document.getElementById('nfs4FlagF').checked ? 'f' : '',
@@ -597,7 +596,7 @@ function renderNFSv4AddForm(_d) {
       document.getElementById('nfs4BigC').checked ? 'C' : '',
     ].join('');
 
-    if (!perms) { toast('Select at least one permission', 'error'); return; }
+    if (!perms) { toast('Select at least one permission', 'err'); return; }
 
     const ace = `${type}:${flags}:${principal}:${perms}`;
     await addACLEntry(ace, false);
@@ -702,7 +701,7 @@ export async function openChownDialog(dataset) {
     if (info.owner) ownerSel.value = info.owner;
     if (info.group) groupSel.value = info.group;
   } catch (err) {
-    toast(`Could not read ownership: ${err.message}`, 'error');
+    toast(`Could not read ownership: ${err.message}`, 'err');
   }
 }
 
@@ -961,7 +960,7 @@ document.getElementById('iscsiExposeBtn').addEventListener('click', async () => 
   const initiators = document.getElementById('iscsiInitiators').value.trim()
     .split('\n').map(s => s.trim()).filter(Boolean);
 
-  if (!iqn) { toast('IQN is required', 'error'); return; }
+  if (!iqn) { toast('IQN is required', 'err'); return; }
 
   iscsiDialog.close();
   showOpLogRunning('Creating iSCSI target\u2026');

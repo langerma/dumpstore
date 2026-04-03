@@ -128,6 +128,10 @@ export function toast(msg, type = 'ok') {
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
 }
 
+// ── ZFS name validation regexes ───────────────────────────────────────────────
+export const reZFSName   = /^[a-zA-Z][a-zA-Z0-9_.:-]*(\/[a-zA-Z][a-zA-Z0-9_.:-]*)*$/;
+export const reSnapLabel = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/;
+
 // ── Refresh ───────────────────────────────────────────────────────────────────
 export function setRefreshing(v) {
   document.getElementById('refreshBtn').classList.toggle('spinning', v);

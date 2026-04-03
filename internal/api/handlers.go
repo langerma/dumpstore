@@ -176,10 +176,9 @@ func NewHandler(runner *ansible.Runner, version string, b *broker.Broker) *Handl
 // req_id is injected automatically by the journalHandler middleware.
 // Since the service has no authentication, operator identity is the client IP.
 func auditLog(ctx context.Context, r *http.Request, action, target string, err error) {
-	outcome := "ok"
-	args := []any{"remote_ip", r.RemoteAddr, "action", action, "target", target, "outcome", outcome}
+	args := []any{"remote_ip", r.RemoteAddr, "action", action, "target", target, "outcome", "ok"}
 	if err != nil {
-		args[5] = "err"
+		args[7] = "err"
 		args = append(args, "error", err.Error())
 	}
 	slog.InfoContext(ctx, "audit", args...)
