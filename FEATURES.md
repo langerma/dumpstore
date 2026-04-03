@@ -71,3 +71,9 @@
 |-------------------|----------------------------------------------------------------------|
 | Snapshot rollback | Not aligned with project goals; too destructive for a lightweight UI |
 | File browser      | Scope creep; out of charter for a storage management tool            |
+| btrfs support     | Linux-only (breaks FreeBSD support); pool/RAID model too different from ZFS to share a UI cleanly; better served by a separate sibling project |
+| LVM + filesystem  | Not a filesystem — requires managing three layers (PV/VG/LV + mkfs + fstab); no checksumming = silent data corruption; wrong tool for NAS data integrity |
+| ext4 / XFS        | No checksumming, no native snapshots, no send/receive — not suitable for a NAS focused on data integrity |
+| bcachefs          | Promising (checksums, CoW, snapshots, compression) but too immature for production NAS use; revisit when ecosystem stabilises (est. 2027+) |
+| HAMMER2           | Technically excellent but DragonFly BSD only — too niche to justify the abstraction cost |
+| Multi-filesystem abstraction | Adds significant complexity for little gain; dumpstore is ZFS + Linux/FreeBSD, period |
