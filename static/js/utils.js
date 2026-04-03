@@ -42,6 +42,12 @@ export function fmtPct(p) {
   return p.toFixed(1) + '%';
 }
 
+export function fmtSpeed(mbps) {
+  if (mbps < 0) return '—';
+  if (mbps >= 1000) return (mbps / 1000) + ' Gbps';
+  return mbps + ' Mbps';
+}
+
 export function fmtNum(n) {
   if (!n) return '—';
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });

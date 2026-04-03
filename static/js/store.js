@@ -29,6 +29,7 @@ export const state = {
   autoSnapshot: {},             // dataset name → AutoSnapshotProps
   selectedSnaps: new Set(),     // full snapshot names checked for batch delete
   schema: null,                 // GET /api/schema response
+  network: null,                // GET /api/network response
 };
 
 // ── Reactive store ──────────────────────────────────────────────────────────

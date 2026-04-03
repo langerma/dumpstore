@@ -42,11 +42,12 @@ export async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
       api('GET', '/api/sysinfo').catch(() => null),
+      api('GET', '/api/network').catch(() => null),
       api('GET', '/api/datasets').catch(() => null),
       api('GET', '/api/snapshots').catch(() => null),
       api('GET', '/api/users').catch(() => null),
@@ -65,6 +66,7 @@ export async function loadAll() {
       if (poolStatuses !== null) storeSet('poolStatuses', poolStatuses);
       if (version !== null) storeSet('version', version?.version || '');
       if (sysinfo !== null) storeSet('sysinfo', sysinfo);
+      if (network !== null) storeSet('network', network);
       if (datasets !== null) storeSet('datasets', datasets);
       if (snapshots !== null) storeSet('snapshots', snapshots);
       if (users !== null) storeSet('users', users);

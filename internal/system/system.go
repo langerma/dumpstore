@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -352,6 +353,129 @@ func UIDMin() int {
 type SoftwareTool struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+}
+
+// NetworkInterface holds information about a single network interface.
+type NetworkInterface struct {
+	Name      string   `json:"name"`
+	State     string   `json:"state"`      // "up" | "down"
+	MAC       string   `json:"mac"`
+	MTU       int      `json:"mtu"`
+	Addrs     []string `json:"addrs"`      // IPv4 and IPv6 CIDRs
+	SpeedMbps int      `json:"speed_mbps"` // -1 if unknown
+	RxBytes   int64    `json:"rx_bytes"`
+	TxBytes   int64    `json:"tx_bytes"`
+	Virtual   bool     `json:"virtual"` // loopback or known virtual prefix
+}
+
+// GetNetworkInterfaces returns a snapshot of all network interfaces.
+func GetNetworkInterfaces() ([]NetworkInterface, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	// On FreeBSD, gather speeds for all interfaces in one exec.
+	var bsdSpeeds map[string]int
+	if runtime.GOOS == "freebsd" {
+		bsdSpeeds = parseBSDIfaceSpeeds()
+	}
+	result := make([]NetworkInterface, 0, len(ifaces))
+	for _, iface := range ifaces {
+		ni := NetworkInterface{
+			Name:      iface.Name,
+			MAC:       iface.HardwareAddr.String(),
+			MTU:       iface.MTU,
+			SpeedMbps: -1,
+		}
+		if iface.Flags&net.FlagUp != 0 {
+			ni.State = "up"
+		} else {
+			ni.State = "down"
+		}
+		ni.Virtual = iface.Flags&net.FlagLoopback != 0 || isVirtualIface(iface.Name)
+		addrs, _ := iface.Addrs()
+		for _, a := range addrs {
+			ni.Addrs = append(ni.Addrs, a.String())
+		}
+		switch runtime.GOOS {
+		case "linux":
+			ni.SpeedMbps = linuxIfaceSpeed(iface.Name)
+			ni.RxBytes = linuxIfaceStat(iface.Name, "rx_bytes")
+			ni.TxBytes = linuxIfaceStat(iface.Name, "tx_bytes")
+		case "freebsd":
+			if s, ok := bsdSpeeds[iface.Name]; ok {
+				ni.SpeedMbps = s
+			}
+		}
+		result = append(result, ni)
+	}
+	return result, nil
+}
+
+var virtualIfacePrefixes = []string{"docker", "virbr", "veth", "br-", "tun", "tap"}
+
+func isVirtualIface(name string) bool {
+	for _, pfx := range virtualIfacePrefixes {
+		if strings.HasPrefix(name, pfx) {
+			return true
+		}
+	}
+	return false
+}
+
+func linuxIfaceSpeed(name string) int {
+	data, err := os.ReadFile("/sys/class/net/" + name + "/speed")
+	if err != nil {
+		return -1
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || v < 0 {
+		return -1
+	}
+	return v
+}
+
+func linuxIfaceStat(name, stat string) int64 {
+	data, err := os.ReadFile("/sys/class/net/" + name + "/statistics/" + stat)
+	if err != nil {
+		return 0
+	}
+	v, _ := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	return v
+}
+
+// parseBSDIfaceSpeeds runs a single "ifconfig -a" and returns a map of
+// interface name → link speed in Mbps. Returns nil on error.
+func parseBSDIfaceSpeeds() map[string]int {
+	out, err := exec.Command("ifconfig", "-a").Output()
+	if err != nil {
+		return nil
+	}
+	speeds := make(map[string]int)
+	var cur string
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
+			if idx := strings.IndexByte(line, ':'); idx > 0 {
+				cur = line[:idx]
+			}
+			continue
+		}
+		if cur == "" {
+			continue
+		}
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "media:") {
+			continue
+		}
+		for _, p := range strings.Fields(line) {
+			if idx := strings.Index(p, "base"); idx > 0 {
+				if v, err := strconv.Atoi(p[:idx]); err == nil {
+					speeds[cur] = v
+				}
+			}
+		}
+	}
+	return speeds
 }
 
 // Info holds a snapshot of host and process statistics.

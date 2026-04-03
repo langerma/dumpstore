@@ -1,6 +1,6 @@
 import { state, subscribe } from './js/store.js';
 import { loadAll, startSSE, buildFormSelects } from './js/loader.js';
-import { renderSysInfo, renderSoftware, renderPools, renderIOStat, renderSMART } from './js/pools.js';
+import { renderSysInfo, renderSoftware, renderNetwork, renderPools, renderIOStat, renderSMART } from './js/pools.js';
 import { renderDatasets } from './js/datasets.js';
 import { renderSnapshots } from './js/snapshots.js';
 import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine } from './js/users.js';
@@ -9,6 +9,7 @@ import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 // ── Store subscriptions ──────────────────────────────────────────────────────
 subscribe(['sysinfo'],                                          renderSysInfo);
 subscribe(['sysinfo'],                                          renderSoftware);
+subscribe(['network'],                                          renderNetwork);
 subscribe(['pools', 'poolStatuses', 'scrubSchedules',
            'scrubScheduleMode', 'scrubThresholdDays'],          renderPools);
 subscribe(['iostat'],                                           renderIOStat);
