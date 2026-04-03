@@ -54,6 +54,7 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		"dataset":   dataset,
 		"sharename": req.Sharename,
 	})
+	auditLog(r.Context(), r, "smb_share.set", dataset, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -85,6 +86,7 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_usershare_unset.yml", map[string]string{
 		"sharename": sharename,
 	})
+	auditLog(r.Context(), r, "smb_share.delete", dataset, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -148,6 +150,7 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 		"username":     name,
 		"smb_password": req.Password,
 	})
+	auditLog(r.Context(), r, "smb_user.add", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -175,6 +178,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_user_remove.yml", map[string]string{
 		"username": name,
 	})
+	auditLog(r.Context(), r, "smb_user.remove", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -190,6 +194,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 // Applies usershare + PAM passthrough settings to /etc/samba/smb.conf and restarts smbd/nmbd.
 func (h *Handler) configureSambaPAM(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_setup.yml", map[string]string{})
+	auditLog(r.Context(), r, "smb_config.pam", "", err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -293,6 +298,7 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 		"create_mask":    req.CreateMask,
 		"directory_mask": req.DirectoryMask,
 	})
+	auditLog(r.Context(), r, "smb_homes.set", req.Dataset, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -308,6 +314,7 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 // Removes the [homes] section from smb.conf.
 func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("smb_homes_unset.yml", map[string]string{})
+	auditLog(r.Context(), r, "smb_homes.delete", "", err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -383,6 +390,7 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		"max_size":    req.MaxSize,
 		"valid_users": req.ValidUsers,
 	})
+	auditLog(r.Context(), r, "smb_timemachine.create", req.Dataset, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -409,6 +417,7 @@ func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request)
 	out, err := h.runOp("smb_timemachine_unset.yml", map[string]string{
 		"sharename": sharename,
 	})
+	auditLog(r.Context(), r, "smb_timemachine.delete", sharename, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

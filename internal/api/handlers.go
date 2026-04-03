@@ -172,6 +172,19 @@ func NewHandler(runner *ansible.Runner, version string, b *broker.Broker) *Handl
 	return &Handler{runner: runner, version: version, broker: b}
 }
 
+// auditLog emits a structured audit log line for every mutating API operation.
+// req_id is injected automatically by the journalHandler middleware.
+// Since the service has no authentication, operator identity is the client IP.
+func auditLog(ctx context.Context, r *http.Request, action, target string, err error) {
+	outcome := "ok"
+	args := []any{"remote_ip", r.RemoteAddr, "action", action, "target", target, "outcome", outcome}
+	if err != nil {
+		args[5] = "err"
+		args = append(args, "error", err.Error())
+	}
+	slog.InfoContext(ctx, "audit", args...)
+}
+
 // runOp executes a playbook and publishes each task step to the ansible.progress
 // SSE topic as it completes, so the frontend can show live progress.
 func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {

@@ -180,6 +180,7 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp(playbook, vars)
+	auditLog(r.Context(), r, "acl.set", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -301,6 +302,7 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp(playbook, vars)
+	auditLog(r.Context(), r, "acl.remove", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

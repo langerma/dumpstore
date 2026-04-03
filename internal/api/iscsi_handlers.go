@@ -120,6 +120,7 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		"chap_password": req.CHAPPassword,
 		"initiators":    strings.Join(req.Initiators, ","),
 	})
+	auditLog(r.Context(), r, "iscsi.create", req.Zvol, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -157,6 +158,7 @@ func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp(playbook, map[string]string{"iqn": iqn, "zvol": zvol})
+	auditLog(r.Context(), r, "iscsi.delete", zvol, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

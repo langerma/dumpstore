@@ -130,6 +130,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp("zfs_dataset_set.yml", vars)
+	auditLog(r.Context(), r, "dataset.modify", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -225,6 +226,7 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		"xattr":        req.Xattr,
 	}
 	out, err := h.runOp("zfs_dataset_create.yml", vars)
+	auditLog(r.Context(), r, "dataset.create", req.Name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -303,6 +305,7 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		"snapname":  req.SnapName,
 		"recursive": recursive,
 	})
+	auditLog(r.Context(), r, "snapshot.create", req.Dataset+"@"+req.SnapName, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -358,6 +361,7 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		"name":      name,
 		"recursive": recursive,
 	})
+	auditLog(r.Context(), r, "dataset.destroy", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -399,6 +403,7 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		"snapshot":  snapshot,
 		"recursive": recursive,
 	})
+	auditLog(r.Context(), r, "snapshot.destroy", snapshot, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -446,6 +451,7 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_snapshot_destroy_batch.yml", map[string]string{
 		"snapshots_json": string(snapsJSON),
 	})
+	auditLog(r.Context(), r, "snapshot.batch_destroy", strings.Join(body.Snapshots, ","), err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -552,6 +558,7 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		"group":      req.Group,
 		"recursive":  recursive,
 	})
+	auditLog(r.Context(), r, "dataset.chown", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -584,6 +591,7 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := h.runOp("zfs_scrub_start.yml", map[string]string{"pool": pool})
+	auditLog(r.Context(), r, "scrub.start", pool, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -608,6 +616,7 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
+	auditLog(r.Context(), r, "scrub.cancel", pool, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -655,6 +664,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 			"pool":           pool,
 			"threshold_days": strconv.Itoa(req.ThresholdDays),
 		})
+		auditLog(r.Context(), r, "scrub_schedule.set", pool, err)
 		if err != nil {
 			var steps []ansible.TaskStep
 			if out != nil {
@@ -669,6 +679,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 
 	// Linux: add to ZFS_SCRUB_POOLS — no schedule params required.
 	out, err := h.runOp("zfs_scrub_zfsutils_enable.yml", map[string]string{"pool": pool})
+	auditLog(r.Context(), r, "scrub_schedule.set", pool, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -696,6 +707,7 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp(playbook, map[string]string{"pool": pool})
+	auditLog(r.Context(), r, "scrub_schedule.delete", pool, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -807,6 +819,7 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.runOp("zfs_autosnap_set.yml", vars)
+	auditLog(r.Context(), r, "auto_snapshot.set", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

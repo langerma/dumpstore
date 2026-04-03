@@ -36,7 +36,7 @@
 
 - [x] **`handlers.go`: Split into domain-specific files** — At 2,150 LOC with 54 handlers, `handlers.go` is a monolith. Split into `zfs_handlers.go`, `user_handlers.go`, `acl_handlers.go`, `smb_handlers.go`, `iscsi_handlers.go` etc. No logic changes — just file boundaries for navigability.
 
-- [ ] **`app.js`: Split into per-tab modules** — At 2,460 LOC with 77 functions, `app.js` is hard to navigate. Group render functions and event handlers by tab/feature into separate files or ES modules.
+- [x] **`app.js`: Split into per-tab modules** — At 2,460 LOC with 77 functions, `app.js` is hard to navigate. Group render functions and event handlers by tab/feature into separate files or ES modules.
 
 - [x] **Request ID correlation in logs** — HTTP middleware generates a UUID per request and stores it in context; all `slog` calls inside handlers use `slog.InfoContext` so every log line carries `req_id`. Lets you reconstruct a full request lifecycle from logs when concurrent requests overlap. No new dependencies — stdlib `context` + `log/slog` only.
 
@@ -48,7 +48,7 @@
 
 - [ ] **OpenTelemetry tracing** — Instrument the HTTP handler, Ansible runner, and ZFS read calls with OTEL spans. Deferred until a trace collector (Jaeger, Grafana Tempo) is available alongside the service — adds a dependency and dead code otherwise. When implemented: one span per HTTP request, child spans for `runner.Run` and each `zfs`/`zpool` exec call, span attributes for playbook name, dataset name, exit code.
 
-- [ ] **No audit logging** — User/group/dataset mutations aren't logged with any operator identity. Compliance gap.
+- [x] **No audit logging** — User/group/dataset mutations aren't logged with any operator identity. Compliance gap.
 - [x] **ACL remove doesn't verify entry exists first** — Calling `setfacl -x` on a nonexistent entry fails silently. Pre-check with `GetDatasetACL()`.
 - [x] **`handlers.go`: Confusing error messages for missing datasets** — Many handlers let the playbook surface the error; a pre-existence check would give cleaner UX.
 - [x] **`handlers.go`: No upper-bound validation on numeric ZFS properties** — `quota`, `recordsize`, etc. accept arbitrary strings like `"99999999999T"` that are syntactically valid but fail at the ZFS layer with a cryptic error. Parse and range-check numeric property values before sending to the playbook.

@@ -96,6 +96,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		"smb_user":     smbUser,
 	}
 	out, err := h.runOp("user_create.yml", vars)
+	auditLog(r.Context(), r, "user.create", req.Username, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -160,6 +161,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
 	})
+	auditLog(r.Context(), r, "user.delete", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -265,6 +267,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		"move_home":     moveHome,
 		"smb_sync":      smbSync,
 	})
+	auditLog(r.Context(), r, "user.modify", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -355,6 +358,7 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 		"home":     target.Home,
 		"key":      req.Key,
 	})
+	auditLog(r.Context(), r, "sshkey.add", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -412,6 +416,7 @@ func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 		"home": target.Home,
 		"key":  req.Key,
 	})
+	auditLog(r.Context(), r, "sshkey.remove", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -449,6 +454,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		"groupname": req.Groupname,
 		"gid":       req.GID,
 	})
+	auditLog(r.Context(), r, "group.create", req.Groupname, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -507,6 +513,7 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
 	})
+	auditLog(r.Context(), r, "group.delete", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
@@ -612,6 +619,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		"members":        req.Members,
 		"update_members": "true",
 	})
+	auditLog(r.Context(), r, "group.modify", name, err)
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {
