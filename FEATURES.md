@@ -45,6 +45,7 @@
 | Drive replacement          | High     | #56   | Replace faulted disks, monitor resilver progress, offline/online devices          |
 | Scheduled replication      | High     | #54   | Cron-based ZFS send/receive jobs with retention; depends on #26                  |
 | Pool create/import/export  | High     | #23   | Create pools (mirror, raidz1/2/3, draid); import/export existing pools           |
+| UI overhaul (datasets + snapshots) | Medium | #63 | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
 | Dataset rename             | Medium   | #21   | Rename a dataset or volume in place                                               |
 | Snapshot clone             | Medium   | #22   | Create a new dataset from an existing snapshot                                    |
 | Snapshot scheduling UI     | Medium   | #55   | Manage auto-snapshot schedules and retention per dataset                          |
