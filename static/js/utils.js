@@ -12,6 +12,7 @@ export async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
+  if (res.status === 401) { window.location.href = '/login'; throw new Error('unauthorized'); }
   if (res.status === 204) return null;
   const data = await res.json();
   if (!res.ok) {

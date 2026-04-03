@@ -183,6 +183,8 @@ export function startSSE() {
     // A transient CONNECTING state means the browser is already retrying.
     if (es.readyState === EventSource.CLOSED) {
       _es = null;
+      // Immediately probe: if the session expired this will 401 → redirect to /login.
+      loadAll();
       startPolling();
       if (!_sseRetryTimer) {
         _sseRetryTimer = setTimeout(() => { _sseRetryTimer = null; startSSE(); }, 5_000);

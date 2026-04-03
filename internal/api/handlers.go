@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dumpstore/internal/ansible"
+	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/system"
@@ -160,16 +161,25 @@ type apiError struct {
 
 // Handler holds dependencies for the HTTP API.
 type Handler struct {
-	runner  *ansible.Runner
-	version string
-	broker  *broker.Broker
-	userMu  sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
+	runner     *ansible.Runner
+	version    string
+	broker     *broker.Broker
+	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
+	authCfg    *auth.Config
+	authStore  *auth.SessionStore
+	configPath string
 }
 
-// NewHandler creates a Handler with the given ansible Runner, app version string,
-// and subscription broker (used by the SSE endpoint).
-func NewHandler(runner *ansible.Runner, version string, b *broker.Broker) *Handler {
-	return &Handler{runner: runner, version: version, broker: b}
+// NewHandler creates a Handler with the given dependencies.
+func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
+	return &Handler{
+		runner:     runner,
+		version:    version,
+		broker:     b,
+		authCfg:    authCfg,
+		authStore:  authStore,
+		configPath: configPath,
+	}
 }
 
 // auditLog emits a structured audit log line for every mutating API operation.
@@ -253,6 +263,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/iscsi-targets", h.createISCSITarget)
 	mux.HandleFunc("DELETE /api/iscsi-targets", h.deleteISCSITarget)
 	mux.HandleFunc("GET /api/schema", h.getSchema)
+	mux.HandleFunc("POST /api/auth/change-password", h.changePassword)
+	mux.HandleFunc("POST /api/auth/change-username", h.changeUsername)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {

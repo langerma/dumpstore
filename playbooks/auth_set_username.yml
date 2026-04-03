@@ -1,0 +1,34 @@
+---
+# auth_set_username.yml — update the admin username in the config file.
+#
+# Required extra vars:
+#   config_path : absolute path to dumpstore.conf (e.g. /etc/dumpstore/dumpstore.conf)
+#   username    : new admin username (non-empty, validated in Go before calling)
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - config_path is defined and config_path | length > 0
+          - username is defined and username | length > 0
+        fail_msg: "config_path and username are required"
+
+    - name: Update username in config file
+      ansible.builtin.shell:
+        cmd: |
+          python3 -c "
+          import json, os
+          path = os.environ['CONFIG_PATH']
+          with open(path) as f:
+              cfg = json.load(f)
+          cfg['username'] = os.environ['USERNAME']
+          tmp = path + '.tmp'
+          with open(tmp, 'w') as f:
+              json.dump(cfg, f, indent=2)
+          os.chmod(tmp, 0o600)
+          os.rename(tmp, path)
+          "
+      environment:
+        CONFIG_PATH: "{{ config_path }}"
+        USERNAME: "{{ username }}"

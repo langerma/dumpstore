@@ -20,6 +20,8 @@
       <span id="sseStatus" class="sse-badge live">live</span>
       <span id="appVersion" class="app-version"></span>
       <button class="refresh-btn" id="refreshBtn" title="Refresh">&#8635;</button>
+      <span id="userBadge" class="user-badge" style="display:none"></span>
+      <button id="logoutBtn" class="logout-btn" style="display:none" title="Sign out">logout</button>
     </div>
   </header>
 
@@ -88,6 +90,14 @@
     <!-- USERS & GROUPS TAB -->
     <section class="tab-pane" id="tab-users">
       <div class="section-header">
+        <h2>Authentication</h2>
+        <button class="btn-secondary" id="changePasswordBtn">Change Password</button>
+        <button class="btn-secondary" id="changeUsernameBtn">Change Username</button>
+      </div>
+      <div id="auth-config-wrap">
+        <div class="loading">Loading…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
         <h2>Local Users</h2>
         <button class="btn-secondary" id="toggleSystemUsersBtn">Show system</button>
         <button class="btn-primary" id="newUserBtn">+ New User</button>
@@ -875,6 +885,47 @@
         <button type="button" id="iscsiExposeBtn" class="btn-primary" style="display:none">Expose as iSCSI</button>
       </div>
     </div>
+  </dialog>
+
+  <!-- CHANGE PASSWORD DIALOG -->
+  <dialog id="changePasswordDialog">
+    <form id="changePasswordForm" method="dialog">
+      <h3>Change Password</h3>
+      <fieldset class="form-section">
+        <legend>Credentials</legend>
+        <label>Current password
+          <input type="password" id="auth-current-pwd" autocomplete="current-password">
+        </label>
+        <label>New password
+          <input type="password" id="auth-new-pwd" autocomplete="new-password">
+        </label>
+        <label>Confirm new password
+          <input type="password" id="auth-confirm-pwd" autocomplete="new-password">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="changePasswordCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Update Password</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- CHANGE USERNAME DIALOG -->
+  <dialog id="changeUsernameDialog">
+    <form id="changeUsernameForm" method="dialog">
+      <h3>Change Username</h3>
+      <fieldset class="form-section">
+        <legend>Identity</legend>
+        <label>New username
+          <input type="text" id="auth-new-username" autocomplete="username" spellcheck="false">
+        </label>
+        <p class="field-note" style="margin-top:0.5rem">All active sessions will be invalidated — you will be signed out immediately.</p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="changeUsernameCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Update Username</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- OPERATION LOG DIALOG -->

@@ -5,6 +5,7 @@ All notable changes to this project will be documented here.
 ## [Unreleased]
 
 ### Added
+- **Authentication** — session-based login with bcrypt-hashed password stored in `/etc/dumpstore/dumpstore.conf`; `--set-password` CLI subcommand; per-IP login rate limiting (10 attempts/60 s); reverse proxy delegation via `X-Remote-User` from configured trusted CIDRs; login page matches dark monospace theme; logout button in header; `/metrics` excluded from auth by default; no-password startup binds to loopback only with a warning
 - **Audit logging** — all mutating API operations (dataset, snapshot, user, group, ACL, SMB, iSCSI) now emit a structured `slog` audit record with operation, target, actor IP, and outcome
 - **Client-side name validation** — dataset and snapshot create dialogs validate names against `reZFSName` / `reSnapLabel` before submitting; inline error shown immediately instead of a round-trip
 - **SSE status badge** — header badge shows "live" (SSE connected) vs "polling" (30 s REST fallback) so users know when they are seeing stale data

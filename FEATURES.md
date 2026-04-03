@@ -32,6 +32,7 @@
 | Time Machine shares      | v0.1.6 | Samba `vfs_fruit` Time Machine backup targets; named shares backed by ZFS datasets; configurable max size and valid users         |
 | User mgmt extensions     | v0.1.7 | SSH authorized key add/remove, home directory change with optional file migration, Samba password sync on edit                    |
 | Request ID correlation   | v0.1.8 | Per-request `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on response |
+| Authentication           | v0.1.9 | Session-based login, bcrypt password, `--set-password` CLI, trusted proxy delegation (`X-Remote-User`), per-IP rate limiting   |
 
 ---
 

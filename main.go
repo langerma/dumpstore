@@ -20,6 +20,7 @@ import (
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/api"
+	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/schema"
 )
@@ -35,11 +36,21 @@ func main() {
 		baseDir     = flag.String("dir", "", "Base directory (contains playbooks/ and static/); defaults to executable location")
 		debug       = flag.Bool("debug", false, "Enable debug log level")
 		showVersion = flag.Bool("version", false, "Print version and exit")
+		configPath  = flag.String("config", "/etc/dumpstore/dumpstore.conf", "Config file path")
+		setPassword = flag.Bool("set-password", false, "Set admin password and exit")
 	)
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	if *setPassword {
+		if err := auth.SetPassword(*configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -72,6 +83,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg, err := auth.LoadConfig(*configPath)
+	if err != nil {
+		slog.Error("failed to load config", "err", err)
+		os.Exit(1)
+	}
+	if cfg.PasswordHash == "" {
+		slog.Warn("no password configured — binding to loopback only; run with --set-password to configure authentication")
+		*addr = "127.0.0.1:8080"
+	}
+	store := auth.NewSessionStore(cfg.SessionTTL.Duration)
+	rl := auth.NewRateLimiter()
+
 	runner := ansible.NewRunner(*baseDir)
 
 	b := broker.New()
@@ -79,15 +102,17 @@ func main() {
 	defer cancel()
 	broker.StartPoller(ctx, b)
 
-	apiHandler := api.NewHandler(runner, version, b)
+	apiHandler := api.NewHandler(runner, version, b, cfg, store, *configPath)
 
 	mux := http.NewServeMux()
+	auth.RegisterRoutes(mux, cfg, store, rl)
 	apiHandler.RegisterRoutes(mux)
 
 	staticDir := filepath.Join(*baseDir, "static")
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-	srv := &http.Server{Addr: *addr, Handler: requestLogger(mux)}
+	authMW := auth.NewMiddleware(cfg, store)
+	srv := &http.Server{Addr: *addr, Handler: requestLogger(authMW.Wrap(mux))}
 
 	// Shut down the HTTP server when the signal context is cancelled.
 	go func() {

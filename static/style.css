@@ -81,6 +81,25 @@ nav { display: flex; gap: 4px; }
 .refresh-btn.spinning { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.user-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.logout-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.logout-btn:hover { color: var(--text); border-color: var(--accent); }
+
+
 /* MAIN */
 main {
   max-width: 1400px;

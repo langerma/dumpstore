@@ -77,6 +77,18 @@ do_install() {
     cp -r playbooks "$INSTALL_DIR/"
     cp -r static    "$INSTALL_DIR/"
 
+    echo "==> Configuring authentication..."
+    CONFIG_DIR="/etc/dumpstore"
+    CONFIG_FILE="$CONFIG_DIR/dumpstore.conf"
+    install -d -m 0700 "$CONFIG_DIR"
+    # Only prompt for a password if none is set yet (safe to re-run on upgrade).
+    if ! grep -q '"password_hash"' "$CONFIG_FILE" 2>/dev/null || grep -q '"password_hash": ""' "$CONFIG_FILE" 2>/dev/null; then
+        echo "==> Set admin password (used to log in to the web UI):"
+        "$INSTALL_DIR/$BINARY" --set-password --config "$CONFIG_FILE"
+    else
+        echo "==> Password already configured, skipping."
+    fi
+
     echo "==> Setting up service..."
     case "$OS" in
         Linux)
@@ -95,7 +107,7 @@ do_install() {
             ;;
         *)
             echo "==> Warning: unknown OS '$OS' — binary and assets installed but service not registered."
-            echo "    Start manually: $INSTALL_DIR/$BINARY -addr :8080 -dir $INSTALL_DIR"
+            echo "    Start manually: $INSTALL_DIR/$BINARY -addr :8080 -dir $INSTALL_DIR -config $CONFIG_FILE"
             ;;
     esac
 }

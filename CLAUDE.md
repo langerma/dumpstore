@@ -57,7 +57,9 @@ go build ./...   # must always pass before committing
 go vet ./...     # must always pass
 ```
 
-No external Go dependencies. Standard library only.
+External Go dependencies (both are official golang.org/x packages, same governance as stdlib):
+- `golang.org/x/crypto/bcrypt` — password hashing for authentication
+- `golang.org/x/term` — echo-disabled password prompting in `--set-password`
 
 ---
 
