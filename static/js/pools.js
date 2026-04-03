@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, showOpLog, showOpLogRunning, toast } from './utils.js';
 import { loadAll } from './loader.js';
 
 // ── Render: System info ────────────────────────────────────────────────────────
@@ -58,6 +58,41 @@ export function renderSoftware() {
     <div class="table-wrap">
       <table>
         <thead><tr><th>Tool</th><th>Version / Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── Render: Network ───────────────────────────────────────────────────────────
+export function renderNetwork() {
+  const wrap = document.getElementById('network-wrap');
+  if (!wrap) return;
+  const ifaces = state.network;
+  if (!ifaces) { wrap.innerHTML = ''; return; }
+  if (!ifaces.length) { wrap.innerHTML = '<div class="loading">No interfaces found.</div>'; return; }
+
+  const rows = ifaces.map(iface => {
+    const muted = iface.virtual ? ' class="row-muted"' : '';
+    const stateClass = iface.state === 'up' ? 'net-up' : 'net-down';
+    const addrs = iface.addrs?.length ? iface.addrs.map(a => esc(a)).join('<br>') : '—';
+    const rx = fmtBytes(iface.rx_bytes);
+    const tx = fmtBytes(iface.tx_bytes);
+    return `<tr${muted}>
+      <td class="mono">${esc(iface.name)}</td>
+      <td><span class="type-badge ${stateClass}">${esc(iface.state)}</span></td>
+      <td class="mono">${iface.mac ? esc(iface.mac) : '—'}</td>
+      <td>${iface.mtu}</td>
+      <td class="mono">${addrs}</td>
+      <td>${fmtSpeed(iface.speed_mbps)}</td>
+      <td>${rx}</td>
+      <td>${tx}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interface</th><th>State</th><th>MAC</th><th>MTU</th><th>Addresses</th><th>Speed</th><th>RX</th><th>TX</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

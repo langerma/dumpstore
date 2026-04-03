@@ -201,6 +201,7 @@ Browser: showOpLog() renders task steps in modal
 
 ```
 GET  /api/sysinfo             → /proc/*, sysctl     (direct)
+GET  /api/network             → net.Interfaces()    (direct)
 GET  /api/version             → zpool version       (direct)
 GET  /api/pools               → zpool list          (direct)
 GET  /api/poolstatus          → zpool status        (direct)

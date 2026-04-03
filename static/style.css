@@ -372,6 +372,8 @@ tr.row-muted td { color: var(--text-muted); opacity: 0.6; }
 .type-filesystem  { background: #1a2d4f; color: #7cb9ff; }
 .type-volume      { background: #2a1a4f; color: #c07cff; }
 .type-snapshot    { background: #1a2e1a; color: #7cff9a; }
+.net-up           { background: #0d3d2e; color: var(--green); }
+.net-down         { background: #3d1010; color: var(--red); }
 
 .dataset-indent { padding-left: calc(4px + var(--depth, 0) * 16px); display: flex; align-items: center; gap: 4px; }
 

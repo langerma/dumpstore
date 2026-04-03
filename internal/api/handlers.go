@@ -205,6 +205,7 @@ func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.Playb
 // RegisterRoutes attaches all API routes to mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sysinfo", h.getSysInfo)
+	mux.HandleFunc("GET /api/network", h.getNetwork)
 	mux.HandleFunc("GET /api/version", h.getVersion)
 	mux.HandleFunc("GET /api/poolstatus", h.getPoolStatuses)
 	mux.HandleFunc("GET /api/pools", h.getPools)
@@ -273,6 +274,15 @@ func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
 		system.Info
 	}
 	writeJSON(r.Context(), w, response{AppVersion: h.version, Info: system.Get()})
+}
+
+func (h *Handler) getNetwork(w http.ResponseWriter, r *http.Request) {
+	ifaces, err := system.GetNetworkInterfaces()
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(r.Context(), w, ifaces)
 }
 
 func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) {

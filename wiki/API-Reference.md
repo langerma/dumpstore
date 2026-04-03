@@ -7,6 +7,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | Method | Path | Description |
 |--------|------|-------------|
 | GET    | `/api/sysinfo`              | Host and process info |
+| GET    | `/api/network`              | Network interfaces (name, state, MAC, MTU, IPs, speed, RX/TX) |
 | GET    | `/api/version`              | OpenZFS version string |
 | GET    | `/api/pools`                | List all pools with usage stats |
 | GET    | `/api/poolstatus`           | Detailed pool status with vdev tree |

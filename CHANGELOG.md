@@ -4,6 +4,9 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Added
+- **Network interface overview** — `GET /api/network` returns all interfaces with name, state (up/down), MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; displayed as a Network section in the Pools tab with state badges and muted virtual/loopback rows; Linux reads speed and counters from `/sys/class/net`; FreeBSD parses a single `ifconfig -a` call for speed
+
 ---
 
 ## [v0.1.9] — 2026-04-03
