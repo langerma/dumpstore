@@ -592,6 +592,14 @@
         </div>
         <p>Every request gets a unique <code>req_id</code> that appears on all log lines for that request — errors, warnings, and the access log line — so you can reconstruct the full lifecycle of any concurrent request. Reads <code>X-Request-ID</code> from upstream proxies (nginx, Traefik) and echoes it back on the response.</p>
       </div>
+
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">Audit logging</span>
+          <span class="health-badge badge-green">logging</span>
+        </div>
+        <p>Every mutating operation (dataset, snapshot, user, group, ACL, SMB, iSCSI, scrub) emits a structured <code>slog</code> audit line with <code>remote_ip</code>, <code>action</code> (e.g. <code>dataset.create</code>), <code>target</code> resource, and <code>outcome</code> (<code>ok</code>/<code>err</code>). The <code>req_id</code> is included automatically, linking the audit entry to the full request log.</p>
+      </div>
     </div>
 
     <div class="section-header" style="margin-top:2rem;">

@@ -41,6 +41,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
 - **Request ID correlation** — every request gets a unique `req_id` carried on all log lines for that request; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
+- **Audit logging** — every mutating operation (dataset/snapshot/user/group/ACL/SMB/iSCSI/scrub create, modify, destroy) emits a structured `slog` audit line with `remote_ip`, `action`, `target`, and `outcome` (`ok`/`err`); `req_id` is included automatically
 
 ## Screenshots
 
