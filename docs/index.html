@@ -600,6 +600,14 @@
         </div>
         <p>Every mutating operation (dataset, snapshot, user, group, ACL, SMB, iSCSI, scrub) emits a structured <code>slog</code> audit line with <code>remote_ip</code>, <code>action</code> (e.g. <code>dataset.create</code>), <code>target</code> resource, and <code>outcome</code> (<code>ok</code>/<code>err</code>). The <code>req_id</code> is included automatically, linking the audit entry to the full request log.</p>
       </div>
+
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">Authentication</span>
+          <span class="health-badge badge-green">security</span>
+        </div>
+        <p>Session-based login with a bcrypt-hashed password stored in <code>/etc/dumpstore/dumpstore.conf</code>. Set up during install via <code>--set-password</code>. Per-IP rate limiting (10 attempts/60 s). Reverse proxy delegation via <code>X-Remote-User</code> from trusted CIDRs. No password configured? The service binds to loopback only until one is set. Change password or username any time from the Users &amp; Groups tab.</p>
+      </div>
     </div>
 
     <div class="section-header" style="margin-top:2rem;">
@@ -823,10 +831,10 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
       <div class="divider"></div>
     </div>
     <p style="max-width:640px;line-height:1.6;color:var(--text-muted)">
-      dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks.
-      Several endpoints accept passwords in the request body — without TLS these travel in plaintext.
-      See <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md" style="color:var(--accent)">SECURITY.md</a>
-      for recommended mitigations (reverse proxy with TLS, SSH tunnel, VPN) and rate-limiting guidance.
+      dumpstore has built-in session-based authentication. A bcrypt-hashed password is set during install and stored in
+      <code>/etc/dumpstore/dumpstore.conf</code>. If no password is configured the service binds to <code>127.0.0.1</code> only.
+      dumpstore runs as root (required for ZFS). See <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md" style="color:var(--accent)">SECURITY.md</a>
+      for notes on TLS and the recommended deployment topology.
     </p>
   </section>
 
