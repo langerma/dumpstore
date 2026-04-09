@@ -29,6 +29,9 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
 - **Request ID correlation** — every request gets a unique `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
 - **Authentication** — session-based login with bcrypt password stored in `/etc/dumpstore/dumpstore.conf`; `--set-password` CLI; per-IP rate limiting; reverse proxy delegation via `X-Remote-User` from configured trusted CIDRs; logout button and username badge in the header
+- **Network interface overview** — read-only view of all interfaces: state badge, MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a`
+- **Service management** — start/stop/restart/enable/disable Samba, NFS, and iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations
+- **TLS / HTTPS** — `--tls` flag; self-signed ECDSA-P256 cert generation via the UI (openssl, Ansible); load existing cert from disk (Let's Encrypt, Certbot, acme.sh); ACME issuance/renewal via `lego`; HTTP→HTTPS redirect; cert status card with CN, SANs, and expiry countdown
 
 ## Planned
 
