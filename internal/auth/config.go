@@ -32,11 +32,21 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 // Config holds all authentication configuration persisted to disk.
 type Config struct {
-	Username          string   `json:"username"`
-	PasswordHash      string   `json:"password_hash"`
-	SessionTTL        Duration `json:"session_ttl"`
-	TrustedProxies    []string `json:"trusted_proxies"`
-	UnprotectedPaths  []string `json:"unprotected_paths"`
+	Username         string   `json:"username"`
+	PasswordHash     string   `json:"password_hash"`
+	SessionTTL       Duration `json:"session_ttl"`
+	TrustedProxies   []string `json:"trusted_proxies"`
+	UnprotectedPaths []string `json:"unprotected_paths"`
+
+	// TLS configuration
+	TLSEnabled  bool   `json:"tls_enabled"`
+	TLSCertPath string `json:"tls_cert_path"`
+	TLSKeyPath  string `json:"tls_key_path"`
+
+	// ACME (Let's Encrypt via lego)
+	ACMEEnabled bool   `json:"acme_enabled"`
+	ACMEEmail   string `json:"acme_email"`
+	ACMEDomain  string `json:"acme_domain"`
 }
 
 // defaults fills zero-value fields with sensible defaults.

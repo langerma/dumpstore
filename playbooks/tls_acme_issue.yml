@@ -1,0 +1,46 @@
+---
+# tls_acme_issue.yml — issue a TLS certificate via ACME (Let's Encrypt) using lego.
+#
+# Required extra vars:
+#   email    : ACME account email (e.g. admin@example.com)
+#   domain   : domain name to issue cert for (e.g. mynas.example.com)
+#   cert_dir : directory to store lego output (e.g. /etc/dumpstore/tls/acme)
+#
+# Uses TLS-ALPN-01 challenge (--tls flag) on port 443.
+# Ensure dumpstore is not already listening on port 443 when running this.
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - email is defined and email | length > 0
+          - domain is defined and domain | length > 0
+          - cert_dir is defined and cert_dir | length > 0
+        fail_msg: "email, domain, and cert_dir are required"
+
+    - name: Assert lego is available
+      ansible.builtin.command:
+        cmd: which lego
+      register: lego_check
+      failed_when: lego_check.rc != 0
+      changed_when: false
+      ignore_errors: false
+
+    - name: Create ACME cert directory
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Issue certificate via ACME (TLS-ALPN-01)
+      ansible.builtin.command:
+        cmd: >
+          lego
+          --email {{ email }}
+          --domains {{ domain }}
+          --path {{ cert_dir }}
+          --tls
+          run
+      register: lego_result
+      changed_when: lego_result.rc == 0

@@ -1,0 +1,37 @@
+---
+# tls_acme_renew.yml — renew a TLS certificate via ACME (Let's Encrypt) using lego.
+#
+# Required extra vars:
+#   email    : ACME account email (must match the one used during issue)
+#   domain   : domain name to renew cert for
+#   cert_dir : lego directory used during issue (e.g. /etc/dumpstore/tls/acme)
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - email is defined and email | length > 0
+          - domain is defined and domain | length > 0
+          - cert_dir is defined and cert_dir | length > 0
+        fail_msg: "email, domain, and cert_dir are required"
+
+    - name: Assert lego is available
+      ansible.builtin.command:
+        cmd: which lego
+      register: lego_check
+      failed_when: lego_check.rc != 0
+      changed_when: false
+
+    - name: Renew certificate via ACME (TLS-ALPN-01)
+      ansible.builtin.command:
+        cmd: >
+          lego
+          --email {{ email }}
+          --domains {{ domain }}
+          --path {{ cert_dir }}
+          --tls
+          renew
+          --days 30
+      register: lego_result
+      changed_when: lego_result.rc == 0

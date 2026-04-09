@@ -1,0 +1,40 @@
+---
+# tls_gencert.yml — generate a self-signed ECDSA-P256 TLS certificate.
+#
+# Required extra vars:
+#   hostname  : CN and DNS SAN for the certificate (e.g. mynas.local)
+#   cert_dir  : directory to write cert.pem and key.pem (e.g. /etc/dumpstore/tls)
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - hostname is defined and hostname | length > 0
+          - cert_dir is defined and cert_dir | length > 0
+        fail_msg: "hostname and cert_dir are required"
+
+    - name: Create TLS directory
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Generate self-signed ECDSA-P256 certificate
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509
+          -newkey ec -pkeyopt ec_paramgen_curve:P-256
+          -keyout {{ cert_dir }}/key.pem
+          -out {{ cert_dir }}/cert.pem
+          -days 3650
+          -nodes
+          -subj "/CN={{ hostname }}"
+          -addext "subjectAltName=IP:127.0.0.1,DNS:{{ hostname }}"
+        creates: "{{ cert_dir }}/cert.pem"
+      register: gencert_result
+
+    - name: Restrict key file permissions
+      ansible.builtin.file:
+        path: "{{ cert_dir }}/key.pem"
+        mode: "0600"

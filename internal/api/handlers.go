@@ -268,6 +268,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/change-username", h.changeUsername)
 	mux.HandleFunc("GET /api/services", h.getServices)
 	mux.HandleFunc("POST /api/services/{service}/{action}", h.mutateService)
+
+	mux.HandleFunc("GET /api/tls/status", h.getTLSStatus)
+	mux.HandleFunc("POST /api/tls/gencert", h.tlsGenCert)
+	mux.HandleFunc("PATCH /api/tls/config", h.tlsSetConfig)
+	mux.HandleFunc("POST /api/tls/acme/issue", h.tlsAcmeIssue)
+	mux.HandleFunc("POST /api/tls/acme/renew", h.tlsAcmeRenew)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
