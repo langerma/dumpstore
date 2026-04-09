@@ -32,12 +32,15 @@ var version = "dev"
 
 func main() {
 	var (
-		addr        = flag.String("addr", ":8080", "Listen address")
+		addr        = flag.String("addr", ":8080", "Listen address (used when --tls is not set)")
 		baseDir     = flag.String("dir", "", "Base directory (contains playbooks/ and static/); defaults to executable location")
 		debug       = flag.Bool("debug", false, "Enable debug log level")
 		showVersion = flag.Bool("version", false, "Print version and exit")
 		configPath  = flag.String("config", "/etc/dumpstore/dumpstore.conf", "Config file path")
 		setPassword = flag.Bool("set-password", false, "Set admin password and exit")
+		tlsFlag     = flag.Bool("tls", false, "Enable HTTPS (requires tls_cert_path and tls_key_path in config)")
+		tlsPort     = flag.String("tls-port", "443", "HTTPS listen port")
+		httpPort    = flag.String("http-port", "80", "HTTP listen port for redirect to HTTPS (used when --tls is set)")
 	)
 	flag.Parse()
 
@@ -88,6 +91,11 @@ func main() {
 		slog.Error("failed to load config", "err", err)
 		os.Exit(1)
 	}
+	if cfg.ACMEEnabled {
+		if _, err := exec.LookPath("lego"); err != nil {
+			slog.Warn("lego not found in PATH — ACME cert issuance/renewal will fail")
+		}
+	}
 	if cfg.PasswordHash == "" {
 		slog.Warn("no password configured — binding to loopback only; run with --set-password to configure authentication")
 		*addr = "127.0.0.1:8080"
@@ -112,21 +120,56 @@ func main() {
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
 	authMW := auth.NewMiddleware(cfg, store)
-	srv := &http.Server{Addr: *addr, Handler: requestLogger(authMW.Wrap(mux))}
+	handler := requestLogger(authMW.Wrap(mux))
 
-	// Shut down the HTTP server when the signal context is cancelled.
-	go func() {
-		<-ctx.Done()
-		slog.Info("dumpstore shutting down")
-		if err := srv.Shutdown(context.Background()); err != nil {
-			slog.Error("server shutdown error", "err", err)
+	if *tlsFlag && cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		httpsAddr := ":" + *tlsPort
+		srv := &http.Server{Addr: httpsAddr, Handler: handler}
+
+		// HTTP redirect server: plain HTTP → HTTPS.
+		redirectAddr := ":" + *httpPort
+		redirectSrv := &http.Server{
+			Addr: redirectAddr,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				target := "https://" + r.Host + r.URL.RequestURI()
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+			}),
 		}
-	}()
 
-	slog.Info("dumpstore starting", "addr", *addr, "base", *baseDir)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("server stopped", "err", err)
-		os.Exit(1)
+		go func() {
+			<-ctx.Done()
+			slog.Info("dumpstore shutting down")
+			srv.Shutdown(context.Background())        //nolint:errcheck
+			redirectSrv.Shutdown(context.Background()) //nolint:errcheck
+		}()
+
+		go func() {
+			if err := redirectSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("redirect server stopped", "err", err)
+			}
+		}()
+
+		slog.Info("dumpstore starting (TLS)", "https_addr", httpsAddr, "redirect_addr", redirectAddr, "base", *baseDir)
+		if err := srv.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath); err != nil && err != http.ErrServerClosed {
+			slog.Error("server stopped", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		srv := &http.Server{Addr: *addr, Handler: handler}
+
+		go func() {
+			<-ctx.Done()
+			slog.Info("dumpstore shutting down")
+			if err := srv.Shutdown(context.Background()); err != nil {
+				slog.Error("server shutdown error", "err", err)
+			}
+		}()
+
+		slog.Info("dumpstore starting", "addr", *addr, "base", *baseDir)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server stopped", "err", err)
+			os.Exit(1)
+		}
 	}
 }
 

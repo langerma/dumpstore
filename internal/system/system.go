@@ -683,6 +683,7 @@ func softwareVersions() []SoftwareTool {
 		{Name: "zfs-auto-snapshot", Version: probePresence("zfs-auto-snapshot")},
 		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
 		{Name: "iSCSI backend", Version: probeISCSIBackend()},
+		{Name: "lego (ACME)", Version: probeVersion("lego", "--version")},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}
 }

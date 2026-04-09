@@ -314,6 +314,7 @@ dumpstore runs as root (required for ZFS). See [SECURITY.md](SECURITY.md) for no
 | SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also install `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
 | iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
+| TLS / ACME (optional)  | `openssl` (usually pre-installed); `lego` for ACME         | same                                         |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
@@ -352,6 +353,17 @@ dnf install targetcli
 # FreeBSD — iSCSI targets (ctld is built-in, just enable the service)
 sysrc ctld_enable=YES
 service ctld start
+
+# ACME cert issuance via Let's Encrypt (lego) — only needed if using --tls with ACME
+# Debian/Ubuntu
+apt install lego
+# or download a release binary: https://github.com/go-acme/lego/releases
+
+# RHEL/Fedora
+dnf install lego
+
+# FreeBSD
+pkg install lego
 ```
 
 ## Contributing

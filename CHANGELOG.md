@@ -5,6 +5,7 @@ All notable changes to this project will be documented here.
 ## [Unreleased]
 
 ### Added
+- **TLS / HTTPS support** — `--tls` flag enables HTTPS; self-signed ECDSA-P256 cert generation via `tls_gencert.yml` (openssl); path loader (`PATCH /api/tls/config`) validates and loads existing certs (Let's Encrypt, Certbot, acme.sh); ACME issuance and renewal via `lego` (`POST /api/tls/acme/issue`, `POST /api/tls/acme/renew`); HTTP→HTTPS redirect listener on `--http-port` (default 80); TLS status card in Users tab with cert CN, SANs, expiry countdown; `lego` is an optional dependency (warn if missing and ACME is configured)
 - **Service management** — new Services tab with start/stop/restart/enable/disable controls for Samba, NFS, and iSCSI; `GET /api/services` returns live status for all three; mutations go through `service_control_linux.yml` (systemd) or `service_control_freebsd.yml` (rc.d) with full op-log display; status updates via SSE every 10 s; NFS stop shows a client-disconnect warning
 - **Network interface overview** — `GET /api/network` returns all interfaces with name, state (up/down), MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; displayed as a Network section in the Pools tab with state badges and muted virtual/loopback rows; Linux reads speed and counters from `/sys/class/net`; FreeBSD parses a single `ifconfig -a` call for speed
 

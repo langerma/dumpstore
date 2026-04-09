@@ -105,6 +105,15 @@
         <div class="loading">Loading…</div>
       </div>
       <div class="section-header" style="margin-top:2rem">
+        <h2>TLS / HTTPS</h2>
+        <button class="btn-secondary" id="tlsGencertBtn">Generate self-signed</button>
+        <button class="btn-secondary" id="tlsPathBtn">Load existing cert</button>
+        <button class="btn-secondary" id="tlsAcmeBtn">Let's Encrypt (ACME)</button>
+      </div>
+      <div id="tls-status-wrap">
+        <div class="loading">Loading…</div>
+      </div>
+      <div class="section-header" style="margin-top:2rem">
         <h2>Local Users</h2>
         <button class="btn-secondary" id="toggleSystemUsersBtn">Show system</button>
         <button class="btn-primary" id="newUserBtn">+ New User</button>
@@ -942,6 +951,72 @@
       <div class="dialog-actions">
         <button type="button" id="changeUsernameCancelBtn" class="btn-secondary">Cancel</button>
         <button type="submit" class="btn-primary">Update Username</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- TLS: GENERATE SELF-SIGNED CERT DIALOG -->
+  <dialog id="tlsGencertDialog">
+    <form id="tlsGencertForm" method="dialog">
+      <h3>Generate Self-Signed Certificate</h3>
+      <fieldset class="form-section">
+        <legend>Certificate settings</legend>
+        <label>Hostname (CN / DNS SAN)
+          <input type="text" id="tls-gencert-hostname" placeholder="mynas.local" spellcheck="false">
+        </label>
+        <label>Certificate directory
+          <input type="text" id="tls-gencert-certdir" value="/etc/dumpstore/tls" spellcheck="false">
+        </label>
+        <p class="field-note" style="margin-top:0.5rem">Generates an ECDSA-P256 certificate valid for 10 years. Restart dumpstore with <code>--tls</code> to activate HTTPS.</p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="tlsGencertCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Generate</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- TLS: LOAD EXISTING CERT DIALOG -->
+  <dialog id="tlsPathDialog">
+    <form id="tlsPathForm" method="dialog">
+      <h3>Load Existing Certificate</h3>
+      <fieldset class="form-section">
+        <legend>Certificate paths</legend>
+        <label>Certificate file (PEM)
+          <input type="text" id="tls-path-cert" placeholder="/etc/letsencrypt/live/example.com/fullchain.pem" spellcheck="false">
+        </label>
+        <label>Key file (PEM)
+          <input type="text" id="tls-path-key" placeholder="/etc/letsencrypt/live/example.com/privkey.pem" spellcheck="false">
+        </label>
+        <p class="field-note" style="margin-top:0.5rem">The cert/key pair will be validated before saving. Restart dumpstore with <code>--tls</code> to activate HTTPS.</p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="tlsPathCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Validate &amp; Apply</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- TLS: ACME / LET'S ENCRYPT DIALOG -->
+  <dialog id="tlsAcmeDialog">
+    <form id="tlsAcmeForm" method="dialog">
+      <h3>Issue Certificate via Let's Encrypt</h3>
+      <fieldset class="form-section">
+        <legend>ACME settings</legend>
+        <label>Email address
+          <input type="email" id="tls-acme-email" placeholder="admin@example.com" spellcheck="false">
+        </label>
+        <label>Domain name
+          <input type="text" id="tls-acme-domain" placeholder="mynas.example.com" spellcheck="false">
+        </label>
+        <label>Certificate directory
+          <input type="text" id="tls-acme-certdir" value="/etc/dumpstore/tls/acme" spellcheck="false">
+        </label>
+        <p class="field-note" style="margin-top:0.5rem">Uses TLS-ALPN-01 challenge on port 443. Requires <code>lego</code> in PATH and the domain to resolve to this machine.</p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="tlsAcmeCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Issue Certificate</button>
       </div>
     </form>
   </dialog>

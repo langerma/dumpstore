@@ -1,0 +1,45 @@
+---
+# tls_set_config.yml — persist TLS cert paths and enabled flag to dumpstore config.
+#
+# Required extra vars:
+#   config_path : absolute path to dumpstore.conf
+#   cert_path   : absolute path to cert.pem
+#   key_path    : absolute path to key.pem
+#   enabled     : "true" or "false"
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - config_path is defined and config_path | length > 0
+          - cert_path is defined and cert_path | length > 0
+          - key_path is defined and key_path | length > 0
+          - enabled is defined
+        fail_msg: "config_path, cert_path, key_path, and enabled are required"
+
+    - name: Update TLS config in dumpstore config file
+      ansible.builtin.shell:
+        cmd: |
+          python3 -c "
+          import json, os
+          path = os.environ['CONFIG_PATH']
+          try:
+              with open(path) as f:
+                  cfg = json.load(f)
+          except FileNotFoundError:
+              cfg = {}
+          cfg['tls_cert_path'] = os.environ['CERT_PATH']
+          cfg['tls_key_path']  = os.environ['KEY_PATH']
+          cfg['tls_enabled']   = os.environ['ENABLED'] == 'true'
+          tmp = path + '.tmp'
+          with open(tmp, 'w') as f:
+              json.dump(cfg, f, indent=2)
+          os.chmod(tmp, 0o600)
+          os.rename(tmp, path)
+          "
+      environment:
+        CONFIG_PATH: "{{ config_path }}"
+        CERT_PATH:   "{{ cert_path }}"
+        KEY_PATH:    "{{ key_path }}"
+        ENABLED:     "{{ enabled }}"

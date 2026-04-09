@@ -57,6 +57,7 @@ do_install() {
     need go
     need ansible-playbook
     need git
+    command -v lego >/dev/null 2>&1 || echo "  [warn] lego not found — ACME cert issuance (Let's Encrypt) will not be available"
 
     # Check we're in the repo root
     [ -f "main.go" ]    || die "run this script from the dumpstore repository root"
