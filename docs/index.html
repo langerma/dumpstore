@@ -566,6 +566,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">TLS / HTTPS</span>
+          <span class="health-badge badge-blue">--tls</span>
+        </div>
+        <p>Enable HTTPS with <code>--tls</code>. Generate a self-signed ECDSA-P256 certificate via the UI (openssl, via Ansible), load an existing cert from disk (Let's Encrypt, Certbot, acme.sh), or issue and renew automatically via <strong>lego</strong> (ACME / Let's Encrypt). HTTP redirects to HTTPS automatically. Cert status card shows CN, SANs, and expiry countdown.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">S.M.A.R.T. health</span>
           <span class="health-badge badge-green">smartctl</span>
         </div>
