@@ -10,6 +10,8 @@
 # Optional rc.conf knobs (with defaults shown):
 #   dumpstore_addr=":8080"
 #   dumpstore_dir="/usr/local/lib/dumpstore"
+#   dumpstore_config="/etc/dumpstore/dumpstore.conf"
+#   dumpstore_logfile="/var/log/dumpstore.log"
 
 . /etc/rc.subr
 
@@ -22,6 +24,8 @@ load_rc_config ${name}
 : ${dumpstore_enable:="NO"}
 : ${dumpstore_addr:=":8080"}
 : ${dumpstore_dir:="/usr/local/lib/dumpstore"}
+: ${dumpstore_config:="/etc/dumpstore/dumpstore.conf"}
+: ${dumpstore_logfile:="/var/log/dumpstore.log"}
 
 _bin="${dumpstore_dir}/dumpstore"
 pidfile="/var/run/${name}.pid"
@@ -29,8 +33,9 @@ pidfile="/var/run/${name}.pid"
 # Use daemon(8) to background the process, write a pidfile, and auto-restart.
 # -P  write PID of the daemon wrapper to pidfile
 # -r  restart the child if it exits
-# -f  redirect stdin/stdout/stderr to /dev/null
+# -o  redirect stdout to log file
+# -e  redirect stderr to log file
 command="/usr/sbin/daemon"
-command_args="-P ${pidfile} -r -f ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir}"
+command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -e ${dumpstore_logfile} ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir} -config ${dumpstore_config}"
 
 run_rc_command "$1"
