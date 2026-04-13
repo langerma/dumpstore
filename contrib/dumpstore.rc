@@ -8,10 +8,11 @@
 #   dumpstore_enable="YES"
 #
 # Optional rc.conf knobs (with defaults shown):
-#   dumpstore_addr=":8080"
-#   dumpstore_dir="/usr/local/lib/dumpstore"
-#   dumpstore_config="/etc/dumpstore/dumpstore.conf"
-#   dumpstore_logfile="/var/log/dumpstore.log"
+#   dumpstore_enable (bool):   Set to YES to enable dumpstore.
+#   dumpstore_addr (str):      Listen address. Default: ":8080"
+#   dumpstore_dir (path):      Base directory. Default: /usr/local/lib/dumpstore
+#   dumpstore_config (path):   Config file. Default: /etc/dumpstore/dumpstore.conf
+#   dumpstore_logfile (path):  Log file. Default: /var/log/dumpstore.log
 
 . /etc/rc.subr
 
@@ -27,55 +28,22 @@ load_rc_config ${name}
 : ${dumpstore_config:="/etc/dumpstore/dumpstore.conf"}
 : ${dumpstore_logfile:="/var/log/dumpstore.log"}
 
-_bin="${dumpstore_dir}/dumpstore"
-_supervisor_pid="/var/run/${name}-supervisor.pid"
-_child_pid="/var/run/${name}.pid"
+pidfile="/var/run/${name}.pid"
+procname="${dumpstore_dir}/dumpstore"
+command="/usr/sbin/daemon"
+command_args="-p ${pidfile} -o ${dumpstore_logfile} -m 3 \
+    ${procname} \
+    -addr ${dumpstore_addr} \
+    -dir ${dumpstore_dir} \
+    -config ${dumpstore_config}"
 
-start_cmd="${name}_start"
-stop_cmd="${name}_stop"
-status_cmd="${name}_status"
-restart_cmd="${name}_restart"
-extra_commands="status"
+start_precmd="${name}_prestart"
 
-dumpstore_start() {
-    echo "Starting ${name}."
-    /usr/sbin/daemon \
-        -P ${_supervisor_pid} \
-        -p ${_child_pid} \
-        -r \
-        -o ${dumpstore_logfile} \
-        -m 3 \
-        ${_bin} \
-        -addr ${dumpstore_addr} \
-        -dir ${dumpstore_dir} \
-        -config ${dumpstore_config}
-}
-
-dumpstore_stop() {
-    echo "Stopping ${name}."
-    if [ -f "${_supervisor_pid}" ]; then
-        kill "$(cat ${_supervisor_pid})" 2>/dev/null || true
-        rm -f "${_supervisor_pid}"
+dumpstore_prestart()
+{
+    if [ ! -e ${pidfile} ]; then
+        install -m 0600 /dev/null ${pidfile}
     fi
-    if [ -f "${_child_pid}" ]; then
-        kill "$(cat ${_child_pid})" 2>/dev/null || true
-        rm -f "${_child_pid}"
-    fi
-}
-
-dumpstore_status() {
-    if [ -f "${_supervisor_pid}" ] && kill -0 "$(cat ${_supervisor_pid})" 2>/dev/null; then
-        echo "${name} is running as pid $(cat ${_child_pid} 2>/dev/null)."
-    else
-        echo "${name} is not running."
-        return 1
-    fi
-}
-
-dumpstore_restart() {
-    dumpstore_stop
-    sleep 1
-    dumpstore_start
 }
 
 run_rc_command "$1"
