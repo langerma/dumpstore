@@ -66,7 +66,7 @@ do_install() {
 
     VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
     echo "==> Building dumpstore $VERSION..."
-    go build -ldflags="-s -w -X main.version=$VERSION" -o "$BINARY" .
+    go build -buildvcs=false -ldflags="-s -w -X main.version=$VERSION" -o "$BINARY" .
 
     echo "==> Installing to $INSTALL_DIR..."
     install -d "$INSTALL_DIR"
