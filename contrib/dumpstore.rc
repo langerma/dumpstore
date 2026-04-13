@@ -27,15 +27,15 @@ load_rc_config ${name}
 : ${dumpstore_config:="/etc/dumpstore/dumpstore.conf"}
 : ${dumpstore_logfile:="/var/log/dumpstore.log"}
 
-_bin="${dumpstore_dir}/dumpstore"
+# procname is the real binary; command is the daemon(8) supervisor.
+# rc.subr uses procname for status/stop checks.
+procname="${dumpstore_dir}/dumpstore"
 pidfile="/var/run/${name}.pid"
-
-# Use daemon(8) to background the process, write a pidfile, and auto-restart.
-# -P  write PID of the daemon wrapper to pidfile
-# -r  restart the child if it exits
-# -o  redirect output to log file
-# -m 3  capture both stdout and stderr (mask: 1=stdout, 2=stderr, 3=both)
 command="/usr/sbin/daemon"
-command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -m 3 ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir} -config ${dumpstore_config}"
+command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -m 3 \
+    ${procname} \
+    -addr ${dumpstore_addr} \
+    -dir ${dumpstore_dir} \
+    -config ${dumpstore_config}"
 
 run_rc_command "$1"
