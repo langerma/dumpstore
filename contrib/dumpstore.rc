@@ -33,9 +33,9 @@ pidfile="/var/run/${name}.pid"
 # Use daemon(8) to background the process, write a pidfile, and auto-restart.
 # -P  write PID of the daemon wrapper to pidfile
 # -r  restart the child if it exits
-# -o  redirect stdout to log file
-# -e  redirect stderr to log file
+# -o  redirect output to log file
+# -m 3  capture both stdout and stderr (mask: 1=stdout, 2=stderr, 3=both)
 command="/usr/sbin/daemon"
-command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -e ${dumpstore_logfile} ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir} -config ${dumpstore_config}"
+command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -m 3 ${_bin} -addr ${dumpstore_addr} -dir ${dumpstore_dir} -config ${dumpstore_config}"
 
 run_rc_command "$1"
