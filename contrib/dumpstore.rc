@@ -27,15 +27,55 @@ load_rc_config ${name}
 : ${dumpstore_config:="/etc/dumpstore/dumpstore.conf"}
 : ${dumpstore_logfile:="/var/log/dumpstore.log"}
 
-# procname is the real binary; command is the daemon(8) supervisor.
-# rc.subr uses procname for status/stop checks.
-procname="${dumpstore_dir}/dumpstore"
-pidfile="/var/run/${name}.pid"
-command="/usr/sbin/daemon"
-command_args="-P ${pidfile} -r -o ${dumpstore_logfile} -m 3 \
-    ${procname} \
-    -addr ${dumpstore_addr} \
-    -dir ${dumpstore_dir} \
-    -config ${dumpstore_config}"
+_bin="${dumpstore_dir}/dumpstore"
+_supervisor_pid="/var/run/${name}-supervisor.pid"
+_child_pid="/var/run/${name}.pid"
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+status_cmd="${name}_status"
+restart_cmd="${name}_restart"
+extra_commands="status"
+
+dumpstore_start() {
+    echo "Starting ${name}."
+    /usr/sbin/daemon \
+        -P ${_supervisor_pid} \
+        -p ${_child_pid} \
+        -r \
+        -o ${dumpstore_logfile} \
+        -m 3 \
+        ${_bin} \
+        -addr ${dumpstore_addr} \
+        -dir ${dumpstore_dir} \
+        -config ${dumpstore_config}
+}
+
+dumpstore_stop() {
+    echo "Stopping ${name}."
+    if [ -f "${_supervisor_pid}" ]; then
+        kill "$(cat ${_supervisor_pid})" 2>/dev/null || true
+        rm -f "${_supervisor_pid}"
+    fi
+    if [ -f "${_child_pid}" ]; then
+        kill "$(cat ${_child_pid})" 2>/dev/null || true
+        rm -f "${_child_pid}"
+    fi
+}
+
+dumpstore_status() {
+    if [ -f "${_supervisor_pid}" ] && kill -0 "$(cat ${_supervisor_pid})" 2>/dev/null; then
+        echo "${name} is running as pid $(cat ${_child_pid} 2>/dev/null)."
+    else
+        echo "${name} is not running."
+        return 1
+    fi
+}
+
+dumpstore_restart() {
+    dumpstore_stop
+    sleep 1
+    dumpstore_start
+}
 
 run_rc_command "$1"
