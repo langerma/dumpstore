@@ -37,6 +37,8 @@ command_args="-p ${pidfile} -o ${dumpstore_logfile} -m 3 \
     -dir ${dumpstore_dir} \
     -config ${dumpstore_config}"
 
+export PATH="${PATH}:/usr/local/bin:/usr/local/sbin"
+
 start_precmd="${name}_prestart"
 
 dumpstore_prestart()
