@@ -31,7 +31,7 @@ load_rc_config ${name}
 pidfile="/var/run/${name}.pid"
 procname="${dumpstore_dir}/dumpstore"
 command="/usr/sbin/daemon"
-command_args="-p ${pidfile} -o ${dumpstore_logfile} -m 3 \
+command_args="-p ${pidfile} -o ${dumpstore_logfile} -m 3 -S -T ${name} \
     ${procname} \
     -addr ${dumpstore_addr} \
     -dir ${dumpstore_dir} \
