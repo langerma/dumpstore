@@ -15,7 +15,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 all: build
 
 build:
-	go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(BINARY) .
+	go build -buildvcs=false -ldflags="-s -w -X main.version=$(VERSION)" -o $(BINARY) .
 
 # Run locally on macOS (or any machine without ZFS/Ansible).
 # Fake CLI stubs in dev/bin/ intercept zfs, zpool, and ansible-playbook.
