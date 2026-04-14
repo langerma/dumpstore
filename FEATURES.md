@@ -46,6 +46,7 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
+| Dev VM environment                 | High     | [#83](https://github.com/langerma/dumpstore/issues/83) | Automated Lima VMs (Linux + FreeBSD) with ZFS; one-command deploy for local testing |
 | UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc` |
 | Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
 | Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |

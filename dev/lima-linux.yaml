@@ -1,0 +1,66 @@
+# Lima VM — Ubuntu 24.04 LTS with ZFS + Ansible
+# Used for dumpstore development and integration testing on Linux.
+#
+# Prerequisites: brew install lima
+# Usage:        make vm-linux-start
+
+vmType: qemu
+os: Linux
+arch: aarch64
+
+cpus: 2
+memory: 2GiB
+disk: 20GiB
+
+# Extra disk for ZFS pool (separate from the OS disk)
+additionalDisks:
+  - name: zfsdata
+    size: 10GiB
+    format: false   # raw, unformatted — ZFS will own it
+
+images:
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+    arch: aarch64
+
+# Forward dumpstore UI port to host
+portForwards:
+  - guestPort: 8080
+    hostPort: 8080
+
+mounts: []
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      export DEBIAN_FRONTEND=noninteractive
+
+      echo "==> Updating apt..."
+      apt-get update -qq
+
+      echo "==> Installing ZFS..."
+      apt-get install -y -qq zfsutils-linux
+
+      echo "==> Installing Ansible + Python..."
+      apt-get install -y -qq ansible python3 python3-pip
+
+      echo "==> Installing optional tools..."
+      apt-get install -y -qq smartmontools rsync
+
+      echo "==> Creating ZFS pool on /dev/vdb..."
+      # Wait for the extra disk to appear
+      for i in $(seq 1 10); do
+        [ -b /dev/vdb ] && break
+        sleep 2
+      done
+      if [ -b /dev/vdb ]; then
+        zpool create -f tank /dev/vdb
+        zfs create tank/data
+        echo "==> ZFS pool 'tank' created."
+      else
+        echo "WARN: /dev/vdb not found — ZFS pool not created. Run: zpool create -f tank <disk>"
+      fi
+
+      echo "==> Provisioning complete."

@@ -496,6 +496,50 @@ sudo ./dumpstore -addr :8080 -dir .
 
 `-dir` must point to the directory that contains `playbooks/` and `static/`. It defaults to the directory of the executable.
 
+## Local development
+
+### Stub mode (no ZFS required)
+
+Run against fake CLI stubs on macOS or any machine without ZFS/Ansible:
+
+```bash
+make dev
+```
+
+`dev/bin/` stubs intercept `zfs`, `zpool`, and `ansible-playbook` with static responses so the full UI renders and write dialogs show op-logs.
+
+### VM mode (real ZFS, Linux and FreeBSD)
+
+Spin up headless Lima VMs with ZFS and Ansible pre-provisioned. Requires [Lima](https://github.com/lima-vm/lima):
+
+```bash
+brew install lima        # Homebrew
+sudo port install lima   # MacPorts
+# or download from https://github.com/lima-vm/lima/releases
+```
+
+**Linux (Ubuntu 24.04, port 8080):**
+
+```bash
+make vm-linux-start    # create + boot (first run provisions the VM, ~5 min)
+make vm-linux-deploy   # cross-compile arm64 binary, rsync, start service
+make vm-linux-ssh      # open a shell inside the VM
+make vm-linux-stop     # suspend
+make vm-linux-destroy  # tear down completely
+```
+
+**FreeBSD 14 (port 8081):**
+
+```bash
+make vm-freebsd-start
+make vm-freebsd-deploy
+make vm-freebsd-ssh
+make vm-freebsd-stop
+make vm-freebsd-destroy
+```
+
+Both VMs run arm64. The Linux VM uses Apple's Virtualization framework (fast). The FreeBSD VM uses QEMU (Apple VZ does not support FreeBSD yet). Both get a `tank` ZFS pool on a dedicated 10 GiB disk created at first boot. Port forwards are fixed — Linux on `:8080`, FreeBSD on `:8081` — so both can be up simultaneously.
+
 ## Uninstall
 
 ```bash
