@@ -408,13 +408,13 @@ export function renderSMBInitStatus() {
   const el = document.getElementById('smb-init-status');
   if (!el) return;
   if (!state.smbInitialized) {
-    el.innerHTML = '<span class="health-badge badge-red">Not initialised</span>';
+    el.innerHTML = '<span class="health-badge health-UNAVAIL">Not initialised</span>';
     return;
   }
   const mtime = state.smbConfMtime
     ? new Date(state.smbConfMtime).toLocaleString()
     : '';
-  el.innerHTML = `<span class="health-badge badge-green">Initialised</span>`
+  el.innerHTML = `<span class="health-badge health-ONLINE">Initialised</span>`
     + (mtime ? `<span class="muted" style="font-size:0.8rem">${esc(mtime)}</span>` : '');
 }
 
