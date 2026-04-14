@@ -92,11 +92,10 @@ func ParseSMBConfig(goos string) (SMBConfig, error) {
 	return parseFromBytes(data)
 }
 
-// RenderToFile renders the full smb.conf from the template and writes it to dst.
+// RenderToFile renders the full smb.conf from the embedded template and writes it to dst.
 func (c *SMBConfig) RenderToFile(dst, goos string) error {
 	tmpl, err := template.New("smb.conf").Funcs(template.FuncMap{
 		"usershareDir": func() string { return UsershareDir(goos) },
-		"isLinux":      func() bool { return goos != "freebsd" },
 	}).Parse(confTemplate)
 	if err != nil {
 		return fmt.Errorf("parse smb.conf template: %w", err)

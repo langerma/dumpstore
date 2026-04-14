@@ -6,11 +6,9 @@
    usershare max shares = 100
    usershare allow guests = no
    usershare owner only = no
-{{- if isLinux}}
    obey pam restrictions = yes
    pam password change = yes
    unix password sync = yes
-{{- end}}
 {{if .Homes}}
 [homes]
    comment = Home directory
