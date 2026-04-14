@@ -57,19 +57,22 @@
 │  internal/system/     │                        │                            │
 │  internal/smart/      │                        │  Run(playbook, extraVars)  │
 │  internal/iscsi/      │                        │                            │
-│                       │                        │                            │
-│  ListPools()          │                        │  exec: ansible-playbook    │
-│  ListDatasets()       │                        │    -i inventory/localhost  │
-│  ListSnapshots()      │                        │    --extra-vars '{...}'    │
-│  IOStats()            │                        │  env: ANSIBLE_STDOUT_      │
-│  GetDatasetProps()    │                        │    CALLBACK=ndjson         │
-│  GetDatasetACL()      │                        │                            │
-│  GetMountpointOwner() │                        │  parse ndjson output       │
-│  PoolStatuses()       │                        │  → []TaskStep              │
-│  Version()            │                        │  streams live via SSE      │
+│  internal/smb/        │                        │                            │
+│                       │                        │  exec: ansible-playbook    │
+│  ListPools()          │                        │    -i inventory/localhost  │
+│  ListDatasets()       │                        │    --extra-vars '{...}'    │
+│  ListSnapshots()      │                        │  env: ANSIBLE_STDOUT_      │
+│  IOStats()            │                        │    CALLBACK=ndjson         │
+│  GetDatasetProps()    │                        │                            │
+│  GetDatasetACL()      │                        │  parse ndjson output       │
+│  GetMountpointOwner() │                        │  → []TaskStep              │
+│  PoolStatuses()       │                        │  streams live via SSE      │
+│  Version()            │                        │                            │
 │  system.Get()         │                        │                            │
 │  system.ListUsers()   │                        │                            │
 │  system.ListGroups()  │                        │                            │
+│  system.ListServices()│                        │                            │
+│  smb.ParseSMBConfig() │                        │                            │
 │  smart.Collect()      │                        │                            │
 │  iscsi.ListTargets()  │                        │                            │
 │                       │                        │                            │
@@ -82,13 +85,49 @@
            │                                                  │
            ▼                                                  ▼
      ZFS kernel                                       playbooks/*.yml
-     subsystem                                        ┌──────────────────────┐
-                                                      │  targets: localhost  │
-                                                      │  gather_facts: false │
-                                                      │  1. assert vars      │
-                                                      │  2. mutating command │
-                                                      └──────────────────────┘
+     subsystem                                        ┌──────────────────────────────────┐
+                                                      │  targets: localhost              │
+                                                      │  gather_facts: false             │
+                                                      │  1. assert vars                  │
+                                                      │  2. mutating command             │
+                                                      │                                  │
+                                                      │  config-owning services only:    │
+                                                      │  2a. create referenced dirs      │
+                                                      │  2b. render full config (tpl)    │
+                                                      │  2c. restart service             │
+                                                      └──────────────────────────────────┘
 ```
+
+## Service ownership model
+
+When dumpstore manages a service it takes **full ownership** of that service's config file. The config is rendered from a Go template on every write — no block-patching, no `lineinfile`, no partial edits. If you manually edit a managed config file, dumpstore will overwrite it on the next write operation.
+
+The rule is binary: **own it completely, or don't touch it at all.**
+
+| Service | Owned? | Config file | Restart mechanism |
+|---------|--------|-------------|-------------------|
+| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |
+| NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
+| iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
+| TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
+| Users / Groups | — | OS is source of truth | n/a |
+| ZFS datasets | — | ZFS kernel properties | n/a |
+
+For config-owning services the write path is extended:
+
+```
+playbooks/smb_apply.yml (example)
+  ┌──────────────────────────────────┐
+  │  targets: localhost              │
+  │  gather_facts: false             │
+  │  1. assert vars                  │
+  │  2. create referenced dirs       │
+  │  3. render full config (template)│
+  │  4. restart service              │
+  └──────────────────────────────────┘
+```
+
+Sub-features (shares, home dirs, Time Machine targets) are gated behind an **init gate** — they are disabled in the UI until the service has been bootstrapped with `POST /api/smb/init` (or equivalent). This prevents partial config states where the config file exists but hasn't been initialised by dumpstore yet.
 
 ## Read/write split
 

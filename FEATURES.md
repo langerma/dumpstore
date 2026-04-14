@@ -46,23 +46,24 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| UPS / NUT integration              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | UPS status display; graceful shutdown on low battery via `upsc` |
-| Drive replacement                  | High     | [#56](https://github.com/langerma/dumpstore/issues/56) | Replace faulted disks, monitor resilver progress, offline/online devices |
-| Scheduled replication              | High     | [#54](https://github.com/langerma/dumpstore/issues/54) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
-| Pool create/import/export          | High     | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
+| UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc` |
+| Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
+| Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
+| Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
 | Dataset rename                     | Medium   | [#21](https://github.com/langerma/dumpstore/issues/21) | Rename a dataset or volume in place |
 | Snapshot clone                     | Medium   | [#22](https://github.com/langerma/dumpstore/issues/22) | Create a new dataset from an existing snapshot |
-| Snapshot scheduling UI             | Medium   | [#55](https://github.com/langerma/dumpstore/issues/55) | Manage auto-snapshot schedules and retention per dataset |
+| Snapshot scheduling UI             | Medium   | [#56](https://github.com/langerma/dumpstore/issues/56) | Manage auto-snapshot schedules and retention per dataset |
 | Pool expansion                     | Medium   | [#57](https://github.com/langerma/dumpstore/issues/57) | Add vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools |
 | Dataset rewrite                    | Medium   | [#50](https://github.com/langerma/dumpstore/issues/50) | Rewrite existing blocks to apply updated properties via `zfs rewrite`; exposed in Edit Dataset dialog |
 | Snapshot diff                      | Medium   | [#24](https://github.com/langerma/dumpstore/issues/24) | Show files changed between two snapshots (`zfs diff`) |
 | Per-user quota tracking            | Medium   | [#25](https://github.com/langerma/dumpstore/issues/25) | Space usage per user/group (`zfs userspace` / `zfs groupspace`) |
-| Log viewer                         | Medium   | [#60](https://github.com/langerma/dumpstore/issues/60) | Tail dumpstore logs, system journal, and ZFS events from the UI |
-| lldap integration                  | Medium   | [#61](https://github.com/langerma/dumpstore/issues/61) | LDAP auth via lldap; Samba passthrough; user/group sync display |
+| Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
+| lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |
+| Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; backward-compatible migration |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
-| Historical I/O graphs              | Low      | [#62](https://github.com/langerma/dumpstore/issues/62) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
+| Historical I/O graphs              | Low      | [#61](https://github.com/langerma/dumpstore/issues/61) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
 | ZFS native encryption              | Low      | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
 | OpenTelemetry                      | Low      | [#49](https://github.com/langerma/dumpstore/issues/49) | Traces, metrics, logs. **Deferred until collector infra available** |
 

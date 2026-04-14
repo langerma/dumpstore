@@ -429,9 +429,10 @@
     </picture>
     <p class="hero-tagline">
       A <strong>lightweight NAS management UI</strong> written in Go — built for Linux and FreeBSD,
-      designed to stay out of the way of a vanilla system.<br><br>
+      designed to stay as close to a vanilla system as possible.<br><br>
       No container runtime. No database. No Node.js. Just a
       <strong>single compiled binary</strong>, some Ansible playbooks, and a handful of static files.
+      Where dumpstore manages a service, it owns the config completely — rendered from a template, never patched.
     </p>
     <div class="hero-actions">
       <a class="btn-primary" href="#install">install</a>
@@ -668,6 +669,11 @@
       <p>
         What I wanted was simple: <strong>observe and manage my storage from a browser</strong>, on a machine that stays as close to a vanilla Linux or FreeBSD installation as possible.
         No agents, no daemons-within-daemons, no frameworks that outlive their welcome. Just a single compiled binary, some Ansible playbooks, and a handful of static files with a lightweight reactive store for efficient UI updates.
+      </p>
+      <p>
+        Where dumpstore does manage a service — Samba, NFS, iSCSI — it takes <strong>full, explicit ownership</strong> of that service's config file.
+        The config is rendered from a template on every write; no block-patching, no partial edits.
+        If you need to run those services alongside another management tool, dumpstore is not the right fit for that service.
       </p>
       <p>
         If you run a Helios64, an old server, or any ZFS box where you care about what is actually installed on it, this might be the tool for you.

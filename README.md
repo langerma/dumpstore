@@ -7,11 +7,15 @@
 
 <p align="center">A lightweight NAS management UI written in Go — built for Linux and FreeBSD, designed to stay out of the way of a vanilla system.</p>
 
+> **Pre-1.0 notice:** dumpstore is under active development. Until v1.0, any release may introduce breaking changes to the API, config format, or behaviour. Use in production at your own risk.
+
 ## Why this exists
 
 I run a [Kobol Helios64](https://wiki.kobol.io/helios64/intro/) as my home NAS — a five-bay ARM board that deserves better than the software ecosystem currently offers it. The existing storage UIs I tried were either too heavy, too opinionated about the underlying distribution, or simply unmaintained. None of them gave me a clean, no-nonsense window into my ZFS pools without pulling in a container runtime, a database, or a Node.js server alongside them.
 
 What I wanted was simple: observe and manage my storage from a browser, on a machine that stays as close to a vanilla Linux or FreeBSD installation as possible. No agents, no daemons-within-daemons, no frameworks that outlive their welcome. Just a single compiled binary, some Ansible playbooks, and a handful of static files.
+
+Where dumpstore does manage a service — Samba, NFS, iSCSI — it takes full, explicit ownership of that service's config. No half-measures: the config file is rendered from a template on every write. If you need to run those services alongside another management tool, dumpstore is not the right fit for that service.
 
 dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, fine-grained permissions, and ZFS send/receive. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
 
@@ -161,6 +165,37 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
                                                       │  2. mutating command │
                                                       └──────────────────────┘
 ```
+
+### Service ownership model
+
+When dumpstore manages a service, it takes **full ownership** of that service's config file. The config is rendered from a Go template on every write — no block-patching, no `lineinfile`, no partial edits. If you manually edit a managed config file, dumpstore will overwrite it on the next write operation.
+
+The rule is binary: **own it completely, or don't touch it at all.**
+
+| Service | Owned? | Config file | Restart mechanism |
+|---------|--------|-------------|-------------------|
+| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |
+| NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
+| iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
+| TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
+| Users / Groups | — | OS is source of truth | n/a |
+| ZFS datasets | — | ZFS kernel properties | n/a |
+
+For config-owning services the write path is extended:
+
+```
+playbooks/smb_apply.yml (example)
+  ┌──────────────────────────────────┐
+  │  targets: localhost              │
+  │  gather_facts: false             │
+  │  1. assert vars                  │
+  │  2. create referenced dirs       │
+  │  3. render full config (template)│
+  │  4. restart service              │
+  └──────────────────────────────────┘
+```
+
+Sub-features (shares, home dirs, Time Machine targets) are gated behind an **init gate** — they are disabled until the service has been bootstrapped with `POST /api/smb/init` (or equivalent). This prevents partial config states.
 
 ### Why the read/write split?
 
@@ -474,52 +509,109 @@ sudo make uninstall
 ├── main.go                          # HTTP server, flag parsing, startup dependency checks
 ├── go.mod
 ├── internal/
-│   ├── zfs/zfs.go                   # Direct zpool/zfs command execution (reads)
-│   ├── zfs/acl.go                   # GetDatasetACL — getfacl/nfs4_getfacl parsing
-│   ├── ansible/runner.go            # Ansible playbook execution + JSON output parsing
-│   ├── api/handlers.go              # Shared infra: validation helpers, Handler struct, RegisterRoutes, SSE
-│   ├── api/zfs_handlers.go          # ZFS handlers: pools, datasets, snapshots, scrub, chown, auto-snapshot
-│   ├── api/user_handlers.go         # User + group handlers, SSH key management
-│   ├── api/acl_handlers.go          # ACL handlers (POSIX + NFSv4)
-│   ├── api/smb_handlers.go          # SMB handlers: shares, users, homes, Time Machine
-│   ├── api/iscsi_handlers.go        # iSCSI target handlers
-│   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
-│   ├── broker/poller.go             # Background poller (ZFS + users/groups) → publishes changes to broker
-│   ├── system/system.go             # Host + process info, ListUsers, ListGroups (/proc, /etc/passwd, /etc/group)
-│   ├── iscsi/iscsi.go              # iSCSI target listing (targetcli on Linux, ctld on FreeBSD)
-│   └── smart/smart.go              # S.M.A.R.T. data via smartctl
+│   ├── platform/
+│   │   └── paths.go                 # ConfigDir(goos) — /etc/dumpstore or /usr/local/etc/dumpstore
+│   ├── zfs/
+│   │   ├── zfs.go                   # ListPools, ListDatasets, ListSnapshots, IOStats, PoolStatuses (direct CLI)
+│   │   ├── acl.go                   # GetPosixACL, GetNFS4ACL — getfacl/nfs4_getfacl parsing
+│   │   └── cronparse.go             # Parse zfsutils-linux / zfstools cron entries for scrub schedules
+│   ├── ansible/
+│   │   ├── runner.go                # Run(playbook, extraVars) → PlaybookOutput; ndjson output parsing
+│   │   └── metrics.go               # Prometheus counters/histograms for Ansible playbook runs
+│   ├── auth/
+│   │   ├── config.go                # Load/save dumpstore.conf (username, password hash, TLS, trusted proxies)
+│   │   ├── config_handlers.go       # API handlers for auth config changes (username, password)
+│   │   ├── login.go                 # Session-based login handler; bcrypt password verify
+│   │   ├── middleware.go            # Auth middleware: session cookie + X-Remote-User trusted proxy
+│   │   ├── ratelimit.go             # Per-IP rate limiter for login endpoint
+│   │   ├── session.go               # In-memory session store
+│   │   └── setpassword.go           # --set-password CLI flag handler
+│   ├── smb/
+│   │   └── config.go                # ParseSMBConfig, RenderSMBConfig — Go template for full smb.conf ownership
+│   ├── api/
+│   │   ├── handlers.go              # Handler struct, RegisterRoutes, validation helpers, writeJSON/writeError
+│   │   ├── zfs_handlers.go          # ZFS: pools, datasets, snapshots, scrub, chown, auto-snapshot
+│   │   ├── user_handlers.go         # Users, groups, SSH key management
+│   │   ├── acl_handlers.go          # POSIX + NFSv4 ACL handlers
+│   │   ├── smb_handlers.go          # SMB: init, shares, users, homes, Time Machine
+│   │   ├── iscsi_handlers.go        # iSCSI target create/delete/list
+│   │   ├── tls_handlers.go          # TLS: status, self-signed gen, ACME issue/renew, load existing cert
+│   │   ├── service_handlers.go      # Service start/stop/restart/enable/disable (Samba, NFS, iSCSI)
+│   │   ├── auth_handlers.go         # Login, logout, session check
+│   │   ├── metrics.go               # GET /metrics — Prometheus exposition
+│   │   ├── httpmetrics.go           # HTTP middleware: request count + latency histograms
+│   │   └── reqid.go                 # X-Request-ID middleware (read from proxy or generate)
+│   ├── broker/
+│   │   ├── broker.go                # Thread-safe pub/sub (Subscribe/Publish/Unsubscribe)
+│   │   └── poller.go                # Background poller → publishes pool/dataset/snapshot/iostat/service changes
+│   ├── schema/
+│   │   └── schema.go                # GET /api/schema — machine-readable API schema
+│   ├── system/
+│   │   ├── system.go                # ListUsers, ListGroups, UIDMin, softwareVersions, getSysInfo
+│   │   └── services.go              # ListServices, ServiceStatus — systemd (Linux) and rc.d (FreeBSD)
+│   ├── iscsi/
+│   │   └── iscsi.go                 # ListTargets — targetcli saveconfig (Linux) / /etc/ctl.conf (FreeBSD)
+│   └── smart/
+│       └── smart.go                 # ListDrives — smartctl per-disk health data
 ├── playbooks/
-│   ├── inventory/localhost          # Local connection inventory
+│   ├── inventory/localhost          # ansible_connection=local, ansible_python_interpreter=auto_silent
+│   │
 │   ├── zfs_dataset_create.yml       # Create filesystem or volume
 │   ├── zfs_dataset_set.yml          # Update dataset properties (set / inherit)
 │   ├── zfs_dataset_destroy.yml      # Destroy dataset or volume
-│   ├── zfs_snapshot_create.yml      # Create snapshot
-│   ├── zfs_snapshot_destroy.yml     # Destroy snapshot
-│   ├── user_create.yml              # Create local user
-│   ├── user_modify.yml              # Modify user (shell, groups, password)
-│   ├── user_delete.yml              # Delete user and home directory
-│   ├── group_create.yml             # Create local group
-│   ├── group_modify.yml             # Modify group (name, GID, members)
-│   ├── group_delete.yml             # Delete local group
+│   ├── zfs_snapshot_create.yml      # Create snapshot (optionally recursive)
+│   ├── zfs_snapshot_destroy.yml     # Destroy single snapshot
+│   ├── zfs_snapshot_destroy_batch.yml # Destroy multiple snapshots in one run
+│   ├── zfs_autosnap_set.yml         # Set com.sun:auto-snapshot* properties per dataset
+│   ├── zfs_scrub_start.yml          # zpool scrub <pool>
+│   ├── zfs_scrub_cancel.yml         # zpool scrub -s <pool>
+│   ├── zfs_scrub_periodic_enable.yml   # Enable periodic scrub via FreeBSD periodic.conf
+│   ├── zfs_scrub_periodic_disable.yml  # Disable periodic scrub via FreeBSD periodic.conf
+│   ├── zfs_scrub_zfsutils_enable.yml   # Enable periodic scrub via zfsutils-linux cron
+│   ├── zfs_scrub_zfsutils_disable.yml  # Disable periodic scrub via zfsutils-linux cron
+│   │
+│   ├── dataset_chown.yml            # Set owner/group on dataset mountpoint
 │   ├── acl_set_posix.yml            # Add/modify POSIX ACL entry (setfacl -m)
 │   ├── acl_remove_posix.yml         # Remove POSIX ACL entry (setfacl -x)
 │   ├── acl_set_nfs4.yml             # Add NFSv4 ACL entry (nfs4_setfacl -a)
 │   ├── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
-│   ├── smb_init.yml                 # First-time Samba setup: create smb4.conf on FreeBSD, usershares dir, restart
-│   ├── smb_apply.yml               # Atomic full smb.conf deploy: create dirs, write rendered config, restart
-│   ├── smb_usershare_set.yml        # Create/update a Samba usershare for a dataset
-│   ├── smb_usershare_unset.yml      # Remove a Samba usershare
-│   ├── smb_user_add.yml             # Add a local user to smbpasswd
-│   ├── smb_user_remove.yml          # Remove a user from smbpasswd
-│   ├── iscsi_target_create.yml      # Create iSCSI target (Linux/targetcli)
-│   ├── iscsi_target_delete.yml      # Remove iSCSI target (Linux/targetcli)
-│   ├── iscsi_target_create_freebsd.yml  # Create iSCSI target (FreeBSD/ctld)
-│   └── iscsi_target_delete_freebsd.yml  # Remove iSCSI target (FreeBSD/ctld)
+│   │
+│   ├── user_create.yml              # Create local Unix user
+│   ├── user_modify.yml              # Modify user (shell, groups, password, home)
+│   ├── user_delete.yml              # Delete local user and home directory
+│   ├── user_ssh_key_add.yml         # Append entry to ~/.ssh/authorized_keys
+│   ├── user_ssh_key_remove.yml      # Remove entry from ~/.ssh/authorized_keys
+│   ├── group_create.yml             # Create local group
+│   ├── group_modify.yml             # Modify group (name, GID, members)
+│   ├── group_delete.yml             # Delete local group
+│   │
+│   ├── smb_init.yml                 # First-time Samba bootstrap: create dirs, render initial smb.conf, restart
+│   ├── smb_apply.yml                # Atomic full smb.conf render + restart (all SMB write ops call this)
+│   ├── smb_usershare_set.yml        # Create/update a usershare via net usershare
+│   ├── smb_usershare_unset.yml      # Remove a usershare
+│   ├── smb_user_add.yml             # Add user to smbpasswd / tdbsam
+│   ├── smb_user_remove.yml          # Remove user from smbpasswd / tdbsam
+│   │
+│   ├── iscsi_target_create.yml      # Create iSCSI target (Linux / targetcli)
+│   ├── iscsi_target_delete.yml      # Remove iSCSI target (Linux / targetcli)
+│   ├── iscsi_target_create_freebsd.yml  # Create iSCSI target (FreeBSD / ctld)
+│   ├── iscsi_target_delete_freebsd.yml  # Remove iSCSI target (FreeBSD / ctld)
+│   │
+│   ├── tls_gencert.yml              # Generate self-signed TLS certificate (openssl)
+│   ├── tls_set_config.yml           # Write TLS cert/key paths into dumpstore.conf
+│   ├── tls_acme_issue.yml           # Issue certificate via ACME / lego
+│   ├── tls_acme_renew.yml           # Renew ACME certificate
+│   │
+│   ├── auth_set_password.yml        # Update bcrypt password hash in dumpstore.conf
+│   ├── auth_set_username.yml        # Update username in dumpstore.conf
+│   │
+│   ├── service_control_linux.yml    # systemctl start/stop/restart/enable/disable
+│   └── service_control_freebsd.yml  # service + sysrc enable/disable
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
-│   ├── index.html                   # Single-page application shell + dialogs
-│   ├── app.js                       # Vanilla JS frontend, no dependencies
-│   ├── style.css                    # Dark monospace theme
+│   ├── index.html                   # Single-page application shell + all dialogs
+│   ├── app.js                       # Vanilla JS frontend — state, render fns, API calls
+│   ├── style.css                    # Dark monospace theme; CSS variables in :root
 │   └── images/                      # Logos served by the HTTP file server
 ├── contrib/
 │   ├── dumpstore.service            # systemd unit file (Linux)
