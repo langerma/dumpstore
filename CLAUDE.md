@@ -5,6 +5,7 @@
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+- **Full ownership or hands off**: If dumpstore manages a service, it owns the config completely — rendered from a template, no block-patching. If it doesn't manage a service, it never touches that service's config. No half-ownership.
 
 ---
 
@@ -64,6 +65,31 @@ External Go dependencies (both are official golang.org/x packages, same governan
 ---
 
 ## Architecture
+
+### Service ownership principle
+
+**If dumpstore manages a service → full ownership, no exceptions.**
+**If dumpstore does not manage a service → hands completely off.**
+
+When dumpstore manages a service it:
+- Owns the config file entirely — rendered from a template on every write, no block-patching
+- Creates all referenced directories and prerequisite state as part of apply
+- Restarts the service via the OS mechanism (systemd/rc.d) after every config change
+- Exposes an init gate — sub-features are disabled until the service is bootstrapped
+
+The service lifecycle (unit file, enable/disable) stays with the OS. dumpstore owns the config, not the service unit.
+
+**Current ownership map:**
+
+| Service | Owns config? | Config file |
+|---------|-------------|-------------|
+| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` |
+| NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) |
+| iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` |
+| TLS | ✅ full | `dumpstore.conf` |
+| Users/Groups | — | OS is source of truth (`useradd`/`groupadd`) |
+
+Do not add partial-ownership patterns (block-patching, lineinfile into a shared config). Either own the file fully or don't touch it.
 
 ### Read / write split
 
