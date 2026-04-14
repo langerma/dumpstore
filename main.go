@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"dumpstore/internal/api"
 	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
+	"dumpstore/internal/platform"
 	"dumpstore/internal/schema"
 )
 
@@ -36,7 +38,7 @@ func main() {
 		baseDir     = flag.String("dir", "", "Base directory (contains playbooks/ and static/); defaults to executable location")
 		debug       = flag.Bool("debug", false, "Enable debug log level")
 		showVersion = flag.Bool("version", false, "Print version and exit")
-		configPath  = flag.String("config", "/etc/dumpstore/dumpstore.conf", "Config file path")
+		configPath  = flag.String("config", platform.ConfigDir(runtime.GOOS)+"/dumpstore.conf", "Config file path")
 		setPassword = flag.Bool("set-password", false, "Set admin password and exit")
 		tlsFlag     = flag.Bool("tls", false, "Enable HTTPS (requires tls_cert_path and tls_key_path in config)")
 		tlsPort     = flag.String("tls-port", "443", "HTTPS listen port")

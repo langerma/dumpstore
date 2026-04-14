@@ -527,21 +527,21 @@
           <span class="pool-name">SMB sharing</span>
           <span class="health-badge badge-blue">usershares</span>
         </div>
-        <p>Samba usershares per dataset. Manage Samba users. One-click setup playbook that configures usershares, disables <code>[homes]</code>, and enables PAM passthrough.</p>
+        <p>Samba usershares per dataset. Manage Samba users. dumpstore takes full ownership of <code>smb.conf</code> — rendered from a template on every write. All sub-features gated behind one-time initialisation; directories created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">SMB home shares</span>
           <span class="health-badge badge-blue">[homes]</span>
         </div>
-        <p>Enable the Samba <code>[homes]</code> section so each authenticated user gets a personal share mapped to a subdirectory. Pick a ZFS dataset as base path or specify a custom one. Configurable browseable, read only, create mask, and directory mask.</p>
+        <p>Enable the Samba <code>[homes]</code> section so each authenticated user gets a personal share mapped to a subdirectory. Pick a ZFS dataset as base path or specify a custom path. Base directory created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">Time Machine shares</span>
           <span class="health-badge badge-blue">vfs_fruit</span>
         </div>
-        <p>Create Samba shares configured as macOS Time Machine backup targets using <code>vfs_fruit</code> with catia and streams_xattr. Multiple named shares each backed by a different ZFS dataset. Configurable max size quota and valid users per share.</p>
+        <p>Create Samba shares configured as macOS Time Machine backup targets using <code>vfs_fruit</code>. Multiple named shares each backed by a different ZFS dataset. Configurable max size quota and valid users; target directory created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -627,7 +627,7 @@
           <span class="pool-name">Authentication</span>
           <span class="health-badge badge-green">security</span>
         </div>
-        <p>Session-based login with a bcrypt-hashed password stored in <code>/etc/dumpstore/dumpstore.conf</code>. Set up during install via <code>--set-password</code>. Per-IP rate limiting (10 attempts/60 s). Reverse proxy delegation via <code>X-Remote-User</code> from trusted CIDRs. No password configured? The service binds to loopback only until one is set. Change password or username any time from the Users &amp; Groups tab.</p>
+        <p>Session-based login with a bcrypt-hashed password stored in <code>/etc/dumpstore/dumpstore.conf</code> (Linux) / <code>/usr/local/etc/dumpstore/dumpstore.conf</code> (FreeBSD). Set up during install via <code>--set-password</code>. Per-IP rate limiting (10 attempts/60 s). Reverse proxy delegation via <code>X-Remote-User</code> from trusted CIDRs. No password configured? The service binds to loopback only until one is set. Change password or username any time from the Users &amp; Groups tab.</p>
       </div>
     </div>
 
@@ -853,7 +853,7 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
     </div>
     <p style="max-width:640px;line-height:1.6;color:var(--text-muted)">
       dumpstore has built-in session-based authentication. A bcrypt-hashed password is set during install and stored in
-      <code>/etc/dumpstore/dumpstore.conf</code>. If no password is configured the service binds to <code>127.0.0.1</code> only.
+      <code>/etc/dumpstore/dumpstore.conf</code> (Linux) / <code>/usr/local/etc/dumpstore/dumpstore.conf</code> (FreeBSD). If no password is configured the service binds to <code>127.0.0.1</code> only.
       dumpstore runs as root (required for ZFS). See <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md" style="color:var(--accent)">SECURITY.md</a>
       for notes on TLS and the recommended deployment topology.
     </p>

@@ -2,7 +2,7 @@
 # auth_set_username.yml — update the admin username in the config file.
 #
 # Required extra vars:
-#   config_path : absolute path to dumpstore.conf (e.g. /etc/dumpstore/dumpstore.conf)
+#   config_path : absolute path to dumpstore.conf (e.g. /etc/dumpstore/dumpstore.conf or /usr/local/etc/dumpstore/dumpstore.conf on FreeBSD)
 #   username    : new admin username (non-empty, validated in Go before calling)
 - hosts: localhost
   gather_facts: false

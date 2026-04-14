@@ -11,7 +11,7 @@
 #   dumpstore_enable (bool):   Set to YES to enable dumpstore.
 #   dumpstore_addr (str):      Listen address. Default: ":8080"
 #   dumpstore_dir (path):      Base directory. Default: /usr/local/lib/dumpstore
-#   dumpstore_config (path):   Config file. Default: /etc/dumpstore/dumpstore.conf
+#   dumpstore_config (path):   Config file. Default: /usr/local/etc/dumpstore/dumpstore.conf
 #   dumpstore_logfile (path):  Log file. Default: /var/log/dumpstore.log
 
 . /etc/rc.subr
@@ -25,7 +25,7 @@ load_rc_config ${name}
 : ${dumpstore_enable:="NO"}
 : ${dumpstore_addr:=":8080"}
 : ${dumpstore_dir:="/usr/local/lib/dumpstore"}
-: ${dumpstore_config:="/etc/dumpstore/dumpstore.conf"}
+: ${dumpstore_config:="/usr/local/etc/dumpstore/dumpstore.conf"}
 : ${dumpstore_logfile:="/var/log/dumpstore.log"}
 
 pidfile="/var/run/${name}.pid"

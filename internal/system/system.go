@@ -156,138 +156,6 @@ func ListSambaUsers() ([]string, error) {
 	return users, nil
 }
 
-// SMBHomesConfig describes the current state of the [homes] section in smb.conf.
-type SMBHomesConfig struct {
-	Enabled       bool   `json:"enabled"`
-	Path          string `json:"path"`
-	Browseable    string `json:"browseable"`
-	ReadOnly      string `json:"read_only"`
-	CreateMask    string `json:"create_mask"`
-	DirectoryMask string `json:"directory_mask"`
-}
-
-// smbConfPath returns the platform-specific path to smb.conf.
-func smbConfPath() string {
-	if runtime.GOOS == "freebsd" {
-		return "/usr/local/etc/smb4.conf"
-	}
-	return "/etc/samba/smb.conf"
-}
-
-// ParseSMBHomes reads smb.conf and returns the current [homes] configuration.
-// Returns Enabled=false if smb.conf is missing or has no [homes] section.
-func ParseSMBHomes() SMBHomesConfig {
-	cfg := SMBHomesConfig{
-		Browseable:    "no",
-		ReadOnly:      "no",
-		CreateMask:    "0644",
-		DirectoryMask: "0755",
-	}
-	data, err := os.ReadFile(smbConfPath())
-	if err != nil {
-		return cfg
-	}
-	lines := strings.Split(string(data), "\n")
-	inHomes := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.EqualFold(trimmed, "[homes]") {
-			inHomes = true
-			cfg.Enabled = true
-			continue
-		}
-		if inHomes && strings.HasPrefix(trimmed, "[") {
-			break // next section
-		}
-		if !inHomes {
-			continue
-		}
-		parts := strings.SplitN(trimmed, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		switch strings.ToLower(key) {
-		case "path":
-			cfg.Path = val
-		case "browseable", "browsable":
-			cfg.Browseable = val
-		case "read only":
-			cfg.ReadOnly = val
-		case "create mask", "create mode":
-			cfg.CreateMask = val
-		case "directory mask", "directory mode":
-			cfg.DirectoryMask = val
-		}
-	}
-	return cfg
-}
-
-// TimeMachineShare describes a single Time Machine backup share in smb.conf.
-type TimeMachineShare struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	MaxSize    string `json:"max_size"`
-	ValidUsers string `json:"valid_users"`
-}
-
-// ParseTimeMachineShares reads smb.conf and returns all shares configured
-// as Time Machine targets (sections containing "fruit:time machine = yes").
-func ParseTimeMachineShares() []TimeMachineShare {
-	data, err := os.ReadFile(smbConfPath())
-	if err != nil {
-		return []TimeMachineShare{}
-	}
-
-	var result []TimeMachineShare
-	var cur *TimeMachineShare
-	isTM := false
-
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-			if cur != nil && isTM {
-				result = append(result, *cur)
-			}
-			name := trimmed[1 : len(trimmed)-1]
-			if strings.EqualFold(name, "global") || strings.EqualFold(name, "homes") || strings.EqualFold(name, "printers") {
-				cur = nil
-				isTM = false
-				continue
-			}
-			cur = &TimeMachineShare{Name: name}
-			isTM = false
-			continue
-		}
-		if cur == nil {
-			continue
-		}
-		parts := strings.SplitN(trimmed, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		switch strings.ToLower(key) {
-		case "path":
-			cur.Path = val
-		case "fruit:time machine":
-			if strings.EqualFold(val, "yes") {
-				isTM = true
-			}
-		case "fruit:time machine max size":
-			cur.MaxSize = val
-		case "valid users":
-			cur.ValidUsers = val
-		}
-	}
-	if cur != nil && isTM {
-		result = append(result, *cur)
-	}
-	return result
-}
-
 // ListAuthorizedKeys reads ~/.ssh/authorized_keys for the given home directory.
 // Returns one entry per non-blank, non-comment line.
 // Returns an empty slice when the file does not exist.
@@ -640,6 +508,7 @@ func detectPkgManager() string {
 		{"pacman", "--version"},
 		{"zypper", "--version"},
 		{"apk", "--version"},
+		{"pkg", "--version"},
 	}
 	for _, m := range managers {
 		if v := probeVersion(m.cmd, m.varg); v != "" {
@@ -647,6 +516,38 @@ func detectPkgManager() string {
 		}
 	}
 	return ""
+}
+
+// SambaInstallHint returns a distro-specific install command when smbd is not
+// found. Returns "" if smbd is already available in PATH or at the FreeBSD
+// default path.
+func SambaInstallHint() string {
+	// Check standard PATH first, then FreeBSD default location.
+	if _, err := exec.LookPath("smbd"); err == nil {
+		return ""
+	}
+	if _, err := os.Stat("/usr/local/sbin/smbd"); err == nil {
+		return ""
+	}
+
+	managers := []struct {
+		cmd  string
+		hint string
+	}{
+		{"apt", "apt install samba"},
+		{"dnf", "dnf install samba"},
+		{"yum", "yum install samba"},
+		{"pacman", "pacman -S samba"},
+		{"zypper", "zypper install samba"},
+		{"apk", "apk add samba"},
+		{"pkg", "pkg install samba416"},
+	}
+	for _, m := range managers {
+		if _, err := exec.LookPath(m.cmd); err == nil {
+			return m.hint
+		}
+	}
+	return "install the samba package for your distribution"
 }
 
 // probeISCSIBackend returns "targetcli <version>" on Linux or "ctld (installed)"

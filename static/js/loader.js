@@ -42,7 +42,7 @@ export async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbStatus, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
@@ -53,6 +53,7 @@ export async function loadAll() {
       api('GET', '/api/users').catch(() => null),
       api('GET', '/api/groups').catch(() => null),
       api('GET', '/api/smb-users').catch(() => null),
+      api('GET', '/api/smb/status').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => null),
       api('GET', '/api/smb/homes').catch(() => null),
       api('GET', '/api/smb/timemachine').catch(() => null),
@@ -75,6 +76,12 @@ export async function loadAll() {
       if (smbData !== null) {
         storeSet('sambaAvailable', smbData?.available ?? false);
         storeSet('sambaUsers', smbData?.users || []);
+      }
+      if (smbStatus !== null) {
+        storeSet('smbInitialized', smbStatus?.initialized ?? false);
+        storeSet('smbConfPath', smbStatus?.conf_path ?? '');
+        storeSet('smbOs', smbStatus?.os ?? '');
+        storeSet('smbConfMtime', smbStatus?.conf_mtime ?? '');
       }
       if (smbShares !== null) storeSet('smbShares', smbShares);
       if (smbHomes !== null) storeSet('smbHomes', smbHomes);

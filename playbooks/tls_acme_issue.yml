@@ -4,7 +4,7 @@
 # Required extra vars:
 #   email    : ACME account email (e.g. admin@example.com)
 #   domain   : domain name to issue cert for (e.g. mynas.example.com)
-#   cert_dir : directory to store lego output (e.g. /etc/dumpstore/tls/acme)
+#   cert_dir : directory to store lego output (e.g. /etc/dumpstore/tls/acme or /usr/local/etc/dumpstore/tls/acme on FreeBSD)
 #
 # Uses TLS-ALPN-01 challenge (--tls flag) on port 443.
 # Ensure dumpstore is not already listening on port 443 when running this.

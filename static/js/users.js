@@ -403,9 +403,28 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   }
 });
 
+// ── Render: SMB init status badge ────────────────────────────────────────────
+export function renderSMBInitStatus() {
+  const el = document.getElementById('smb-init-status');
+  if (!el) return;
+  if (!state.smbInitialized) {
+    el.innerHTML = '<span class="health-badge health-UNAVAIL">Not initialised</span>';
+    return;
+  }
+  const mtime = state.smbConfMtime
+    ? new Date(state.smbConfMtime).toLocaleString()
+    : '';
+  el.innerHTML = `<span class="health-badge health-ONLINE">Initialised</span>`
+    + (mtime ? `<span class="muted" style="font-size:0.8rem">${esc(mtime)}</span>` : '');
+}
+
 // ── Render: SMB Home Shares ───────────────────────────────────────────────────
 export function renderSMBHomes() {
   const wrap = document.getElementById('smb-homes-wrap');
+  if (!state.smbInitialized) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba not initialised — click <strong>Initialize Samba</strong> above to get started.</div>';
+    return;
+  }
   const cfg = state.smbHomes;
   if (!cfg.enabled) {
     wrap.innerHTML = `
@@ -527,6 +546,10 @@ document.getElementById('smbHomesDisableBtn').addEventListener('click', async ()
 // ── Render: Time Machine Shares ───────────────────────────────────────────────
 export function renderTimeMachine() {
   const wrap = document.getElementById('tm-shares-wrap');
+  if (!state.smbInitialized) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba not initialised — click <strong>Initialize Samba</strong> above to get started.</div>';
+    return;
+  }
   const shares = state.timeMachineShares || [];
   if (!shares.length) {
     wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">No Time Machine shares configured.</div>';
@@ -628,6 +651,10 @@ document.getElementById('tmCreateBtn').addEventListener('click', async () => {
 // ── Render: SMB Users ─────────────────────────────────────────────────────────
 export function renderSambaUsers() {
   const wrap = document.getElementById('smb-users-wrap');
+  if (!state.smbInitialized) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba not initialised — click <strong>Initialize Samba</strong> above to get started.</div>';
+    return;
+  }
   if (!state.sambaAvailable) {
     wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba (pdbedit) not available on this system.</div>';
     return;
@@ -740,11 +767,20 @@ document.getElementById('configureSambaCancelBtn').addEventListener('click', () 
 
 document.getElementById('configureSambaConfirmBtn').addEventListener('click', async () => {
   configureSambaDialog.close();
-  showOpLogRunning('Configuring Samba…');
+  showOpLogRunning('Initialising Samba…');
   try {
-    const result = await api('POST', '/api/smb-config/pam');
-    showOpLog('Samba configured', result.tasks, null);
+    const result = await api('POST', '/api/smb/init');
+    showOpLog('Samba initialised', result.tasks, null);
+    const status = await api('GET', '/api/smb/status').catch(() => null);
+    if (status !== null) {
+      storeBatch(() => {
+        storeSet('smbInitialized', status?.initialized ?? false);
+        storeSet('smbConfPath', status?.conf_path ?? '');
+        storeSet('smbOs', status?.os ?? '');
+        storeSet('smbConfMtime', status?.conf_mtime ?? '');
+      });
+    }
   } catch (err) {
-    showOpLog('Failed to configure Samba', err.tasks, err.message);
+    showOpLog('Failed to initialise Samba', err.tasks, err.message);
   }
 });

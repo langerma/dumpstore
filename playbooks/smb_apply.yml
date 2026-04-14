@@ -1,0 +1,48 @@
+---
+# smb_apply.yml — Atomically apply a fully rendered smb.conf and restart Samba.
+#
+# Called by dumpstore after rendering the complete config from its internal
+# template. This playbook creates any referenced directories, deploys the
+# rendered file, and restarts the service.
+#
+# Required extra vars:
+#   src             – path to the rendered smb.conf temp file
+#   smb_conf        – destination path (e.g. /etc/samba/smb.conf)
+#   dirs            – JSON list of directories to ensure exist (may be empty: [])
+#   samba_services  – JSON list of service names to restart
+
+- name: Apply dumpstore Samba configuration
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert required variables are defined
+      ansible.builtin.assert:
+        that:
+          - src is defined and src | length > 0
+          - smb_conf is defined and smb_conf | length > 0
+          - dirs is defined
+          - samba_services is defined and samba_services | length > 0
+        fail_msg: "src, smb_conf, dirs, and samba_services are required"
+
+    - name: Create referenced directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        mode: "0755"
+      loop: "{{ dirs | from_json }}"
+      when: (dirs | from_json) | length > 0
+
+    - name: Deploy smb.conf atomically
+      ansible.builtin.copy:
+        src: "{{ src }}"
+        dest: "{{ smb_conf }}"
+        owner: root
+        mode: "0644"
+        backup: true
+
+    - name: Restart Samba services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ samba_services | from_json }}"

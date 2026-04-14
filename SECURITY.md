@@ -6,15 +6,20 @@ dumpstore is designed for **trusted, private networks** (home lab, local LAN). I
 
 ## Authentication
 
-dumpstore requires a password to access the UI and API. The password is bcrypt-hashed (cost 12) and stored in `/etc/dumpstore/dumpstore.conf` (mode `0600`). Session tokens are 32 bytes from `crypto/rand` (256-bit entropy), stored in memory, and expire after a configurable TTL (default 24 h).
+dumpstore requires a password to access the UI and API. The password is bcrypt-hashed (cost 12) and stored in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD) (mode `0600`). Session tokens are 32 bytes from `crypto/rand` (256-bit entropy), stored in memory, and expire after a configurable TTL (default 24 h).
 
 Login attempts are rate-limited to 10 per IP per 60 seconds.
 
 **Set or reset the password:**
 
 ```bash
+# Linux
 sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /etc/dumpstore/dumpstore.conf
 sudo systemctl restart dumpstore
+
+# FreeBSD
+sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /usr/local/etc/dumpstore/dumpstore.conf
+sudo service dumpstore restart
 ```
 
 If no password is configured the service binds to `127.0.0.1` only and logs a warning.

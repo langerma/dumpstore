@@ -12,6 +12,10 @@ export const state = {
   groups: [],
   sambaUsers: [],
   sambaAvailable: false,
+  smbInitialized: false,  // true when smb.conf exists at the OS path
+  smbConfPath: '',        // OS-specific path, from GET /api/smb/status
+  smbOs: '',              // 'linux' or 'freebsd', from GET /api/smb/status
+  smbConfMtime: '',       // RFC3339 mtime of smb.conf, from GET /api/smb/status
   smbShares: [],      // [{name, path}] from net usershare info
   smbHomes: { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' },
   timeMachineShares: [],  // [{name, path, max_size, valid_users}]
