@@ -1,0 +1,74 @@
+---
+# smb_init.yml — First-time Samba initialisation for dumpstore.
+#
+# Creates the OS-specific smb.conf (FreeBSD only — Linux packages provide one),
+# creates the usershares directory with correct permissions, and restarts Samba.
+# Safe to run multiple times (idempotent).
+#
+# No required extra vars — OS is detected via gather_facts.
+
+- name: Initialise Samba for dumpstore
+  hosts: localhost
+  gather_facts: true
+  tasks:
+    - name: Set OS-specific Samba variables
+      ansible.builtin.set_fact:
+        smb_conf: >-
+          {{ '/usr/local/etc/smb4.conf'
+             if ansible_os_family == 'FreeBSD'
+             else '/etc/samba/smb.conf' }}
+        usershares_dir: >-
+          {{ '/var/db/samba4/usershares'
+             if ansible_os_family == 'FreeBSD'
+             else '/var/lib/samba/usershares' }}
+        samba_services: >-
+          {{ ['samba_server']
+             if ansible_os_family == 'FreeBSD'
+             else ['smbd', 'nmbd'] }}
+
+    - name: Check smb.conf exists
+      ansible.builtin.stat:
+        path: "{{ smb_conf }}"
+      register: smb_conf_stat
+
+    - name: Fail if smb.conf not found on Linux (package must be installed)
+      ansible.builtin.fail:
+        msg: >-
+          {{ smb_conf }} not found — install the samba package first
+          (e.g. apt install samba / dnf install samba).
+      when: not smb_conf_stat.stat.exists and ansible_os_family != 'FreeBSD'
+
+    - name: Create minimal smb.conf on FreeBSD if absent
+      ansible.builtin.copy:
+        dest: "{{ smb_conf }}"
+        owner: root
+        group: wheel
+        mode: "0644"
+        force: false
+        content: |
+          # This file is managed by dumpstore. Manual edits will be overwritten.
+          [global]
+             workgroup = WORKGROUP
+             server string = Samba Server
+      when: ansible_os_family == 'FreeBSD' and not smb_conf_stat.stat.exists
+
+    - name: Ensure sambashare group exists (Linux only)
+      ansible.builtin.group:
+        name: sambashare
+        state: present
+      when: ansible_os_family != 'FreeBSD'
+
+    - name: Create usershares directory
+      ansible.builtin.file:
+        path: "{{ usershares_dir }}"
+        state: directory
+        owner: root
+        group: "{{ 'sambashare' if ansible_os_family != 'FreeBSD' else 'wheel' }}"
+        mode: "{{ '1770' if ansible_os_family != 'FreeBSD' else '1755' }}"
+
+    - name: Restart Samba services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ samba_services }}"
+      failed_when: false

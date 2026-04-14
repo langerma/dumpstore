@@ -33,9 +33,9 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
-- **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
-- **SMB home shares** — enable and configure the Samba `[homes]` section in `smb.conf` so each authenticated user automatically gets a personal share mapped to a subdirectory; configurable base path (pick a ZFS dataset or specify a custom path), browseable, read only, create mask, and directory mask
-- **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit` with catia and streams_xattr; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users per share
+- **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); dumpstore takes full ownership of `smb.conf` / `smb4.conf` and renders it from a template on every write; all sub-features gated behind one-time initialisation (`POST /api/smb/init`); cross-platform (Linux and FreeBSD)
+- **SMB home shares** — enable and configure the Samba `[homes]` section; configurable base path (pick a ZFS dataset or specify a custom path), browseable, read only, create mask, and directory mask; base directory is created automatically on apply
+- **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users; target directory created automatically on apply
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN (auto-generated, editable), portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
@@ -142,7 +142,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  system.ListUsers()   │                        │                            │
 │  system.ListGroups()  │                        │                            │
 │  system.ListSamba*()  │                        │                            │
-│  system.ParseSMBHomes()│                       │                            │
+│  smb.ParseSMBConfig() │                        │                            │
 │  smart.Collect()      │                        │                            │
 │  iscsi.ListTargets()  │                        │                            │
 │                       │                        │                            │
@@ -248,15 +248,16 @@ POST   /api/smb-share/{ds}    → smb_usershare_set.yml     (ansible)
 DELETE /api/smb-share/{ds}    → smb_usershare_unset.yml   (ansible)
 POST   /api/smb-users/{name}  → smb_user_add.yml          (ansible)
 DELETE /api/smb-users/{name}  → smb_user_remove.yml       (ansible)
-POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
+GET    /api/smb/status         → smb.IsInitialized()      (direct)
+POST   /api/smb/init           → smb_init.yml             (ansible)
 
-GET    /api/smb/homes          → parse smb.conf [homes]   (direct)
-POST   /api/smb/homes          → smb_homes_set.yml        (ansible)
-DELETE /api/smb/homes          → smb_homes_unset.yml      (ansible)
+GET    /api/smb/homes          → smb.ParseSMBConfig()     (direct)
+POST   /api/smb/homes          → smb_apply.yml            (ansible, full config render)
+DELETE /api/smb/homes          → smb_apply.yml            (ansible, full config render)
 
-GET    /api/smb/timemachine    → parse smb.conf fruit:time machine  (direct)
-POST   /api/smb/timemachine    → smb_timemachine_set.yml  (ansible)
-DELETE /api/smb/timemachine/{n}→ smb_timemachine_unset.yml (ansible)
+GET    /api/smb/timemachine    → smb.ParseSMBConfig()     (direct)
+POST   /api/smb/timemachine    → smb_apply.yml            (ansible, full config render)
+DELETE /api/smb/timemachine/{n}→ smb_apply.yml            (ansible, full config render)
 
 GET    /api/auto-snapshot/{ds} → zfs get com.sun:auto-snapshot* (direct)
 PUT    /api/auto-snapshot/{ds} → zfs_autosnap_set.yml           (ansible)
@@ -499,15 +500,12 @@ sudo make uninstall
 │   ├── acl_remove_posix.yml         # Remove POSIX ACL entry (setfacl -x)
 │   ├── acl_set_nfs4.yml             # Add NFSv4 ACL entry (nfs4_setfacl -a)
 │   ├── acl_remove_nfs4.yml          # Remove NFSv4 ACL entry (nfs4_setfacl -x)
-│   ├── smb_setup.yml                # Configure Samba: usershares dir, disable [homes], PAM passthrough
+│   ├── smb_init.yml                 # First-time Samba setup: create smb4.conf on FreeBSD, usershares dir, restart
+│   ├── smb_apply.yml               # Atomic full smb.conf deploy: create dirs, write rendered config, restart
 │   ├── smb_usershare_set.yml        # Create/update a Samba usershare for a dataset
 │   ├── smb_usershare_unset.yml      # Remove a Samba usershare
 │   ├── smb_user_add.yml             # Add a local user to smbpasswd
 │   ├── smb_user_remove.yml          # Remove a user from smbpasswd
-│   ├── smb_homes_set.yml            # Enable/update [homes] section in smb.conf
-│   ├── smb_homes_unset.yml          # Remove [homes] section from smb.conf
-│   ├── smb_timemachine_set.yml      # Create/update Time Machine share in smb.conf (vfs_fruit)
-│   ├── smb_timemachine_unset.yml    # Remove Time Machine share from smb.conf
 │   ├── iscsi_target_create.yml      # Create iSCSI target (Linux/targetcli)
 │   ├── iscsi_target_delete.yml      # Remove iSCSI target (Linux/targetcli)
 │   ├── iscsi_target_create_freebsd.yml  # Create iSCSI target (FreeBSD/ctld)
@@ -562,10 +560,11 @@ sudo make uninstall
 | GET    | `/api/smb-shares`           | List all active Samba usershares      |
 | POST   | `/api/smb-share/{dataset}`  | Create or update a Samba usershare    |
 | DELETE | `/api/smb-share/{dataset}`  | Remove a Samba usershare              |
+| GET    | `/api/smb/status`           | Samba init state, conf path, OS       |
+| POST   | `/api/smb/init`             | Initialise Samba (create conf + dirs) |
 | GET    | `/api/smb-users`            | List users registered in smbpasswd   |
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd               |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd          |
-| POST   | `/api/smb-config/pam`       | Run Samba setup playbook              |
 | GET    | `/api/smb/homes`            | Get current SMB [homes] config        |
 | POST   | `/api/smb/homes`            | Enable/update SMB [homes] section     |
 | DELETE | `/api/smb/homes`            | Disable/remove SMB [homes] section    |

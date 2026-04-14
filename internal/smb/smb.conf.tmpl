@@ -1,0 +1,38 @@
+# This file is managed by dumpstore. Manual edits will be overwritten.
+[global]
+   workgroup = {{.Global.Workgroup}}
+   server string = {{.Global.ServerString}}
+   usershare path = {{usershareDir}}
+   usershare max shares = 100
+   usershare allow guests = no
+   usershare owner only = no
+{{- if isLinux}}
+   obey pam restrictions = yes
+   pam password change = yes
+   unix password sync = yes
+{{- end}}
+{{if .Homes}}
+[homes]
+   comment = Home directory
+   path = {{.Homes.Path}}
+   browseable = {{.Homes.Browseable}}
+   read only = {{.Homes.ReadOnly}}
+   create mask = {{.Homes.CreateMask}}
+   directory mask = {{.Homes.DirectoryMask}}
+   valid users = %S
+{{end -}}
+{{range .TimeMachine}}
+[{{.Name}}]
+   comment = Time Machine backup
+   path = {{.Path}}
+   vfs objects = catia fruit streams_xattr
+   fruit:time machine = yes
+{{- if .MaxSize}}
+   fruit:time machine max size = {{.MaxSize}}
+{{- end}}
+   browseable = yes
+   read only = no
+{{- if .ValidUsers}}
+   valid users = {{.ValidUsers}}
+{{- end}}
+{{end -}}

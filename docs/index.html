@@ -527,21 +527,21 @@
           <span class="pool-name">SMB sharing</span>
           <span class="health-badge badge-blue">usershares</span>
         </div>
-        <p>Samba usershares per dataset. Manage Samba users. One-click setup playbook that configures usershares, disables <code>[homes]</code>, and enables PAM passthrough.</p>
+        <p>Samba usershares per dataset. Manage Samba users. dumpstore takes full ownership of <code>smb.conf</code> — rendered from a template on every write. All sub-features gated behind one-time initialisation; directories created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">SMB home shares</span>
           <span class="health-badge badge-blue">[homes]</span>
         </div>
-        <p>Enable the Samba <code>[homes]</code> section so each authenticated user gets a personal share mapped to a subdirectory. Pick a ZFS dataset as base path or specify a custom one. Configurable browseable, read only, create mask, and directory mask.</p>
+        <p>Enable the Samba <code>[homes]</code> section so each authenticated user gets a personal share mapped to a subdirectory. Pick a ZFS dataset as base path or specify a custom path. Base directory created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">Time Machine shares</span>
           <span class="health-badge badge-blue">vfs_fruit</span>
         </div>
-        <p>Create Samba shares configured as macOS Time Machine backup targets using <code>vfs_fruit</code> with catia and streams_xattr. Multiple named shares each backed by a different ZFS dataset. Configurable max size quota and valid users per share.</p>
+        <p>Create Samba shares configured as macOS Time Machine backup targets using <code>vfs_fruit</code>. Multiple named shares each backed by a different ZFS dataset. Configurable max size quota and valid users; target directory created automatically on apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

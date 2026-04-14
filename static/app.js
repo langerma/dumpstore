@@ -20,9 +20,9 @@ subscribe(['datasets', 'aclStatus', 'smbShares',
 subscribe(['snapshots'],                                        renderSnapshots);
 subscribe(['users'],                                            renderUsers);
 subscribe(['groups'],                                           renderGroups);
-subscribe(['sambaUsers', 'sambaAvailable', 'users'],            renderSambaUsers);
-subscribe(['smbHomes', 'datasets'],                             renderSMBHomes);
-subscribe(['timeMachineShares'],                                renderTimeMachine);
+subscribe(['sambaUsers', 'sambaAvailable', 'smbInitialized', 'users'], renderSambaUsers);
+subscribe(['smbHomes', 'smbInitialized', 'datasets'],                  renderSMBHomes);
+subscribe(['timeMachineShares', 'smbInitialized'],                     renderTimeMachine);
 subscribe(['services'],                                         renderServices);
 subscribe(['schema'],                                           buildFormSelects);
 

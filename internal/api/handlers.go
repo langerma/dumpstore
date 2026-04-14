@@ -165,6 +165,7 @@ type Handler struct {
 	version    string
 	broker     *broker.Broker
 	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
+	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
 	configPath string
@@ -239,10 +240,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/groups", h.createGroup)
 	mux.HandleFunc("PUT /api/groups/{name}", h.modifyGroup)
 	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
+	mux.HandleFunc("GET /api/smb/status", h.getSMBStatus)
+	mux.HandleFunc("POST /api/smb/init", h.initSamba)
 	mux.HandleFunc("GET /api/smb-users", h.getSambaUsers)
 	mux.HandleFunc("POST /api/smb-users/{name}", h.addSambaUser)
 	mux.HandleFunc("DELETE /api/smb-users/{name}", h.removeSambaUser)
-	mux.HandleFunc("POST /api/smb-config/pam", h.configureSambaPAM)
 	mux.HandleFunc("GET /api/smb-shares", h.getSMBShares)
 	mux.HandleFunc("POST /api/smb-share/{dataset...}", h.setSMBShare)
 	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)

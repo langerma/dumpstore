@@ -36,6 +36,7 @@
 | Network interface overview | v0.1.10 | Read-only view of all interfaces: state badge, MAC, MTU, IPs, link speed, RX/TX counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a` |
 | Service management         | v0.1.10 | Start/stop/restart/enable/disable Samba, NFS, iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations |
 | TLS / HTTPS                | v0.1.10 | `--tls` flag; self-signed cert generation (openssl via Ansible); path loader for existing certs; ACME issuance/renewal via `lego`; HTTP→HTTPS redirect; cert status card with expiry countdown |
+| Samba full ownership       | v0.1.11 | dumpstore owns smb.conf entirely — rendered from Go template on every write; directories auto-created; init gate blocks sub-features until Samba is bootstrapped; FreeBSD smb4.conf created on first init; resolves #75 #77 #78 #79 #81 |
 
 ---
 

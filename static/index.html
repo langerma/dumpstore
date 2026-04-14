@@ -144,7 +144,7 @@
       </div>
       <div class="section-header" style="margin-top:2rem">
         <h2>SMB Users</h2>
-        <button class="btn-secondary" id="smbConfigPamBtn">Configure Samba</button>
+        <button class="btn-secondary" id="smbConfigPamBtn">Initialize Samba</button>
       </div>
       <div id="smb-users-wrap">
         <div class="loading">Loading SMB users…</div>
@@ -663,17 +663,18 @@
     </div>
   </dialog>
 
-  <!-- CONFIGURE SAMBA DIALOG -->
+  <!-- INITIALIZE SAMBA DIALOG -->
   <dialog id="configureSambaDialog">
-    <h3>Configure Samba</h3>
+    <h3>Initialize Samba</h3>
     <div class="dialog-body">
       <div class="delete-warning">
-        <p>This will modify <strong>/etc/samba/smb.conf</strong> and restart smbd/nmbd.</p>
-        <p class="delete-child-warning">Applies usershare configuration (required for custom share names) and PAM password sync.</p>
+        <p>dumpstore will take <strong>full ownership</strong> of the Samba configuration file on this system.</p>
+        <p class="delete-child-warning">On FreeBSD, a minimal <code>smb4.conf</code> will be created if absent. On Linux, the existing <code>smb.conf</code> will be used as the base. The usershares directory will be created and Samba will be restarted.</p>
+        <p class="delete-child-warning">Any future changes to SMB shares, home shares, or Time Machine targets through dumpstore will overwrite the config file. Manual edits outside dumpstore will be lost on next apply.</p>
       </div>
       <div class="dialog-actions">
         <button type="button" id="configureSambaCancelBtn" class="btn-secondary">Cancel</button>
-        <button type="button" id="configureSambaConfirmBtn" class="btn-primary">Apply</button>
+        <button type="button" id="configureSambaConfirmBtn" class="btn-primary">Initialize</button>
       </div>
     </div>
   </dialog>
