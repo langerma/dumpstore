@@ -36,7 +36,9 @@
 | Network interface overview | v0.1.10 | Read-only view of all interfaces: state badge, MAC, MTU, IPs, link speed, RX/TX counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a` |
 | Service management         | v0.1.10 | Start/stop/restart/enable/disable Samba, NFS, iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations |
 | TLS / HTTPS                | v0.1.10 | `--tls` flag; self-signed cert generation (openssl via Ansible); path loader for existing certs; ACME issuance/renewal via `lego`; HTTP→HTTPS redirect; cert status card with expiry countdown |
-| Samba full ownership       | v0.1.11 | dumpstore owns smb.conf entirely — rendered from Go template on every write; directories auto-created; init gate blocks sub-features until Samba is bootstrapped; FreeBSD smb4.conf created on first init; resolves #75 #77 #78 #79 #81 |
+| Samba full ownership       | v0.1.10 | dumpstore owns smb.conf entirely — rendered from Go template on every write; directories auto-created; init gate blocks sub-features until Samba is bootstrapped; FreeBSD smb4.conf created on first init; resolves #75 #77 #78 #79 #81 |
+| FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
+| SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
 
 ---
 
@@ -44,8 +46,6 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| Authentication                     | High     | [#51](https://github.com/langerma/dumpstore/issues/51) | Session-based login + reverse proxy `X-Remote-User` delegation |
-| TLS / HTTPS                        | High     | [#52](https://github.com/langerma/dumpstore/issues/52) | Self-signed auto-gen, custom cert, optional ACME/Let's Encrypt |
 | UPS / NUT integration              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | UPS status display; graceful shutdown on low battery via `upsc` |
 | Drive replacement                  | High     | [#56](https://github.com/langerma/dumpstore/issues/56) | Replace faulted disks, monitor resilver progress, offline/online devices |
 | Scheduled replication              | High     | [#54](https://github.com/langerma/dumpstore/issues/54) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
@@ -58,8 +58,6 @@
 | Dataset rewrite                    | Medium   | [#50](https://github.com/langerma/dumpstore/issues/50) | Rewrite existing blocks to apply updated properties via `zfs rewrite`; exposed in Edit Dataset dialog |
 | Snapshot diff                      | Medium   | [#24](https://github.com/langerma/dumpstore/issues/24) | Show files changed between two snapshots (`zfs diff`) |
 | Per-user quota tracking            | Medium   | [#25](https://github.com/langerma/dumpstore/issues/25) | Space usage per user/group (`zfs userspace` / `zfs groupspace`) |
-| Service management                 | Medium   | [#58](https://github.com/langerma/dumpstore/issues/58) | Start/stop/restart/enable Samba, NFS, iSCSI from the UI |
-| Network interface overview         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | IP addresses, link state, speed — read-only, shown in Sysinfo tab |
 | Log viewer                         | Medium   | [#60](https://github.com/langerma/dumpstore/issues/60) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#61](https://github.com/langerma/dumpstore/issues/61) | LDAP auth via lldap; Samba passthrough; user/group sync display |
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |

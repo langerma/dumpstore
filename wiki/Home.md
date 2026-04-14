@@ -20,7 +20,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **User management** — list, create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default
 - **Group management** — list, create, edit, and delete local groups; system groups hidden by default
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform
-- **SMB share management** — create and remove Samba usershares; manage Samba users; one-click Samba setup
+- **SMB share management** — create and remove Samba usershares; manage Samba users; dumpstore owns `smb.conf` entirely (rendered from template on every write); all sub-features gated behind one-time initialisation; init status badge shows last-applied timestamp
 - **SMB home shares** — enable/configure the Samba `[homes]` section for automatic per-user home directory shares; configurable base path, browseable, read only, create/directory masks
 - **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN, portal IP/port, auth mode (None/CHAP), and initiator ACL list

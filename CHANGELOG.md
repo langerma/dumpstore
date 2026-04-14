@@ -4,22 +4,27 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-### Changed
-- **FreeBSD-compliant config paths** — dumpstore now uses `/usr/local/etc/dumpstore/` on FreeBSD (instead of `/etc/dumpstore/`) for its config file, TLS certificates, and Samba usershares directory. A new `internal/platform` package provides `ConfigDir(goos)` as the single source of truth. `Makefile`, `install.sh`, and `contrib/dumpstore.rc` updated accordingly.
-- **Samba full ownership model** — dumpstore now owns `smb.conf` / `smb4.conf` entirely. All Samba config changes (homes, Time Machine shares) render the complete config from a Go template and deploy it atomically via the new `smb_apply.yml` playbook; block-patching playbooks (`smb_setup.yml`, `smb_homes_set.yml`, `smb_homes_unset.yml`, `smb_timemachine_set.yml`, `smb_timemachine_unset.yml`) are removed. Referenced directories (homes base path, TM target paths) are created automatically as part of apply.
-- **Samba initialisation gate** — all Samba sub-features (home shares, Time Machine, SMB users, usershares) are now disabled in the UI and return HTTP 409 from the API until `POST /api/smb/init` has been called. The button is renamed "Initialize Samba".
-- **FreeBSD smb4.conf bootstrap** — `smb_init.yml` creates a minimal `/usr/local/etc/smb4.conf` on FreeBSD if none exists (Linux packages provide one). Resolves #77.
-- **New endpoints**: `GET /api/smb/status` returns `{initialized, conf_path, os}`; `POST /api/smb/init` replaces `POST /api/smb-config/pam`.
-- **New Go package** `internal/smb` — owns `SMBConfig`, parsing, template rendering, and OS helpers.
+---
 
-### Fixed
-- **FreeBSD rc script** — rewrote `contrib/dumpstore.rc` to follow the standard `daemon(8)` pattern (`-p` child pidfile + `procname`); fixes start/restart failures caused by stale supervisor processes, missing PATH for `ansible-playbook`, and silent crashes (output now goes to `/var/log/dumpstore.log` and syslog via `-S -T dumpstore`)
-- **FreeBSD build** — added `-buildvcs=false` to `go build` in both `Makefile` and `install.sh` to fix VCS stamping failure in jails and on certain mount types
+## [v0.1.10] — 2026-04-14
 
 ### Added
 - **TLS / HTTPS support** — `--tls` flag enables HTTPS; self-signed ECDSA-P256 cert generation via `tls_gencert.yml` (openssl); path loader (`PATCH /api/tls/config`) validates and loads existing certs (Let's Encrypt, Certbot, acme.sh); ACME issuance and renewal via `lego` (`POST /api/tls/acme/issue`, `POST /api/tls/acme/renew`); HTTP→HTTPS redirect listener on `--http-port` (default 80); TLS status card in Users tab with cert CN, SANs, expiry countdown; `lego` is an optional dependency (warn if missing and ACME is configured)
 - **Service management** — new Services tab with start/stop/restart/enable/disable controls for Samba, NFS, and iSCSI; `GET /api/services` returns live status for all three; mutations go through `service_control_linux.yml` (systemd) or `service_control_freebsd.yml` (rc.d) with full op-log display; status updates via SSE every 10 s; NFS stop shows a client-disconnect warning
 - **Network interface overview** — `GET /api/network` returns all interfaces with name, state (up/down), MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; displayed as a Network section in the Pools tab with state badges and muted virtual/loopback rows; Linux reads speed and counters from `/sys/class/net`; FreeBSD parses a single `ifconfig -a` call for speed
+- **SMB init status badge** — Users & Groups tab shows a green "Initialised" badge with last-applied timestamp (from `conf_mtime` in `GET /api/smb/status`), or red "Not initialised" when `smb.conf` is absent; updates live after `POST /api/smb/init`
+
+### Changed
+- **Samba full ownership model** — dumpstore now owns `smb.conf` / `smb4.conf` entirely. All Samba config changes (homes, Time Machine shares) render the complete config from a Go template and deploy it atomically via the new `smb_apply.yml` playbook; block-patching playbooks (`smb_setup.yml`, `smb_homes_set.yml`, `smb_homes_unset.yml`, `smb_timemachine_set.yml`, `smb_timemachine_unset.yml`) are removed. Referenced directories (homes base path, TM target paths) are created automatically as part of apply.
+- **Samba initialisation gate** — all Samba sub-features (home shares, Time Machine, SMB users, usershares) are now disabled in the UI and return HTTP 409 from the API until `POST /api/smb/init` has been called. The button is renamed "Initialize Samba".
+- **FreeBSD smb4.conf bootstrap** — `smb_init.yml` creates a minimal `/usr/local/etc/smb4.conf` on FreeBSD if none exists (Linux packages provide one). Resolves #77.
+- **FreeBSD-compliant config paths** — dumpstore now uses `/usr/local/etc/dumpstore/` on FreeBSD (instead of `/etc/dumpstore/`) for its config file, TLS certificates, and Samba usershares directory. A new `internal/platform` package provides `ConfigDir(goos)` as the single source of truth. `Makefile`, `install.sh`, and `contrib/dumpstore.rc` updated accordingly.
+- **New endpoints**: `GET /api/smb/status` returns `{initialized, conf_path, os, conf_mtime}`; `POST /api/smb/init` replaces `POST /api/smb-config/pam`.
+- **New Go package** `internal/smb` — owns `SMBConfig`, parsing, template rendering, and OS helpers.
+
+### Fixed
+- **FreeBSD rc script** — rewrote `contrib/dumpstore.rc` to follow the standard `daemon(8)` pattern (`-p` child pidfile + `procname`); fixes start/restart failures caused by stale supervisor processes, missing PATH for `ansible-playbook`, and silent crashes (output now goes to `/var/log/dumpstore.log` and syslog via `-S -T dumpstore`)
+- **FreeBSD build** — added `-buildvcs=false` to `go build` in both `Makefile` and `install.sh` to fix VCS stamping failure in jails and on certain mount types
 
 ---
 
