@@ -19,9 +19,9 @@
              if ansible_os_family == 'FreeBSD'
              else '/etc/samba/smb.conf' }}
         usershares_dir: >-
-          {{ '/var/db/samba4/usershares'
+          {{ '/usr/local/etc/dumpstore/smb/usershares'
              if ansible_os_family == 'FreeBSD'
-             else '/var/lib/samba/usershares' }}
+             else '/etc/dumpstore/smb/usershares' }}
         samba_services: >-
           {{ ['samba_server']
              if ansible_os_family == 'FreeBSD'

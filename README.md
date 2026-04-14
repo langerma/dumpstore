@@ -276,13 +276,18 @@ dumpstore has built-in session-based authentication.
 To set or reset the password manually:
 
 ```bash
+# Linux
 sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /etc/dumpstore/dumpstore.conf
 sudo systemctl restart dumpstore
+
+# FreeBSD
+sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /usr/local/etc/dumpstore/dumpstore.conf
+sudo service dumpstore restart
 ```
 
 If no password is configured the service starts but **binds to `127.0.0.1` only** with a warning in the logs.
 
-**Configuration** (`/etc/dumpstore/dumpstore.conf`, JSON):
+**Configuration** (`/etc/dumpstore/dumpstore.conf` on Linux, `/usr/local/etc/dumpstore/dumpstore.conf` on FreeBSD, JSON):
 
 ```json
 {

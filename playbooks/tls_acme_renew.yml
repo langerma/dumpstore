@@ -4,7 +4,7 @@
 # Required extra vars:
 #   email    : ACME account email (must match the one used during issue)
 #   domain   : domain name to renew cert for
-#   cert_dir : lego directory used during issue (e.g. /etc/dumpstore/tls/acme)
+#   cert_dir : lego directory used during issue (e.g. /etc/dumpstore/tls/acme or /usr/local/etc/dumpstore/tls/acme on FreeBSD)
 - hosts: localhost
   gather_facts: false
   tasks:

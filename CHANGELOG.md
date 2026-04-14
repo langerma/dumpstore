@@ -5,6 +5,7 @@ All notable changes to this project will be documented here.
 ## [Unreleased]
 
 ### Changed
+- **FreeBSD-compliant config paths** — dumpstore now uses `/usr/local/etc/dumpstore/` on FreeBSD (instead of `/etc/dumpstore/`) for its config file, TLS certificates, and Samba usershares directory. A new `internal/platform` package provides `ConfigDir(goos)` as the single source of truth. `Makefile`, `install.sh`, and `contrib/dumpstore.rc` updated accordingly.
 - **Samba full ownership model** — dumpstore now owns `smb.conf` / `smb4.conf` entirely. All Samba config changes (homes, Time Machine shares) render the complete config from a Go template and deploy it atomically via the new `smb_apply.yml` playbook; block-patching playbooks (`smb_setup.yml`, `smb_homes_set.yml`, `smb_homes_unset.yml`, `smb_timemachine_set.yml`, `smb_timemachine_unset.yml`) are removed. Referenced directories (homes base path, TM target paths) are created automatically as part of apply.
 - **Samba initialisation gate** — all Samba sub-features (home shares, Time Machine, SMB users, usershares) are now disabled in the UI and return HTTP 409 from the API until `POST /api/smb/init` has been called. The button is renamed "Initialize Samba".
 - **FreeBSD smb4.conf bootstrap** — `smb_init.yml` creates a minimal `/usr/local/etc/smb4.conf` on FreeBSD if none exists (Linux packages provide one). Resolves #77.

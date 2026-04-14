@@ -3,7 +3,7 @@
 #
 # Required extra vars:
 #   hostname  : CN and DNS SAN for the certificate (e.g. mynas.local)
-#   cert_dir  : directory to write cert.pem and key.pem (e.g. /etc/dumpstore/tls)
+#   cert_dir  : directory to write cert.pem and key.pem (e.g. /etc/dumpstore/tls or /usr/local/etc/dumpstore/tls on FreeBSD)
 - hosts: localhost
   gather_facts: false
   tasks:

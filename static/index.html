@@ -966,7 +966,7 @@
           <input type="text" id="tls-gencert-hostname" placeholder="mynas.local" spellcheck="false">
         </label>
         <label>Certificate directory
-          <input type="text" id="tls-gencert-certdir" value="/etc/dumpstore/tls" spellcheck="false">
+          <input type="text" id="tls-gencert-certdir" placeholder="/etc/dumpstore/tls  (FreeBSD: /usr/local/etc/dumpstore/tls)" spellcheck="false">
         </label>
         <p class="field-note" style="margin-top:0.5rem">Generates an ECDSA-P256 certificate valid for 10 years. Restart dumpstore with <code>--tls</code> to activate HTTPS.</p>
       </fieldset>
@@ -1011,7 +1011,7 @@
           <input type="text" id="tls-acme-domain" placeholder="mynas.example.com" spellcheck="false">
         </label>
         <label>Certificate directory
-          <input type="text" id="tls-acme-certdir" value="/etc/dumpstore/tls/acme" spellcheck="false">
+          <input type="text" id="tls-acme-certdir" placeholder="/etc/dumpstore/tls/acme  (FreeBSD: /usr/local/etc/dumpstore/tls/acme)" spellcheck="false">
         </label>
         <p class="field-note" style="margin-top:0.5rem">Uses TLS-ALPN-01 challenge on port 443. Requires <code>lego</code> in PATH and the domain to resolve to this machine.</p>
       </fieldset>

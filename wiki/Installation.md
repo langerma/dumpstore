@@ -95,14 +95,17 @@ sudo make install
 
 ## Authentication
 
-dumpstore uses session-based login. The password is stored as a bcrypt hash in `/etc/dumpstore/dumpstore.conf`.
+dumpstore uses session-based login. The password is stored as a bcrypt hash in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD).
 
 ### Set or reset the password
 
 ```bash
+# Linux
 sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /etc/dumpstore/dumpstore.conf
-sudo systemctl restart dumpstore   # Linux
-# service dumpstore restart        # FreeBSD
+sudo systemctl restart dumpstore
+# FreeBSD
+sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /usr/local/etc/dumpstore/dumpstore.conf
+sudo service dumpstore restart
 ```
 
 The prompt reads from `/dev/tty` so it works correctly even when stdin is piped.
@@ -113,7 +116,7 @@ If the config file is missing or has no `password_hash`, the service starts but 
 
 ### Config file reference
 
-`/etc/dumpstore/dumpstore.conf` (created with mode `0600`):
+`/etc/dumpstore/dumpstore.conf` (Linux) / `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD), mode `0600`:
 
 ```json
 {

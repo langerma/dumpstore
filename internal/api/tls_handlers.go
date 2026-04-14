@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"time"
 )
@@ -74,7 +75,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.CertDir == "" {
-		req.CertDir = "/etc/dumpstore/tls"
+		req.CertDir = filepath.Dir(h.configPath) + "/tls"
 	}
 	if !reTLSPath.MatchString(req.CertDir) {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid cert_dir"), nil)
@@ -195,7 +196,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.CertDir == "" {
-		req.CertDir = "/etc/dumpstore/tls/acme"
+		req.CertDir = filepath.Dir(h.configPath) + "/tls/acme"
 	}
 	if !reTLSPath.MatchString(req.CertDir) {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid cert_dir"), nil)
@@ -261,10 +262,10 @@ func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Derive cert_dir from stored cert path (parent of certificates/<domain>.crt)
-	certDir := "/etc/dumpstore/tls/acme"
+	certDir := filepath.Dir(h.configPath) + "/tls/acme"
 	if h.authCfg.TLSCertPath != "" {
 		// Walk up two levels from <cert_dir>/certificates/<domain>.crt
-		certDir = certDirFromCertPath(h.authCfg.TLSCertPath)
+		certDir = certDirFromCertPath(h.authCfg.TLSCertPath, h.configPath)
 	}
 
 	out, err := h.runOp("tls_acme_renew.yml", map[string]string{
@@ -287,7 +288,7 @@ func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
 
 // certDirFromCertPath derives the lego root dir from a cert path of the form
 // <certDir>/certificates/<domain>.crt
-func certDirFromCertPath(certPath string) string {
+func certDirFromCertPath(certPath, configPath string) string {
 	// Strip /certificates/<domain>.crt — go up two path segments
 	for i := len(certPath) - 1; i >= 0; i-- {
 		if certPath[i] == '/' {
@@ -300,7 +301,7 @@ func certDirFromCertPath(certPath string) string {
 			return certPath[:i]
 		}
 	}
-	return "/etc/dumpstore/tls/acme"
+	return filepath.Dir(configPath) + "/tls/acme"
 }
 
 type certMeta struct {

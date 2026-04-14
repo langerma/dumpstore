@@ -79,7 +79,10 @@ do_install() {
     cp -r static    "$INSTALL_DIR/"
 
     echo "==> Configuring authentication..."
-    CONFIG_DIR="/etc/dumpstore"
+    case "$OS" in
+        FreeBSD) CONFIG_DIR="/usr/local/etc/dumpstore" ;;
+        *)       CONFIG_DIR="/etc/dumpstore" ;;
+    esac
     CONFIG_FILE="$CONFIG_DIR/dumpstore.conf"
     install -d -m 0700 "$CONFIG_DIR"
     # Only prompt for a password if none is set yet (safe to re-run on upgrade).

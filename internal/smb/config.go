@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"text/template"
+
+	"dumpstore/internal/platform"
 )
 
 //go:embed smb.conf.tmpl
@@ -56,12 +58,11 @@ func ConfPath(goos string) string {
 	return "/etc/samba/smb.conf"
 }
 
-// UsershareDir returns the OS-specific usershares directory.
+// UsershareDir returns the dumpstore-managed usershares directory.
+// dumpstore owns this directory exclusively; it does not share the OS default
+// usershares path with manually-created shares.
 func UsershareDir(goos string) string {
-	if goos == "freebsd" {
-		return "/var/db/samba4/usershares"
-	}
-	return "/var/lib/samba/usershares"
+	return platform.ConfigDir(goos) + "/smb/usershares"
 }
 
 // ServiceNames returns the OS-specific Samba service names.
