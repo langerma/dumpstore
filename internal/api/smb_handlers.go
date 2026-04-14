@@ -53,14 +53,19 @@ func (h *Handler) applyConfig(r *http.Request, cfg *smb.SMBConfig) (*ansible.Pla
 }
 
 // getSMBStatus handles GET /api/smb/status
-// Returns {"initialized":bool,"conf_path":"/etc/samba/smb.conf","os":"linux"}
+// Returns {"initialized":bool,"conf_path":"...","os":"linux","conf_mtime":"<RFC3339>"}
 func (h *Handler) getSMBStatus(w http.ResponseWriter, r *http.Request) {
 	goos := runtime.GOOS
-	writeJSON(r.Context(), w, map[string]any{
+	confPath := smb.ConfPath(goos)
+	resp := map[string]any{
 		"initialized": smb.IsInitialized(goos),
-		"conf_path":   smb.ConfPath(goos),
+		"conf_path":   confPath,
 		"os":          goos,
-	})
+	}
+	if fi, err := os.Stat(confPath); err == nil {
+		resp["conf_mtime"] = fi.ModTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	writeJSON(r.Context(), w, resp)
 }
 
 // initSamba handles POST /api/smb/init

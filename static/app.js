@@ -3,7 +3,7 @@ import { loadAll, startSSE, buildFormSelects } from './js/loader.js';
 import { renderSysInfo, renderSoftware, renderNetwork, renderPools, renderIOStat, renderSMART } from './js/pools.js';
 import { renderDatasets } from './js/datasets.js';
 import { renderSnapshots } from './js/snapshots.js';
-import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine } from './js/users.js';
+import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine, renderSMBInitStatus } from './js/users.js';
 import { renderServices } from './js/services.js';
 import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 
@@ -20,6 +20,7 @@ subscribe(['datasets', 'aclStatus', 'smbShares',
 subscribe(['snapshots'],                                        renderSnapshots);
 subscribe(['users'],                                            renderUsers);
 subscribe(['groups'],                                           renderGroups);
+subscribe(['smbInitialized', 'smbConfMtime'],                          renderSMBInitStatus);
 subscribe(['sambaUsers', 'sambaAvailable', 'smbInitialized', 'users'], renderSambaUsers);
 subscribe(['smbHomes', 'smbInitialized', 'datasets'],                  renderSMBHomes);
 subscribe(['timeMachineShares', 'smbInitialized'],                     renderTimeMachine);

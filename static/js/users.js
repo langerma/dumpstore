@@ -403,6 +403,21 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   }
 });
 
+// ── Render: SMB init status badge ────────────────────────────────────────────
+export function renderSMBInitStatus() {
+  const el = document.getElementById('smb-init-status');
+  if (!el) return;
+  if (!state.smbInitialized) {
+    el.innerHTML = '<span class="health-badge badge-red">Not initialised</span>';
+    return;
+  }
+  const mtime = state.smbConfMtime
+    ? new Date(state.smbConfMtime).toLocaleString()
+    : '';
+  el.innerHTML = `<span class="health-badge badge-green">Initialised</span>`
+    + (mtime ? `<span class="muted" style="font-size:0.8rem">${esc(mtime)}</span>` : '');
+}
+
 // ── Render: SMB Home Shares ───────────────────────────────────────────────────
 export function renderSMBHomes() {
   const wrap = document.getElementById('smb-homes-wrap');
@@ -762,6 +777,7 @@ document.getElementById('configureSambaConfirmBtn').addEventListener('click', as
         storeSet('smbInitialized', status?.initialized ?? false);
         storeSet('smbConfPath', status?.conf_path ?? '');
         storeSet('smbOs', status?.os ?? '');
+        storeSet('smbConfMtime', status?.conf_mtime ?? '');
       });
     }
   } catch (err) {
