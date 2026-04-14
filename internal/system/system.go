@@ -508,6 +508,7 @@ func detectPkgManager() string {
 		{"pacman", "--version"},
 		{"zypper", "--version"},
 		{"apk", "--version"},
+		{"pkg", "--version"},
 	}
 	for _, m := range managers {
 		if v := probeVersion(m.cmd, m.varg); v != "" {
@@ -515,6 +516,38 @@ func detectPkgManager() string {
 		}
 	}
 	return ""
+}
+
+// SambaInstallHint returns a distro-specific install command when smbd is not
+// found. Returns "" if smbd is already available in PATH or at the FreeBSD
+// default path.
+func SambaInstallHint() string {
+	// Check standard PATH first, then FreeBSD default location.
+	if _, err := exec.LookPath("smbd"); err == nil {
+		return ""
+	}
+	if _, err := os.Stat("/usr/local/sbin/smbd"); err == nil {
+		return ""
+	}
+
+	managers := []struct {
+		cmd  string
+		hint string
+	}{
+		{"apt", "apt install samba"},
+		{"dnf", "dnf install samba"},
+		{"yum", "yum install samba"},
+		{"pacman", "pacman -S samba"},
+		{"zypper", "zypper install samba"},
+		{"apk", "apk add samba"},
+		{"pkg", "pkg install samba416"},
+	}
+	for _, m := range managers {
+		if _, err := exec.LookPath(m.cmd); err == nil {
+			return m.hint
+		}
+	}
+	return "install the samba package for your distribution"
 }
 
 // probeISCSIBackend returns "targetcli <version>" on Linux or "ctld (installed)"

@@ -64,22 +64,62 @@ func (h *Handler) getSMBStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // initSamba handles POST /api/smb/init
-// Runs smb_init.yml — creates smb.conf on FreeBSD if absent, creates usershares
-// dir, restarts Samba. Safe to call multiple times.
+// Checks smbd is installed, backs up any existing config, creates the
+// usershares directory, then writes dumpstore's own smb.conf from template.
+// Preserves workgroup and server string from an existing config if present.
+// Safe to call multiple times.
 func (h *Handler) initSamba(w http.ResponseWriter, r *http.Request) {
-	out, err := h.runOp("smb_init.yml", map[string]string{})
+	h.smbMu.Lock()
+	defer h.smbMu.Unlock()
+
+	goos := runtime.GOOS
+
+	// Fail fast with a distro-specific install hint if smbd is missing.
+	if hint := system.SambaInstallHint(); hint != "" {
+		writeError(r.Context(), w, http.StatusUnprocessableEntity,
+			fmt.Errorf("Samba not installed — run: %s", hint), nil)
+		return
+	}
+
+	// Parse existing config to carry over workgroup/server string if present.
+	// Falls back to defaults if the file doesn't exist yet.
+	cfg, err := smb.ParseSMBConfig(goos)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	}
+
+	// Step 1: check smbd is installed, back up existing conf, create usershares dir.
+	out1, err := h.runOp("smb_init.yml", map[string]string{})
 	auditLog(r.Context(), r, "smb.init", "", err)
 	if err != nil {
 		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
+		if out1 != nil {
+			steps = out1.Steps()
 		}
 		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
 		return
 	}
+
+	// Step 2: write our own clean smb.conf from template.
+	out2, err := h.applyConfig(r, &cfg)
+	if err != nil {
+		var steps []ansible.TaskStep
+		steps = append(steps, out1.Steps()...)
+		if out2 != nil {
+			steps = append(steps, out2.Steps()...)
+		}
+		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		return
+	}
+
+	var allSteps []ansible.TaskStep
+	allSteps = append(allSteps, out1.Steps()...)
+	allSteps = append(allSteps, out2.Steps()...)
+
 	writeJSON(r.Context(), w, map[string]any{
-		"initialized": smb.IsInitialized(runtime.GOOS),
-		"tasks":       out.Steps(),
+		"initialized": smb.IsInitialized(goos),
+		"tasks":       allSteps,
 	})
 }
 

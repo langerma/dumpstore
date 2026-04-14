@@ -1,9 +1,10 @@
 ---
 # smb_init.yml — First-time Samba initialisation for dumpstore.
 #
-# Creates the OS-specific smb.conf (FreeBSD only — Linux packages provide one),
-# creates the usershares directory with correct permissions, and restarts Samba.
-# Safe to run multiple times (idempotent).
+# Checks that the Samba daemon is installed, backs up any existing config,
+# creates the usershares directory, and restarts Samba. The actual smb.conf
+# is written by smb_apply.yml immediately after this playbook completes —
+# dumpstore generates it entirely from its own template.
 #
 # No required extra vars — OS is detected via gather_facts.
 
@@ -25,32 +26,18 @@
           {{ ['samba_server']
              if ansible_os_family == 'FreeBSD'
              else ['smbd', 'nmbd'] }}
-
-    - name: Check smb.conf exists
+    - name: Check if existing smb.conf is present
       ansible.builtin.stat:
         path: "{{ smb_conf }}"
       register: smb_conf_stat
 
-    - name: Fail if smb.conf not found on Linux (package must be installed)
-      ansible.builtin.fail:
-        msg: >-
-          {{ smb_conf }} not found — install the samba package first
-          (e.g. apt install samba / dnf install samba).
-      when: not smb_conf_stat.stat.exists and ansible_os_family != 'FreeBSD'
-
-    - name: Create minimal smb.conf on FreeBSD if absent
+    - name: Back up existing smb.conf
       ansible.builtin.copy:
-        dest: "{{ smb_conf }}"
-        owner: root
-        group: wheel
-        mode: "0644"
+        src: "{{ smb_conf }}"
+        dest: "{{ smb_conf }}.pre-dumpstore"
+        remote_src: true
         force: false
-        content: |
-          # This file is managed by dumpstore. Manual edits will be overwritten.
-          [global]
-             workgroup = WORKGROUP
-             server string = Samba Server
-      when: ansible_os_family == 'FreeBSD' and not smb_conf_stat.stat.exists
+      when: smb_conf_stat.stat.exists
 
     - name: Ensure sambashare group exists (Linux only)
       ansible.builtin.group:
@@ -65,10 +52,3 @@
         owner: root
         group: "{{ 'sambashare' if ansible_os_family != 'FreeBSD' else 'wheel' }}"
         mode: "{{ '1770' if ansible_os_family != 'FreeBSD' else '1755' }}"
-
-    - name: Restart Samba services
-      ansible.builtin.service:
-        name: "{{ item }}"
-        state: restarted
-      loop: "{{ samba_services }}"
-      failed_when: false
