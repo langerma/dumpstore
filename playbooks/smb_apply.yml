@@ -30,8 +30,8 @@
         state: directory
         owner: root
         mode: "0755"
-      loop: "{{ dirs | from_json }}"
-      when: (dirs | from_json) | length > 0
+      loop: "{{ dirs | from_json | default([]) }}"
+      when: (dirs | from_json | default([])) | length > 0
 
     - name: Deploy smb.conf atomically
       ansible.builtin.copy:

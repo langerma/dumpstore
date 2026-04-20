@@ -39,6 +39,7 @@
 | Samba full ownership       | v0.1.10 | dumpstore owns smb.conf entirely — rendered from Go template on every write; directories auto-created; init gate blocks sub-features until Samba is bootstrapped; FreeBSD smb4.conf created on first init; resolves #75 #77 #78 #79 #81 |
 | FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
 | SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
+| Dev VM environment         | v0.1.11 | `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy`; Ubuntu 24.04 + FreeBSD 15 with ZFS + Ansible; default admin/admin; closes #83 |
 
 ---
 
@@ -46,8 +47,8 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| Dev VM environment                 | High     | [#83](https://github.com/langerma/dumpstore/issues/83) | Automated Lima VMs (Linux + FreeBSD) with ZFS; one-command deploy for local testing |
 | UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc` |
+
 | Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
 | Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |

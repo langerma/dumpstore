@@ -1,8 +1,8 @@
-# Lima VM — FreeBSD 14 with ZFS + Ansible
+# Lima VM — FreeBSD 15 with ZFS + Ansible
 # Used for dumpstore development and integration testing on FreeBSD.
 # Uses QEMU backend — Apple Virtualization framework does not support FreeBSD.
 #
-# Prerequisites: brew install lima
+# Prerequisites: brew install lima   (or MacPorts: sudo port install lima)
 # Usage:        make vm-freebsd-start
 
 vmType: qemu
@@ -15,12 +15,11 @@ disk: 20GiB
 
 # Extra disk for a second ZFS pool (zroot already exists from base install)
 additionalDisks:
-  - name: zfsdata
-    size: 10GiB
+  - name: dumpstore-freebsd-data
     format: false   # raw, unformatted — ZFS will own it
 
 images:
-  - location: "https://download.freebsd.org/releases/VM-IMAGES/14.2-RELEASE/aarch64/Latest/FreeBSD-14.2-RELEASE-arm64-aarch64-ZFS.img.xz"
+  - location: "https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/aarch64/Latest/FreeBSD-15.0-RELEASE-arm64-aarch64-BASIC-CLOUDINIT-zfs.qcow2.xz"
     arch: aarch64
 
 # Forward dumpstore UI port to host
@@ -49,6 +48,10 @@ provision:
 
       echo "==> Enabling ZFS in rc.conf..."
       sysrc zfs_enable="YES"
+
+      echo "==> Writing default dev config (admin/admin)..."
+      install -d -m 0700 /usr/local/etc/dumpstore
+      python3.11 -c 'import json,os; cfg={"username":"admin","password_hash":"$2a$10$7Kfic7R28U4V1ePxnvrA.OkJwiahwkmbRrnEDEKW6RbvC/G86Q8nC","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
 
       echo "==> Creating second ZFS pool on /dev/vtbd1..."
       # Wait for the extra disk to appear
