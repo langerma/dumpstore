@@ -1,0 +1,70 @@
+# Lima VM — FreeBSD 15 with ZFS + Ansible
+# Used for dumpstore development and integration testing on FreeBSD.
+# Uses QEMU backend — Apple Virtualization framework does not support FreeBSD.
+#
+# Prerequisites: brew install lima   (or MacPorts: sudo port install lima)
+# Usage:        make vm-freebsd-start
+
+vmType: qemu
+os: FreeBSD
+arch: aarch64
+
+cpus: 2
+memory: 2GiB
+disk: 20GiB
+
+# Extra disk for a second ZFS pool (zroot already exists from base install)
+additionalDisks:
+  - name: dumpstore-freebsd-data
+    format: false   # raw, unformatted — ZFS will own it
+
+images:
+  - location: "https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/aarch64/Latest/FreeBSD-15.0-RELEASE-arm64-aarch64-BASIC-CLOUDINIT-zfs.qcow2.xz"
+    arch: aarch64
+
+# Forward dumpstore UI port to host
+portForwards:
+  - guestPort: 8080
+    hostPort: 8081   # 8081 to avoid clash when both VMs are up simultaneously
+
+mounts: []
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+
+      echo "==> Installing pkg dependencies..."
+      # Bootstrap pkg if not already present
+      ASSUME_ALWAYS_YES=yes pkg bootstrap -f 2>/dev/null || true
+      pkg update -q
+
+      echo "==> Installing Ansible + Python..."
+      pkg install -y ansible python311
+
+      echo "==> Installing optional tools..."
+      pkg install -y smartmontools rsync
+
+      echo "==> Enabling ZFS in rc.conf..."
+      sysrc zfs_enable="YES"
+
+      echo "==> Writing default dev config (admin/admin)..."
+      install -d -m 0700 /usr/local/etc/dumpstore
+      python3.11 -c 'import json,os; cfg={"username":"admin","password_hash":"$2a$10$7Kfic7R28U4V1ePxnvrA.OkJwiahwkmbRrnEDEKW6RbvC/G86Q8nC","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
+
+      echo "==> Creating second ZFS pool on /dev/vtbd1..."
+      # Wait for the extra disk to appear
+      for i in $(seq 1 10); do
+        [ -c /dev/vtbd1 ] && break
+        sleep 2
+      done
+      if [ -c /dev/vtbd1 ]; then
+        zpool create -f tank /dev/vtbd1
+        zfs create tank/data
+        echo "==> ZFS pool 'tank' created."
+      else
+        echo "WARN: /dev/vtbd1 not found — extra pool not created. zroot is still available."
+      fi
+
+      echo "==> Provisioning complete."

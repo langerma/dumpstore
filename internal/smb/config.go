@@ -231,7 +231,7 @@ func parseFromBytes(data []byte) (SMBConfig, error) {
 // DirsToCreate returns all directory paths referenced by this config that
 // must exist before the config is applied.
 func (c *SMBConfig) DirsToCreate() []string {
-	var dirs []string
+	dirs := []string{}
 	if c.Homes != nil && c.Homes.Path != "" {
 		// Strip %U and similar substitutions to get the base directory
 		base := strings.TrimSuffix(c.Homes.Path, "/%U")

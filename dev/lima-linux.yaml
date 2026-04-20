@@ -1,0 +1,69 @@
+# Lima VM — Ubuntu 24.04 LTS with ZFS + Ansible
+# Used for dumpstore development and integration testing on Linux.
+# Default credentials: admin / admin
+#
+# Prerequisites: brew install lima   (or MacPorts: sudo port install lima)
+# Usage:        make vm-linux-start
+
+vmType: qemu
+os: Linux
+arch: aarch64
+
+cpus: 2
+memory: 2GiB
+disk: 20GiB
+
+# Extra disk for ZFS pool (separate from the OS disk)
+additionalDisks:
+  - name: dumpstore-linux-data
+    format: false   # raw, unformatted — ZFS will own it
+
+images:
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+    arch: aarch64
+
+# Forward dumpstore UI port to host
+portForwards:
+  - guestPort: 8080
+    hostPort: 8080
+
+mounts: []
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      export DEBIAN_FRONTEND=noninteractive
+
+      echo "==> Updating apt..."
+      apt-get update -qq
+
+      echo "==> Installing ZFS..."
+      apt-get install -y -qq zfsutils-linux
+
+      echo "==> Installing Ansible + Python..."
+      apt-get install -y -qq ansible python3
+
+      echo "==> Installing optional tools..."
+      apt-get install -y -qq smartmontools rsync make
+
+      echo "==> Writing default dev config (admin/admin)..."
+      install -d -m 0700 /etc/dumpstore
+      python3 -c 'import json,os; cfg={"username":"admin","password_hash":"$2a$10$7Kfic7R28U4V1ePxnvrA.OkJwiahwkmbRrnEDEKW6RbvC/G86Q8nC","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/etc/dumpstore/dumpstore.conf",0o600)'
+
+      echo "==> Creating ZFS pool on /dev/vdb..."
+      for i in $(seq 1 10); do
+        [ -b /dev/vdb ] && break
+        sleep 2
+      done
+      if [ -b /dev/vdb ]; then
+        zpool create -f tank /dev/vdb
+        zfs create tank/data
+        echo "==> ZFS pool 'tank' created."
+      else
+        echo "WARN: /dev/vdb not found — ZFS pool not created. Run: zpool create -f tank <disk>"
+      fi
+
+      echo "==> Provisioning complete."
