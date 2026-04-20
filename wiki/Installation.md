@@ -63,7 +63,7 @@ ansible-playbook playbooks/smb_setup.yml
 
 ## Install script (recommended)
 
-Clone the repository and run `install.sh` as root. It checks prerequisites, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
+Clone the repository and run `install.sh` as root. It is a thin wrapper around `make install`, which auto-installs Go and Ansible if absent, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
 
 ```bash
 git clone https://github.com/langerma/dumpstore.git

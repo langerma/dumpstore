@@ -747,7 +747,8 @@
 cd dumpstore
 sudo ./install.sh</pre>
         <p class="install-note">
-          The script checks prerequisites, compiles the binary, copies everything to
+          Thin wrapper around <code>make install</code>. Auto-installs Go and Ansible
+          if absent, compiles the binary, copies everything to
           <code>/usr/local/lib/dumpstore/</code>, prompts for an admin password,
           then registers and starts the service —
           systemd on Linux, rc.d on FreeBSD.

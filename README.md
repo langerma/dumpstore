@@ -522,13 +522,13 @@ sudo port install lima   # MacPorts
 
 ```bash
 make vm-linux-start    # create + boot (first run provisions the VM, ~5 min)
-make vm-linux-deploy   # cross-compile arm64 binary, rsync, start service
+make vm-linux-deploy   # pack source, copy to VM, run make install natively
 make vm-linux-ssh      # open a shell inside the VM
 make vm-linux-stop     # suspend
 make vm-linux-destroy  # tear down completely
 ```
 
-**FreeBSD 14 (port 8081):**
+**FreeBSD 15 (port 8081):**
 
 ```bash
 make vm-freebsd-start
@@ -538,7 +538,7 @@ make vm-freebsd-stop
 make vm-freebsd-destroy
 ```
 
-Both VMs run arm64. The Linux VM uses Apple's Virtualization framework (fast). The FreeBSD VM uses QEMU (Apple VZ does not support FreeBSD yet). Both get a `tank` ZFS pool on a dedicated 10 GiB disk created at first boot. Port forwards are fixed — Linux on `:8080`, FreeBSD on `:8081` — so both can be up simultaneously.
+Both VMs run arm64 via QEMU. Each gets a dedicated 10 GiB extra disk for ZFS (`tank` pool created at first boot). Deployment packs the source tree on the host, copies it into the VM, and runs `make install` natively — no cross-compilation. Port forwards are fixed: Linux on `:8080`, FreeBSD on `:8081`, so both can be up simultaneously. Default credentials: **admin / admin**.
 
 ## Uninstall
 
