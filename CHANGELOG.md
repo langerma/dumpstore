@@ -18,6 +18,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 - **SMB apply with no dirs** — `DirsToCreate()` returned Go `nil` slice, marshalled to JSON `null`, which caused Ansible's `from_json` to return Python `None` and fail the loop; fixed by initialising to `[]string{}`; added `| default([])` guard in `smb_apply.yml`
+- **Rename button styling** — `.btn-rename` was missing from `style.css`; the button now matches all other small action buttons (ACL, Chown, NFS, SMB, Snap, iSCSI); closes #87
 
 ---
 

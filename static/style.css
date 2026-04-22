@@ -776,6 +776,8 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-iscsi:hover { background: var(--surface); color: var(--text); }
 .btn-iscsi.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
 .btn-iscsi.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
+.btn-rename { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.btn-rename:hover { background: var(--surface); color: var(--text); }
 
 /* ── Services tab ───────────────────────────────────────────────────────────── */
 .svc-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }

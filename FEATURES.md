@@ -48,9 +48,10 @@
 
 ## Known Issues
 
-| Bug                                              | Priority | Issue | Notes                                                                                                                       |
-|--------------------------------------------------|----------|-------|-----------------------------------------------------------------------------------------------------------------------------|
-| *(all cleared — see Implemented table)* | | | |
+| Bug                                                                                         | Priority | Issue                                                   | Notes                                                                                                   |
+|---------------------------------------------------------------------------------------------|----------|---------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| FreeBSD: auto-snapshot cron not auto-configured; inherited property skipped by zfstools     | Medium   | [#74](https://github.com/langerma/dumpstore/issues/74)  | UI shows warning; cron entries must be added manually; inheritance bug is upstream in bdrewery/zfstools |
+| FreeBSD: no `zfs_enable` check in rc.conf — pools disappear after reboot if ZFS not enabled | Medium   | [#76](https://github.com/langerma/dumpstore/issues/76)  | UI shows warning; full detection/remediation not yet implemented                                        |
 
 ---
 
