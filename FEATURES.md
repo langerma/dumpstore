@@ -40,6 +40,9 @@
 | FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
 | SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
 | Dev VM environment         | v0.1.11 | `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy`; Ubuntu 24.04 + FreeBSD 15 with ZFS + Ansible; default admin/admin; closes #83 |
+| Dataset rename             | v0.1.12 | Rename a dataset or volume in place; same-parent constraint; closes #21 |
+| Snapshot clone             | v0.1.12 | Create a new dataset from an existing snapshot via `zfs clone`; closes #22 |
+| wsdd discovery hint        | v0.1.12 | `wsdd` shown in Installed Software card; closes #80 |
 
 ---
 
@@ -47,10 +50,7 @@
 
 | Bug                                              | Priority | Issue | Notes                                                                                                                       |
 |--------------------------------------------------|----------|-------|-----------------------------------------------------------------------------------------------------------------------------|
-| FreeBSD: Python version missing from system info | Low      | [#71](https://github.com/langerma/dumpstore/issues/71) | `python3` not in service PATH; probe `/usr/local/bin/python3` or versioned names as fallback |
-| FreeBSD: `getfacl -c` flag not supported         | Low      | [#73](https://github.com/langerma/dumpstore/issues/73) | `-c` is Linux-only; use `runtime.GOOS` to omit on FreeBSD; causes log spam on every poll    |
-| FreeBSD: auto-snapshot silently does nothing     | Medium   | [#74](https://github.com/langerma/dumpstore/issues/74) | `zfstools` needs manual cron setup; also ignores inherited `com.sun:auto-snapshot`; warn in UI |
-| FreeBSD: no ZFS-enabled check at startup         | Medium   | [#76](https://github.com/langerma/dumpstore/issues/76) | If `zfs_enable` not set in `rc.conf`, pools disappear after reboot; add startup warning      |
+| *(all cleared — see Implemented table)* | | | |
 
 ---
 
@@ -62,8 +62,7 @@
 | Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
-| Dataset rename                     | Medium   | [#21](https://github.com/langerma/dumpstore/issues/21) | Rename a dataset or volume in place |
-| Snapshot clone                     | Medium   | [#22](https://github.com/langerma/dumpstore/issues/22) | Create a new dataset from an existing snapshot |
+
 | Snapshot scheduling UI             | Medium   | [#56](https://github.com/langerma/dumpstore/issues/56) | Manage auto-snapshot schedules and retention per dataset |
 | Pool expansion                     | Medium   | [#57](https://github.com/langerma/dumpstore/issues/57) | Add vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools |
 | Dataset rewrite                    | Medium   | [#50](https://github.com/langerma/dumpstore/issues/50) | Rewrite existing blocks to apply updated properties via `zfs rewrite`; exposed in Edit Dataset dialog |
@@ -71,7 +70,7 @@
 | Per-user quota tracking            | Medium   | [#25](https://github.com/langerma/dumpstore/issues/25) | Space usage per user/group (`zfs userspace` / `zfs groupspace`) |
 | Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
-| wsdd / network discovery hint      | Low      | [#80](https://github.com/langerma/dumpstore/issues/80) | Show `wsdd` in Installed Software card or document it; without it SMB shares don't appear in Windows/Gnome Network |
+
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |
 | Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; backward-compatible migration |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |

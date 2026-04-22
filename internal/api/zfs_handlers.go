@@ -313,6 +313,59 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// renameDataset handles POST /api/datasets/rename
+// Body: {"name":"tank/old", "new_name":"tank/new"}
+func (h *Handler) renameDataset(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string `json:"name"`
+		NewName string `json:"new_name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Name == "" || req.NewName == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("name and new_name are required"), nil)
+		return
+	}
+	if !validZFSName(req.Name) || !validZFSName(req.NewName) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	if !strings.Contains(req.Name, "/") || !strings.Contains(req.NewName, "/") {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("refusing to rename a pool root"), nil)
+		return
+	}
+	// Both names must share the same parent (ZFS rename constraint).
+	oldParent := req.Name[:strings.LastIndex(req.Name, "/")]
+	newParent := req.NewName[:strings.LastIndex(req.NewName, "/")]
+	if oldParent != newParent {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("new name must be under the same parent dataset"), nil)
+		return
+	}
+	if ok, err := datasetExists(req.Name); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", req.Name), nil)
+		return
+	}
+
+	out, err := h.runOp("zfs_dataset_rename.yml", map[string]string{
+		"name":     req.Name,
+		"new_name": req.NewName,
+	})
+	auditLog(r.Context(), r, "dataset.rename", req.Name+" -> "+req.NewName, err)
+	if err != nil {
+		writeRunOpError(r.Context(), w, err, out)
+		return
+	}
+
+	h.publishDatasets()
+	h.publishSnapshots()
+	writeJSON(r.Context(), w, map[string]any{"name": req.Name, "new_name": req.NewName, "tasks": out.Steps()})
+}
+
 // deleteDataset handles DELETE /api/datasets/{name}
 // Pool roots (names without a '/') are rejected — use `zpool destroy` for that.
 // Names containing '@' are rejected — use DELETE /api/snapshots instead.
@@ -358,6 +411,58 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 
 	h.publishDatasets()
 	writeJSON(r.Context(), w, map[string]any{"name": name, "tasks": out.Steps()})
+}
+
+// cloneSnapshot handles POST /api/snapshots/clone
+// Body: {"snapshot":"tank/data@snap1", "target":"tank/data-clone"}
+func (h *Handler) cloneSnapshot(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Snapshot string `json:"snapshot"`
+		Target   string `json:"target"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Snapshot == "" || req.Target == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshot and target are required"), nil)
+		return
+	}
+	// Validate snapshot: must contain '@', dataset part must be valid.
+	at := strings.IndexByte(req.Snapshot, '@')
+	if at < 0 {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshot must contain '@'"), nil)
+		return
+	}
+	dsName := req.Snapshot[:at]
+	label := req.Snapshot[at+1:]
+	if !validZFSName(dsName) || !validSnapLabel(label) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name"), nil)
+		return
+	}
+	if !validZFSName(req.Target) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid target dataset name"), nil)
+		return
+	}
+	if !strings.Contains(req.Target, "/") {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("target must include a pool prefix"), nil)
+		return
+	}
+
+	out, err := h.runOp("zfs_snapshot_clone.yml", map[string]string{
+		"snapshot": req.Snapshot,
+		"target":   req.Target,
+	})
+	auditLog(r.Context(), r, "snapshot.clone", req.Snapshot+" -> "+req.Target, err)
+	if err != nil {
+		writeRunOpError(r.Context(), w, err, out)
+		return
+	}
+
+	h.publishDatasets()
+	h.publishSnapshots()
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(r.Context(), w, map[string]any{"snapshot": req.Snapshot, "target": req.Target, "tasks": out.Steps()})
 }
 
 // deleteSnapshot handles DELETE /api/snapshots/{dataset@snapname}

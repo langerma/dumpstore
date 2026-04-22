@@ -2,6 +2,7 @@ package zfs
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -72,7 +73,12 @@ func GetDatasetACL(dataset string) (*DatasetACL, error) {
 // An error is returned only when both tools fail (e.g. neither is installed).
 // Callers should treat an error as "unknown" and fall back accordingly.
 func DatasetHasACL(mountpoint string) (bool, error) {
-	out, err := run("getfacl", "-c", mountpoint)
+	// FreeBSD getfacl does not support -c (omit header comments).
+	args := []string{"-c", mountpoint}
+	if runtime.GOOS == "freebsd" {
+		args = []string{mountpoint}
+	}
+	out, err := run("getfacl", args...)
 	if err == nil {
 		n := 0
 		for _, line := range splitLines(out) {
@@ -113,7 +119,12 @@ func normalizeACLType(s string) string {
 // getPOSIXACL runs getfacl and parses the output.
 // Uses -c (omit header comments) and -p (absolute paths, no strip of leading /).
 func getPOSIXACL(mountpoint string) ([]ACLEntry, error) {
-	out, err := run("getfacl", "-c", "-p", mountpoint)
+	// FreeBSD getfacl does not support -c (omit header comments).
+	args := []string{"-c", "-p", mountpoint}
+	if runtime.GOOS == "freebsd" {
+		args = []string{"-p", mountpoint}
+	}
+	out, err := run("getfacl", args...)
 	if err != nil {
 		return nil, fmt.Errorf("getfacl %s: %w", mountpoint, err)
 	}

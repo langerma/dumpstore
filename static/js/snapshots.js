@@ -39,7 +39,12 @@ export function renderSnapshots() {
       <td>${fmtBytes(s.refer)}</td>
       <td class="muted">${fmtDate(s.creation)}</td>
       <td class="muted">${s.clones && s.clones !== '-' ? esc(s.clones) : '—'}</td>
-      <td><button class="btn-del" data-snap="${esc(s.name)}">Delete</button></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn-clone btn-small" data-snap="${esc(s.name)}">Clone</button>
+          <button class="btn-del" data-snap="${esc(s.name)}">Delete</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `
@@ -53,6 +58,10 @@ export function renderSnapshots() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  wrap.querySelectorAll('.btn-clone').forEach(btn => {
+    btn.addEventListener('click', () => openCloneSnapDialog(btn.dataset.snap));
+  });
 
   wrap.querySelectorAll('.btn-del').forEach(btn => {
     btn.addEventListener('click', () => deleteSnapshot(btn.dataset.snap));
@@ -167,5 +176,41 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
     storeSet('snapshots', snaps || []);
   } catch (e) {
     showOpLog('Snapshot creation failed', e.tasks, e.message);
+  }
+});
+
+// ── Clone Snapshot dialog ────────────────────────────────────────────────────────
+const cloneSnapDialog = document.getElementById('cloneSnapDialog');
+document.getElementById('cloneSnapCancelBtn').addEventListener('click', () => cloneSnapDialog.close());
+
+function openCloneSnapDialog(snapshotName) {
+  document.getElementById('cloneSnapSource').value = snapshotName;
+  // Suggest target: dataset part + '-clone'
+  const at = snapshotName.indexOf('@');
+  const dsName = at >= 0 ? snapshotName.substring(0, at) : snapshotName;
+  document.getElementById('cloneSnapTarget').value = dsName + '-clone';
+  cloneSnapDialog.showModal();
+  const input = document.getElementById('cloneSnapTarget');
+  input.focus();
+  input.select();
+}
+
+document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const snapshot = document.getElementById('cloneSnapSource').value;
+  const target = document.getElementById('cloneSnapTarget').value.trim();
+  if (!reZFSName.test(target)) {
+    toast('Invalid target dataset name', 'err');
+    return;
+  }
+  cloneSnapDialog.close();
+  showOpLogRunning('Cloning snapshot…');
+  try {
+    const result = await api('POST', '/api/snapshots/clone', { snapshot, target });
+    showOpLog(`Cloned: ${snapshot} → ${target}`, result.tasks, null);
+    const datasets = await api('GET', '/api/datasets');
+    storeSet('datasets', datasets || []);
+  } catch (err) {
+    showOpLog('Clone failed', err.tasks, err.message);
   }
 });

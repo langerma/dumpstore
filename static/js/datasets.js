@@ -71,6 +71,7 @@ export function renderDatasets() {
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
             ${d.type === 'volume' ? (() => { const _it = state.iscsiTargets.find(t => t.zvol_name === d.name); return `<button class="btn-iscsi btn-small${_it ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_it ? 'iSCSI target: ' + esc(_it.iqn) : 'Not exposed as iSCSI target'}">iSCSI</button>`; })() : ''}
             <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
+            ${canDelete ? `<button class="btn-rename btn-small" data-ds="${esc(d.name)}">Rename</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -102,6 +103,10 @@ export function renderDatasets() {
 
   wrap.querySelectorAll('.btn-edit[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openEditDatasetDialog(btn.dataset.ds, btn.dataset.type));
+  });
+
+  wrap.querySelectorAll('.btn-rename[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openRenameDatasetDialog(btn.dataset.ds));
   });
 
   wrap.querySelectorAll('.btn-del[data-ds]').forEach(btn => {
@@ -993,5 +998,45 @@ document.getElementById('iscsiRemoveBtn').addEventListener('click', async () => 
     await _refreshISCSITargets();
   } catch (e) {
     showOpLog('Failed to remove iSCSI target', e.tasks, e.message);
+  }
+});
+
+// ── Rename Dataset dialog ───────────────────���─────────────────────────────────
+const renameDatasetDialog = document.getElementById('renameDatasetDialog');
+document.getElementById('renameDatasetCancelBtn').addEventListener('click', () => renameDatasetDialog.close());
+
+function openRenameDatasetDialog(name) {
+  document.getElementById('renameDatasetCurrent').value = name;
+  document.getElementById('renameDatasetNewName').value = name;
+  renameDatasetDialog.showModal();
+  // Select just the last path component for easy editing.
+  const input = document.getElementById('renameDatasetNewName');
+  const lastSlash = name.lastIndexOf('/');
+  input.setSelectionRange(lastSlash + 1, name.length);
+  input.focus();
+}
+
+document.getElementById('renameDatasetForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('renameDatasetCurrent').value;
+  const newName = document.getElementById('renameDatasetNewName').value.trim();
+  if (!reZFSName.test(newName)) {
+    toast('Invalid dataset name', 'err');
+    return;
+  }
+  if (name === newName) {
+    renameDatasetDialog.close();
+    toast('No change', 'ok');
+    return;
+  }
+  renameDatasetDialog.close();
+  showOpLogRunning('Renaming dataset…');
+  try {
+    const result = await api('POST', '/api/datasets/rename', { name, new_name: newName });
+    showOpLog(`Renamed: ${name} → ${newName}`, result.tasks, null);
+    const datasets = await api('GET', '/api/datasets');
+    storeSet('datasets', datasets || []);
+  } catch (err) {
+    showOpLog('Rename failed', err.tasks, err.message);
   }
 });

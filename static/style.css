@@ -786,3 +786,15 @@ dialog label select:focus { border-color: var(--accent); }
 .svc-enabled  { color: var(--green); }
 .svc-disabled { color: var(--text-muted); }
 .svc-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* Platform warnings */
+.sysinfo-warnings { margin-bottom: 1rem; }
+.sysinfo-warning {
+  background: #3d2e10;
+  color: #f5c542;
+  border: 1px solid #5a4520;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}

@@ -369,6 +369,9 @@ type Info struct {
 
 	// External software
 	Software []SoftwareTool `json:"software"`
+
+	// Platform warnings (e.g. misconfigured services)
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Get collects and returns current system and process information.
@@ -394,6 +397,7 @@ func Get() Info {
 	}
 	info.Load1, info.Load5, info.Load15 = loadAverages()
 	info.Software = softwareVersions()
+	info.Warnings = platformWarnings()
 	return info
 }
 
@@ -499,6 +503,26 @@ func probePresence(cmd string) string {
 	return "installed"
 }
 
+// probePython probes for a Python 3 interpreter.
+// On FreeBSD python3 may not be in the service PATH; try versioned names
+// and the /usr/local/bin prefix as fallbacks.
+func probePython() string {
+	if v := probeVersion("python3", "--version"); v != "" {
+		return v
+	}
+	if runtime.GOOS == "freebsd" {
+		for _, name := range []string{
+			"/usr/local/bin/python3",
+			"python3.13", "python3.12", "python3.11",
+		} {
+			if v := probeVersion(name, "--version"); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
 // detectPkgManager returns the name+version of the first known package manager found.
 func detectPkgManager() string {
 	managers := []struct{ cmd, varg string }{
@@ -576,15 +600,49 @@ func softwareVersions() []SoftwareTool {
 	return []SoftwareTool{
 		{Name: "ZFS", Version: probeVersion("zfs", "version")},
 		{Name: "Ansible", Version: probeVersion("ansible-playbook", "--version")},
-		{Name: "Python", Version: probeVersion("python3", "--version")},
+		{Name: "Python", Version: probePython()},
 		{Name: "smartctl", Version: probeVersion("smartctl", "--version")},
 		{Name: "NFS server", Version: probeNFSServer()},
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
 		{Name: "zfs-auto-snapshot", Version: probePresence("zfs-auto-snapshot")},
 		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
+		{Name: "wsdd (WS-Discovery)", Version: probePresence("wsdd")},
 		{Name: "iSCSI backend", Version: probeISCSIBackend()},
 		{Name: "lego (ACME)", Version: probeVersion("lego", "--version")},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}
+}
+
+// platformWarnings returns warnings for common misconfigurations.
+func platformWarnings() []string {
+	var w []string
+	if runtime.GOOS == "freebsd" {
+		// #76: Check zfs_enable in rc.conf — pools won't mount after reboot without it.
+		out, err := exec.Command("sysrc", "-n", "zfs_enable").Output()
+		if err != nil || strings.TrimSpace(string(out)) != "YES" {
+			w = append(w, "zfs_enable is not set to YES in rc.conf — ZFS pools will not mount after reboot")
+		}
+
+		// #74: Check zfstools cron — auto-snapshot does nothing without it.
+		hasAutoSnap := probePresence("zfs-auto-snapshot") != "" || probePresence("zfs-auto-snapshot.rb") != ""
+		if hasAutoSnap {
+			if msg := autoSnapCronWarning(); msg != "" {
+				w = append(w, msg)
+			}
+		}
+	}
+	return w
+}
+
+// autoSnapCronWarning checks whether any crontab mentions zfs-auto-snapshot.
+func autoSnapCronWarning() string {
+	// Check system crontab and user crontabs for auto-snapshot entries.
+	for _, path := range []string{"/etc/crontab", "/var/cron/tabs/root"} {
+		data, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(data), "auto-snapshot") {
+			return ""
+		}
+	}
+	return "zfs-auto-snapshot requires manual cron setup on FreeBSD — auto-snapshots may not be running"
 }

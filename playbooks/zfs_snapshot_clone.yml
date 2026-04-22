@@ -1,0 +1,24 @@
+---
+# Required extra vars:
+#   snapshot - full snapshot path (e.g. tank/data@snap1)
+#   target   - new dataset name (e.g. tank/data-clone)
+- name: Clone ZFS snapshot
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - snapshot is defined and snapshot != ""
+          - target is defined and target != ""
+          - snapshot is search("@")
+          - target is not search("@")
+          - target is search("/")
+        fail_msg: >-
+          snapshot must contain '@' and target must be a valid dataset path
+
+    - name: Clone snapshot
+      ansible.builtin.command:
+        argv: ["zfs", "clone", "{{ snapshot }}", "{{ target }}"]
+      register: clone_result
+      changed_when: clone_result.rc == 0

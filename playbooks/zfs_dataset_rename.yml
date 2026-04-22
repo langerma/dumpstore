@@ -1,0 +1,26 @@
+---
+# Required extra vars:
+#   name     - current full dataset path (e.g. tank/data)
+#   new_name - new full dataset path (e.g. tank/archive)
+- name: Rename ZFS dataset
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - name is defined and name != ""
+          - new_name is defined and new_name != ""
+          - name is not search("@")
+          - new_name is not search("@")
+          - name is search("/")
+          - new_name is search("/")
+        fail_msg: >-
+          name and new_name are required, must not contain '@',
+          and must include a pool prefix (refusing to rename a pool root)
+
+    - name: Rename dataset
+      ansible.builtin.command:
+        argv: ["zfs", "rename", "{{ name }}", "{{ new_name }}"]
+      register: rename_result
+      changed_when: rename_result.rc == 0

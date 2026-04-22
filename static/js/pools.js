@@ -16,7 +16,12 @@ export function renderSysInfo() {
   const verBadge = document.getElementById('appVersion');
   if (verBadge && s.app_version) verBadge.textContent = s.app_version;
 
-  wrap.innerHTML = `
+  const warningsHtml = s.warnings?.length ? `
+    <div class="sysinfo-warnings">
+      ${s.warnings.map(w => `<div class="sysinfo-warning">⚠ ${esc(w)}</div>`).join('')}
+    </div>` : '';
+
+  wrap.innerHTML = warningsHtml + `
     <div class="sysinfo-card">
       <div class="sysinfo-section-label">Host</div>
       <div class="sysinfo-grid">

@@ -357,6 +357,44 @@
     </div>
   </dialog>
 
+  <!-- RENAME DATASET DIALOG -->
+  <dialog id="renameDatasetDialog">
+    <form id="renameDatasetForm" method="dialog">
+      <h3>Rename Dataset</h3>
+      <fieldset class="form-section">
+        <label>Current name
+          <input type="text" id="renameDatasetCurrent" readonly class="mono">
+        </label>
+        <label>New name
+          <input type="text" id="renameDatasetNewName" required autocomplete="off" spellcheck="false" class="mono" placeholder="pool/new-name">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="renameDatasetCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" id="renameDatasetConfirmBtn" class="btn-primary">Rename</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- CLONE SNAPSHOT DIALOG -->
+  <dialog id="cloneSnapDialog">
+    <form id="cloneSnapForm" method="dialog">
+      <h3>Clone Snapshot</h3>
+      <fieldset class="form-section">
+        <label>Snapshot
+          <input type="text" id="cloneSnapSource" readonly class="mono">
+        </label>
+        <label>Target dataset name
+          <input type="text" id="cloneSnapTarget" required autocomplete="off" spellcheck="false" class="mono" placeholder="pool/clone-name">
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="cloneSnapCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" id="cloneSnapConfirmBtn" class="btn-primary">Clone</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- DELETE SNAPSHOT DIALOG -->
   <dialog id="deleteSnapDialog">
     <h3>Delete Snapshot</h3>
