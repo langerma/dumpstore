@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"dumpstore/internal/ansible"
 	"dumpstore/internal/zfs"
 )
 
@@ -182,11 +181,7 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp(playbook, vars)
 	auditLog(r.Context(), r, "acl.set", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
@@ -304,11 +299,7 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp(playbook, vars)
 	auditLog(r.Context(), r, "acl.remove", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "entry": entry, "tasks": out.Steps()})

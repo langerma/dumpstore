@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"dumpstore/internal/ansible"
 	"dumpstore/internal/system"
 )
 
@@ -98,11 +97,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("user_create.yml", vars)
 	auditLog(r.Context(), r, "user.create", req.Username, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishUserGroup()
@@ -163,11 +158,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "user.delete", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishUserGroup()
@@ -269,11 +260,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "user.modify", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishUserGroup()
@@ -360,11 +347,7 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "sshkey.add", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
@@ -418,11 +401,7 @@ func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "sshkey.remove", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
@@ -456,11 +435,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "group.create", req.Groupname, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -515,11 +490,7 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "group.delete", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishUserGroup()
@@ -621,11 +592,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "group.modify", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishUserGroup()

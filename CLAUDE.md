@@ -142,12 +142,14 @@ Do not change this split without a good reason — it exists to avoid Ansible's 
 
 | File | Responsibility |
 |------|----------------|
-| `main.go` | Server setup, flag parsing, dependency check (`ansible-playbook` in PATH, `playbooks/` and `static/` dirs exist) |
+| `main.go` | Server setup, flag parsing, dependency check (`ansible-playbook` in PATH, `playbooks/` and `static/` dirs exist). Logging and request middleware live in `internal/logging/`. |
 | `internal/zfs/zfs.go` | `ListPools`, `ListDatasets`, `ListSnapshots`, `IOStats` — all direct CLI calls |
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
 | `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
-| `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct, `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
+| `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
+| `internal/logging/handler.go` | `NewJournalHandler` — slog handler with systemd journal priority prefixes |
+| `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation |
 | `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot |
 | `internal/api/user_handlers.go` | User + group handlers, SSH key management |
 | `internal/api/acl_handlers.go` | ACL handlers (POSIX + NFSv4) |

@@ -166,6 +166,7 @@ type Handler struct {
 	broker     *broker.Broker
 	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
+	authMu     sync.RWMutex // protects concurrent access to authCfg fields
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
 	configPath string
@@ -181,6 +182,20 @@ func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, authCf
 		authStore:  authStore,
 		configPath: configPath,
 	}
+}
+
+// AuthCfgRead calls fn while holding the authCfg read lock.
+func (h *Handler) AuthCfgRead(fn func(*auth.Config)) {
+	h.authMu.RLock()
+	defer h.authMu.RUnlock()
+	fn(h.authCfg)
+}
+
+// AuthCfgWrite calls fn while holding the authCfg write lock.
+func (h *Handler) AuthCfgWrite(fn func(*auth.Config)) {
+	h.authMu.Lock()
+	defer h.authMu.Unlock()
+	fn(h.authCfg)
 }
 
 // auditLog emits a structured audit log line for every mutating API operation.
@@ -410,6 +425,17 @@ func writeJSON(ctx context.Context, w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.ErrorContext(ctx, "writeJSON encode failed", "err", err)
 	}
+}
+
+// writeRunOpError is a convenience wrapper for the common pattern of returning
+// an error from runOp. It extracts task steps from out (if non-nil) and writes
+// a 500 response.
+func writeRunOpError(ctx context.Context, w http.ResponseWriter, err error, out *ansible.PlaybookOutput) {
+	var steps []ansible.TaskStep
+	if out != nil {
+		steps = out.Steps()
+	}
+	writeError(ctx, w, http.StatusInternalServerError, err, steps)
 }
 
 func writeError(ctx context.Context, w http.ResponseWriter, code int, err error, steps []ansible.TaskStep) {

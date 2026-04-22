@@ -22,8 +22,8 @@
 │  • startup: checks ansible-playbook in PATH,                        │
 │             playbooks/ and static/ dirs exist                       │
 │  • signal.NotifyContext → graceful shutdown on SIGTERM/SIGINT       │
-│  • requestLogger middleware: reads X-Request-ID from proxy (or      │
-│    generates one), stores in ctx, logs req_id on every request line │
+│  • logging.RequestLogger middleware: reads X-Request-ID from proxy  │
+│    (or generates one), stores in ctx, logs req_id on every line    │
 │  • GET /      → http.FileServer  (static/)                          │
 │  • /api/*     → api.Handler                                         │
 └───────────────────┬─────────────────────────────────────────────────┘

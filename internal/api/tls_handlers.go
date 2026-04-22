@@ -3,7 +3,6 @@ package api
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -15,26 +14,27 @@ import (
 )
 
 var (
-	reDomain = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
-	reEmail  = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	reDomain  = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
+	reEmail   = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 	reTLSPath = regexp.MustCompile(`^/[^\x00;|&$` + "`" + `]+$`)
 )
 
 type tlsStatusResponse struct {
-	Enabled      bool     `json:"enabled"`
-	CertPath     string   `json:"cert_path,omitempty"`
-	KeyPath      string   `json:"key_path,omitempty"`
-	CN           string   `json:"cn,omitempty"`
-	SANs         []string `json:"sans,omitempty"`
-	ExpiresAt    string   `json:"expires_at,omitempty"`
-	DaysRemaining int     `json:"days_remaining,omitempty"`
-	SelfSigned   bool     `json:"self_signed,omitempty"`
-	ACMEEmail    string   `json:"acme_email,omitempty"`
-	ACMEDomain   string   `json:"acme_domain,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	CertPath      string   `json:"cert_path,omitempty"`
+	KeyPath       string   `json:"key_path,omitempty"`
+	CN            string   `json:"cn,omitempty"`
+	SANs          []string `json:"sans,omitempty"`
+	ExpiresAt     string   `json:"expires_at,omitempty"`
+	DaysRemaining int      `json:"days_remaining,omitempty"`
+	SelfSigned    bool     `json:"self_signed,omitempty"`
+	ACMEEmail     string   `json:"acme_email,omitempty"`
+	ACMEDomain    string   `json:"acme_domain,omitempty"`
 }
 
 // getTLSStatus returns the current TLS configuration and cert metadata.
 func (h *Handler) getTLSStatus(w http.ResponseWriter, r *http.Request) {
+	h.authMu.RLock()
 	resp := tlsStatusResponse{
 		Enabled:    h.authCfg.TLSEnabled,
 		CertPath:   h.authCfg.TLSCertPath,
@@ -42,9 +42,11 @@ func (h *Handler) getTLSStatus(w http.ResponseWriter, r *http.Request) {
 		ACMEEmail:  h.authCfg.ACMEEmail,
 		ACMEDomain: h.authCfg.ACMEDomain,
 	}
+	certPath := h.authCfg.TLSCertPath
+	h.authMu.RUnlock()
 
-	if h.authCfg.TLSCertPath != "" {
-		if meta, err := parseCertMeta(h.authCfg.TLSCertPath); err == nil {
+	if certPath != "" {
+		if meta, err := parseCertMeta(certPath); err == nil {
 			resp.CN = meta.cn
 			resp.SANs = meta.sans
 			resp.ExpiresAt = meta.expiresAt.Format(time.RFC3339)
@@ -62,7 +64,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		Hostname string `json:"hostname"`
 		CertDir  string `json:"cert_dir"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
 		return
 	}
@@ -87,11 +89,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		"cert_dir": req.CertDir,
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
@@ -113,9 +111,11 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.authMu.Lock()
 	h.authCfg.TLSCertPath = certPath
 	h.authCfg.TLSKeyPath = keyPath
 	h.authCfg.TLSEnabled = true
+	h.authMu.Unlock()
 
 	auditLog(r.Context(), r, "tls.gencert", req.Hostname, nil)
 
@@ -130,7 +130,7 @@ func (h *Handler) tlsSetConfig(w http.ResponseWriter, r *http.Request) {
 		CertPath string `json:"cert_path"`
 		KeyPath  string `json:"key_path"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
 		return
 	}
@@ -156,17 +156,15 @@ func (h *Handler) tlsSetConfig(w http.ResponseWriter, r *http.Request) {
 		"enabled":     "true",
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
+	h.authMu.Lock()
 	h.authCfg.TLSCertPath = req.CertPath
 	h.authCfg.TLSKeyPath = req.KeyPath
 	h.authCfg.TLSEnabled = true
+	h.authMu.Unlock()
 
 	auditLog(r.Context(), r, "tls.set_config", req.CertPath, nil)
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
@@ -179,7 +177,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		Domain  string `json:"domain"`
 		CertDir string `json:"cert_dir"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
 		return
 	}
@@ -209,11 +207,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		"cert_dir": req.CertDir,
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
@@ -236,12 +230,14 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.authMu.Lock()
 	h.authCfg.TLSCertPath = certPath
 	h.authCfg.TLSKeyPath = keyPath
 	h.authCfg.TLSEnabled = true
 	h.authCfg.ACMEEnabled = true
 	h.authCfg.ACMEEmail = req.Email
 	h.authCfg.ACMEDomain = req.Domain
+	h.authMu.Unlock()
 
 	auditLog(r.Context(), r, "tls.acme_issue", req.Domain, nil)
 
@@ -252,37 +248,40 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 
 // tlsAcmeRenew renews the ACME certificate using stored config.
 func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
-	if !h.authCfg.ACMEEnabled {
+	h.authMu.RLock()
+	acmeEnabled := h.authCfg.ACMEEnabled
+	acmeEmail := h.authCfg.ACMEEmail
+	acmeDomain := h.authCfg.ACMEDomain
+	certPath := h.authCfg.TLSCertPath
+	h.authMu.RUnlock()
+
+	if !acmeEnabled {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("ACME is not configured"), nil)
 		return
 	}
-	if h.authCfg.ACMEEmail == "" || h.authCfg.ACMEDomain == "" {
+	if acmeEmail == "" || acmeDomain == "" {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("ACME email and domain are not set"), nil)
 		return
 	}
 
 	// Derive cert_dir from stored cert path (parent of certificates/<domain>.crt)
 	certDir := filepath.Dir(h.configPath) + "/tls/acme"
-	if h.authCfg.TLSCertPath != "" {
+	if certPath != "" {
 		// Walk up two levels from <cert_dir>/certificates/<domain>.crt
-		certDir = certDirFromCertPath(h.authCfg.TLSCertPath, h.configPath)
+		certDir = certDirFromCertPath(certPath, h.configPath)
 	}
 
 	out, err := h.runOp("tls_acme_renew.yml", map[string]string{
-		"email":    h.authCfg.ACMEEmail,
-		"domain":   h.authCfg.ACMEDomain,
+		"email":    acmeEmail,
+		"domain":   acmeDomain,
 		"cert_dir": certDir,
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
-	auditLog(r.Context(), r, "tls.acme_renew", h.authCfg.ACMEDomain, nil)
+	auditLog(r.Context(), r, "tls.acme_renew", acmeDomain, nil)
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 

@@ -176,11 +176,7 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "smb_share.set", dataset, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": dataset, "sharename": req.Sharename, "tasks": out.Steps()})
@@ -210,11 +206,7 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "smb_share.delete", dataset, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": dataset, "sharename": sharename, "tasks": out.Steps()})
@@ -274,11 +266,7 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "smb_user.add", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
@@ -305,11 +293,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "smb_user.remove", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
@@ -349,7 +333,7 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 		CreateMask    string `json:"create_mask"`
 		DirectoryMask string `json:"directory_mask"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
 		return
 	}
@@ -426,11 +410,7 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 	out, err := h.applyConfig(r, &cfg)
 	auditLog(r.Context(), r, "smb_homes.set", req.Dataset, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{
@@ -462,11 +442,7 @@ func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
 	out, err := h.applyConfig(r, &cfg)
 	auditLog(r.Context(), r, "smb_homes.delete", "", err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
@@ -498,7 +474,7 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		MaxSize    string `json:"max_size"`
 		ValidUsers string `json:"valid_users"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err), nil)
 		return
 	}
@@ -564,11 +540,7 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 	out, err := h.applyConfig(r, &cfg)
 	auditLog(r.Context(), r, "smb_timemachine.create", req.Dataset, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	shares := cfg.TimeMachine
@@ -613,11 +585,7 @@ func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request)
 	out, err := h.applyConfig(r, &cfg)
 	auditLog(r.Context(), r, "smb_timemachine.delete", sharename, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})

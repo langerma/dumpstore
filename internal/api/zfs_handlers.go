@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"dumpstore/internal/ansible"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/smart"
 	"dumpstore/internal/zfs"
@@ -132,11 +131,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_dataset_set.yml", vars)
 	auditLog(r.Context(), r, "dataset.modify", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishDatasets()
@@ -228,14 +223,11 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_dataset_create.yml", vars)
 	auditLog(r.Context(), r, "dataset.create", req.Name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
+	h.publishDatasets()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -307,14 +299,11 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "snapshot.create", req.Dataset+"@"+req.SnapName, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
+	h.publishSnapshots()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -363,14 +352,11 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "dataset.destroy", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
+	h.publishDatasets()
 	writeJSON(r.Context(), w, map[string]any{"name": name, "tasks": out.Steps()})
 }
 
@@ -405,14 +391,11 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "snapshot.destroy", snapshot, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 
+	h.publishSnapshots()
 	writeJSON(r.Context(), w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
 }
 
@@ -453,13 +436,10 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "snapshot.batch_destroy", strings.Join(body.Snapshots, ","), err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
+	h.publishSnapshots()
 	writeJSON(r.Context(), w, map[string]any{"snapshots": body.Snapshots, "tasks": out.Steps()})
 }
 
@@ -560,21 +540,34 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "dataset.chown", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "tasks": out.Steps()})
 }
 
 // publishDatasets re-reads the dataset list and immediately pushes
-// dataset.query to all SSE subscribers. Called after any dataset property change.
+// dataset.query to all SSE subscribers. Called after any dataset mutation.
 func (h *Handler) publishDatasets() {
 	if datasets, err := zfs.ListDatasets(); err == nil {
 		h.broker.Publish("dataset.query", datasets)
+	}
+}
+
+// publishSnapshots re-reads all snapshots and pushes snapshot.query to SSE subscribers.
+func (h *Handler) publishSnapshots() {
+	if snaps, err := zfs.ListSnapshots(); err == nil {
+		h.broker.Publish("snapshot.query", snaps)
+	}
+}
+
+// publishPools re-reads pool data and pushes pool.query and poolstatus to SSE subscribers.
+func (h *Handler) publishPools() {
+	if pools, err := zfs.ListPools(); err == nil {
+		h.broker.Publish("pool.query", pools)
+	}
+	if statuses, err := zfs.PoolStatuses(); err == nil {
+		h.broker.Publish("poolstatus", statuses)
 	}
 }
 
@@ -593,13 +586,10 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_scrub_start.yml", map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub.start", pool, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
+	h.publishPools()
 	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
@@ -618,13 +608,10 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub.cancel", pool, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
+	h.publishPools()
 	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
 }
 
@@ -656,7 +643,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			ThresholdDays int `json:"threshold_days"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req) // threshold_days optional
+		_ = decodeJSON(r, &req) // threshold_days optional
 		if req.ThresholdDays <= 0 {
 			req.ThresholdDays = 35
 		}
@@ -666,11 +653,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		})
 		auditLog(r.Context(), r, "scrub_schedule.set", pool, err)
 		if err != nil {
-			var steps []ansible.TaskStep
-			if out != nil {
-				steps = out.Steps()
-			}
-			writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+			writeRunOpError(r.Context(), w, err, out)
 			return
 		}
 		writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
@@ -681,11 +664,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_scrub_zfsutils_enable.yml", map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub_schedule.set", pool, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
@@ -709,11 +688,7 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp(playbook, map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub_schedule.delete", pool, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
@@ -821,11 +796,7 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp("zfs_autosnap_set.yml", vars)
 	auditLog(r.Context(), r, "auto_snapshot.set", name, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	h.publishDatasets()
