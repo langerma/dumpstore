@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -18,11 +17,16 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
 		return
 	}
-	if h.authCfg.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(h.authCfg.PasswordHash), []byte(req.CurrentPassword)) != nil {
+
+	h.authMu.RLock()
+	pwHash := h.authCfg.PasswordHash
+	h.authMu.RUnlock()
+
+	if pwHash == "" || bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(req.CurrentPassword)) != nil {
 		writeError(r.Context(), w, http.StatusUnauthorized, errors.New("current password is incorrect"), nil)
 		return
 	}
@@ -40,16 +44,16 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		"password_hash": string(hash),
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	// Update in-memory config so subsequent logins use the new hash immediately.
+	h.authMu.Lock()
 	h.authCfg.PasswordHash = string(hash)
-	auditLog(r.Context(), r, "auth.change_password", h.authCfg.Username, nil)
+	username := h.authCfg.Username
+	h.authMu.Unlock()
+
+	auditLog(r.Context(), r, "auth.change_password", username, nil)
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
@@ -57,7 +61,7 @@ func (h *Handler) changeUsername(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
 		return
 	}
@@ -70,15 +74,15 @@ func (h *Handler) changeUsername(w http.ResponseWriter, r *http.Request) {
 		"username":    req.Username,
 	})
 	if err != nil {
-		if out != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, out.Steps())
-		} else {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		}
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	auditLog(r.Context(), r, "auth.change_username", req.Username, nil)
+
+	h.authMu.Lock()
 	h.authCfg.Username = req.Username
+	h.authMu.Unlock()
+
 	// Invalidate all sessions — the username changed so everyone must re-login.
 	h.authStore.DeleteAll()
 	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})

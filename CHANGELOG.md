@@ -8,6 +8,11 @@ All notable changes to this project will be documented here.
 - **Dev VM environment** — `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy` spin up headless Lima VMs (Ubuntu 24.04 + FreeBSD 15) with ZFS, Ansible, and Go pre-installed; source is packed and `make install` runs natively inside the VM; Linux UI at http://localhost:8080, FreeBSD at http://localhost:8081; VMs use dedicated extra disks for ZFS (`dumpstore-linux-data`, `dumpstore-freebsd-data`); default credentials admin/admin; closes #83
 
 ### Changed
+- **authCfg thread safety** — added `sync.RWMutex` to protect concurrent reads/writes of in-memory auth config (`PasswordHash`, `Username`, TLS/ACME fields); eliminates a data race under concurrent requests
+- **Consistent JSON decoding** — all API endpoints now use the `decodeJSON` helper (rejects trailing garbage after the JSON value); 8 endpoints previously used raw `json.NewDecoder().Decode()`
+- **Handler boilerplate reduction** — new `writeRunOpError` helper replaces 33 instances of the 5-line error-handling pattern after `runOp` calls; ~165 lines removed
+- **Consistent SSE publish after mutations** — `createDataset`, `deleteDataset`, `createSnapshot`, `deleteSnapshot`, `deleteSnapshotBatch`, `startScrub`, and `cancelScrub` now immediately push SSE updates (previously relied on the 10 s poller); new `publishSnapshots()` and `publishPools()` helpers
+- **Logging extracted from main.go** — `journalHandler` and `requestLogger` middleware moved to new `internal/logging/` package (`NewJournalHandler`, `RequestLogger`); `main.go` reduced from 345 to 180 lines
 - **Makefile** — BSD/GNU make compatible (no `$(shell ...)` at parse time); `check-prereqs` now auto-installs Go (from go.dev) and Ansible (`apt-get`/`pkg`) if absent; `install.sh` reduced to a thin root-check wrapper around `make install`
 - **FreeBSD VM port forwarding** — SSH tunnel (`-L 8081:127.0.0.1:8080`) set up in `vm-freebsd-start` as Lima's guest agent is Linux/Darwin-only; torn down in `vm-freebsd-stop`
 

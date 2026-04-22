@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"dumpstore/internal/ansible"
 	"dumpstore/internal/iscsi"
 )
 
@@ -122,11 +121,7 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "iscsi.create", req.Zvol, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"zvol": req.Zvol, "iqn": req.IQN, "tasks": out.Steps()})
@@ -160,11 +155,7 @@ func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 	out, err := h.runOp(playbook, map[string]string{"iqn": iqn, "zvol": zvol})
 	auditLog(r.Context(), r, "iscsi.delete", zvol, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"iqn": iqn, "zvol": zvol, "tasks": out.Steps()})

@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"runtime"
 
-	"dumpstore/internal/ansible"
 	"dumpstore/internal/system"
 )
 
@@ -62,11 +61,7 @@ func (h *Handler) mutateService(w http.ResponseWriter, r *http.Request) {
 	})
 	auditLog(r.Context(), r, "service."+action, svc, err)
 	if err != nil {
-		var steps []ansible.TaskStep
-		if out != nil {
-			steps = out.Steps()
-		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
+		writeRunOpError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"service": svc, "tasks": out.Steps()})
