@@ -33,6 +33,8 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
+- **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
+- **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for configurable hourly/daily/weekly/monthly rotation
 - **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
@@ -910,8 +912,8 @@ The browser UI uses `EventSource` to subscribe to all eight topics and falls bac
 
 | Feature                  | Notes                                                                                         |
 |--------------------------|-----------------------------------------------------------------------------------------------|
-| Dataset rename           | Rename a dataset or volume in place                                                           |
-| Snapshot clone           | Create a new dataset from an existing snapshot                                                |
+| ~~Dataset rename~~       | ~~Rename a dataset or volume in place~~ — **done** (`zfs rename`; same-parent constraint; closes #21) |
+| ~~Snapshot clone~~       | ~~Create a new dataset from an existing snapshot~~ — **done** (`zfs clone`; closes #22)       |
 | ~~Auto-snapshot scheduling~~ | ~~Hourly/daily/weekly/monthly rotation policies~~ — **done** (`com.sun:auto-snapshot*` ZFS properties; integrates with `zfs-auto-snapshot` / `zfstools`) |
 | ZFS native encryption    | Load/unload keys, show encryption status per dataset, support keyformat/keylocation           |
 | ~~iSCSI target management~~ | ~~Expose zvols as iSCSI targets~~ — **done** (`targetcli`/LIO on Linux, `ctld` on FreeBSD; IQN, portal, CHAP, initiator ACLs) |

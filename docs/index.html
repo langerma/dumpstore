@@ -497,6 +497,20 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">dataset rename</span>
+          <span class="health-badge badge-blue">zfs rename</span>
+        </div>
+        <p>Rename a dataset or volume in place. Same-parent constraint enforced — only the leaf name changes, the pool and parent path stay fixed. Backed by an Ansible playbook with full op-log feedback.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">snapshot clone</span>
+          <span class="health-badge badge-green">zfs clone</span>
+        </div>
+        <p>Create a new writable dataset from any existing snapshot. Pick the source snapshot and enter a name for the clone — the clone appears immediately in the dataset browser as an independent filesystem.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">user management</span>
           <span class="health-badge badge-blue">users</span>
         </div>

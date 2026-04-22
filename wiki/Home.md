@@ -16,6 +16,8 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots
+- **Dataset rename** — rename a dataset or volume in place
+- **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for automatic snapshot rotation
 - **User management** — list, create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default
 - **Group management** — list, create, edit, and delete local groups; system groups hidden by default

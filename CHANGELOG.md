@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented here.
 
-## [Unreleased]
+## [v0.1.11] — 2026-04-22
 
 ### Added
 - **Dev VM environment** — `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy` spin up headless Lima VMs (Ubuntu 24.04 + FreeBSD 15) with ZFS, Ansible, and Go pre-installed; source is packed and `make install` runs natively inside the VM; Linux UI at http://localhost:8080, FreeBSD at http://localhost:8081; VMs use dedicated extra disks for ZFS (`dumpstore-linux-data`, `dumpstore-freebsd-data`); default credentials admin/admin; closes #83
