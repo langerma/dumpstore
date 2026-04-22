@@ -62,7 +62,6 @@
 | Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
-
 | Snapshot scheduling UI             | Medium   | [#56](https://github.com/langerma/dumpstore/issues/56) | Manage auto-snapshot schedules and retention per dataset |
 | Pool expansion                     | Medium   | [#57](https://github.com/langerma/dumpstore/issues/57) | Add vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools |
 | Dataset rewrite                    | Medium   | [#50](https://github.com/langerma/dumpstore/issues/50) | Rewrite existing blocks to apply updated properties via `zfs rewrite`; exposed in Edit Dataset dialog |
@@ -70,7 +69,6 @@
 | Per-user quota tracking            | Medium   | [#25](https://github.com/langerma/dumpstore/issues/25) | Space usage per user/group (`zfs userspace` / `zfs groupspace`) |
 | Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
-
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |
 | Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; backward-compatible migration |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
