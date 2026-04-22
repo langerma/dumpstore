@@ -43,12 +43,21 @@
 
 ---
 
+## Known Issues
+
+| Bug                                              | Priority | Issue | Notes                                                                                                                       |
+|--------------------------------------------------|----------|-------|-----------------------------------------------------------------------------------------------------------------------------|
+| FreeBSD: Python version missing from system info | Low      | [#71](https://github.com/langerma/dumpstore/issues/71) | `python3` not in service PATH; probe `/usr/local/bin/python3` or versioned names as fallback |
+| FreeBSD: `getfacl -c` flag not supported         | Low      | [#73](https://github.com/langerma/dumpstore/issues/73) | `-c` is Linux-only; use `runtime.GOOS` to omit on FreeBSD; causes log spam on every poll    |
+| FreeBSD: auto-snapshot silently does nothing     | Medium   | [#74](https://github.com/langerma/dumpstore/issues/74) | `zfstools` needs manual cron setup; also ignores inherited `com.sun:auto-snapshot`; warn in UI |
+| FreeBSD: no ZFS-enabled check at startup         | Medium   | [#76](https://github.com/langerma/dumpstore/issues/76) | If `zfs_enable` not set in `rc.conf`, pools disappear after reboot; add startup warning      |
+
+---
+
 ## Planned
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc` |
-
 | Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
 | Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; depends on [#26](https://github.com/langerma/dumpstore/issues/26) |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
@@ -62,10 +71,12 @@
 | Per-user quota tracking            | Medium   | [#25](https://github.com/langerma/dumpstore/issues/25) | Space usage per user/group (`zfs userspace` / `zfs groupspace`) |
 | Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
+| wsdd / network discovery hint      | Low      | [#80](https://github.com/langerma/dumpstore/issues/80) | Show `wsdd` in Installed Software card or document it; without it SMB shares don't appear in Windows/Gnome Network |
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |
 | Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; backward-compatible migration |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
 | Historical I/O graphs              | Low      | [#61](https://github.com/langerma/dumpstore/issues/61) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
+| UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc`   |
 | ZFS native encryption              | Low      | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
 | OpenTelemetry                      | Low      | [#49](https://github.com/langerma/dumpstore/issues/49) | Traces, metrics, logs. **Deferred until collector infra available** |
 
