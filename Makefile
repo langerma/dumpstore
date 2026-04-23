@@ -71,8 +71,7 @@ install: check-prereqs build
 	cp -r static    $(INSTALL)/; \
 	echo "==> Configuring authentication..."; \
 	install -d -m 0700 $$CONFIG_DIR; \
-	if ! grep -q '"password_hash"' $$CONFIG_DIR/dumpstore.conf 2>/dev/null || \
-	     grep -q '"password_hash": ""' $$CONFIG_DIR/dumpstore.conf 2>/dev/null; then \
+	if ! grep -qF '"password_hash": "$$argon2id$$' $$CONFIG_DIR/dumpstore.conf 2>/dev/null; then \
 	    echo "Set admin password (used to log in to the web UI):"; \
 	    $(INSTALL)/$(BINARY) --set-password --config $$CONFIG_DIR/dumpstore.conf; \
 	else \

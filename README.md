@@ -567,7 +567,7 @@ sudo make uninstall
 │   ├── auth/
 │   │   ├── config.go                # Load/save dumpstore.conf (username, password hash, TLS, trusted proxies)
 │   │   ├── config_handlers.go       # API handlers for auth config changes (username, password)
-│   │   ├── login.go                 # Session-based login handler; bcrypt password verify
+│   │   ├── login.go                 # Session-based login handler; argon2id password verify
 │   │   ├── middleware.go            # Auth middleware: session cookie + X-Remote-User trusted proxy
 │   │   ├── ratelimit.go             # Per-IP rate limiter for login endpoint
 │   │   ├── session.go               # In-memory session store
@@ -648,7 +648,7 @@ sudo make uninstall
 │   ├── tls_acme_issue.yml           # Issue certificate via ACME / lego
 │   ├── tls_acme_renew.yml           # Renew ACME certificate
 │   │
-│   ├── auth_set_password.yml        # Update bcrypt password hash in dumpstore.conf
+│   ├── auth_set_password.yml        # Update argon2id password hash in dumpstore.conf
 │   ├── auth_set_username.yml        # Update username in dumpstore.conf
 │   │
 │   ├── service_control_linux.yml    # systemctl start/stop/restart/enable/disable

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Password hashing: bcrypt → argon2id** ⚠️ **BREAKING** — existing `password_hash` in `dumpstore.conf` is no longer valid after upgrade. Upgrade path: stop the service, install the new binary, run `dumpstore --set-password`, start the service. Argon2id parameters: `time=3, memory=64 MiB, threads=4` (OWASP minimum). If a bcrypt hash is detected at login, a warning is emitted to the journal. Closes #67
+
+---
+
 ## [v0.1.11] — 2026-04-22
 
 ### Added

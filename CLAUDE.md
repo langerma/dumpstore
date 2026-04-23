@@ -54,12 +54,15 @@
 ## Build & Check
 
 ```bash
-go build ./...   # must always pass before committing
-go vet ./...     # must always pass
+go build ./...             # must always pass before committing
+go vet ./...               # must always pass
+go test ./...              # unit tests (no external dependencies)
+go test -run TestFoo ./internal/api/   # run a single test by name
+go test -tags integration ./tests/integration/...  # integration tests (requires live VM)
 ```
 
 External Go dependencies (both are official golang.org/x packages, same governance as stdlib):
-- `golang.org/x/crypto/bcrypt` — password hashing for authentication
+- `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format)
 - `golang.org/x/term` — echo-disabled password prompting in `--set-password`
 
 ---
