@@ -40,9 +40,10 @@
 | FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
 | SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
 | Dev VM environment         | v0.1.11 | `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy`; Ubuntu 24.04 + FreeBSD 15 with ZFS + Ansible; default admin/admin; closes #83 |
-| Dataset rename             | v0.1.12 | Rename a dataset or volume in place; same-parent constraint; closes #21 |
+| Dataset rename             | v0.1.11 | Rename a dataset or volume in place; same-parent constraint; closes #21 |
 | Snapshot clone             | v0.1.12 | Create a new dataset from an existing snapshot via `zfs clone`; closes #22 |
-| wsdd discovery hint        | v0.1.12 | `wsdd` shown in Installed Software card; closes #80 |
+| wsdd discovery hint        | v0.1.11 | `wsdd` shown in Installed Software card; closes #80 |
+| Password hashing (argon2id)| v0.1.12 | argon2id replaces bcrypt; PHC string format; OWASP parameters; **breaking** — run `--set-password` after upgrade; closes #67 |
 
 ---
 
@@ -72,7 +73,7 @@
 | Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
 | ZFS send/receive                   | Low      | [#26](https://github.com/langerma/dumpstore/issues/26) | One-shot pool replication; local and remote (SSH) |
-| Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; backward-compatible migration |
+| Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; **breaking change** — existing password hash is dropped, `--set-password` required after upgrade |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
 | Historical I/O graphs              | Low      | [#61](https://github.com/langerma/dumpstore/issues/61) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
 | UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc`   |
