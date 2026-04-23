@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 )
 
@@ -43,7 +42,7 @@ func SetPassword(configPath string) error {
 		return errors.New("passwords do not match")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword(pass1, 12)
+	hash, err := hashPassword(pass1)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
@@ -52,7 +51,7 @@ func SetPassword(configPath string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	cfg.PasswordHash = string(hash)
+	cfg.PasswordHash = hash
 
 	if err := SaveConfig(configPath, cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)

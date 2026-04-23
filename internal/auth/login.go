@@ -3,8 +3,6 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 const sessionCookieName = "dumpstore_session"
@@ -45,7 +43,7 @@ func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.Handler
 
 		valid := username == cfg.Username &&
 			cfg.PasswordHash != "" &&
-			bcrypt.CompareHashAndPassword([]byte(cfg.PasswordHash), []byte(password)) == nil
+			verifyPassword(cfg.PasswordHash, []byte(password)) == nil
 
 		if !valid {
 			http.Redirect(w, r, "/login?error=Invalid+username+or+password.", http.StatusFound)
