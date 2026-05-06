@@ -10,3 +10,14 @@ func ConfigDir(goos string) string {
 	}
 	return "/etc/dumpstore"
 }
+
+// StateDir returns the root directory for dumpstore mutable runtime state
+// (job records, scheduled-job persistence, cached state).
+// On FreeBSD, third-party variable data belongs under /var/db.
+// On Linux, it belongs under /var/lib.
+func StateDir(goos string) string {
+	if goos == "freebsd" {
+		return "/var/db/dumpstore"
+	}
+	return "/var/lib/dumpstore"
+}

@@ -511,6 +511,20 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">snapshot send/receive</span>
+          <span class="health-badge badge-green">zfs send</span>
+        </div>
+        <p>Replicate a snapshot to another local pool or to a remote host over SSH. Dispatched as a background job — the dialog returns immediately and the transfer is tracked in the Jobs tab with live status, runtime, output tails, and a cancel button. Optional incremental send picks a prior snapshot of the same dataset (<code>-i</code>); <code>--raw</code> preserves encryption. SSH keys must be pre-configured for the dumpstore service account; remote sends use <code>BatchMode=yes</code> so missing keys fail fast instead of hanging.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">background jobs</span>
+          <span class="health-badge badge-blue">jobs runner</span>
+        </div>
+        <p>Long-running data-plane operations (currently snapshot send/receive) run outside Ansible via the jobs manager. Each job runs in its own process group; cancel sends SIGTERM and escalates to SIGKILL after a 10 s grace. Status, runtime, exit code, and the last 64 KiB of stdout/stderr are surfaced in the Jobs tab. Records are persisted to disk so status survives a service restart — any job that was running at shutdown is rewritten as <code>interrupted</code>.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">user management</span>
           <span class="health-badge badge-blue">users</span>
         </div>

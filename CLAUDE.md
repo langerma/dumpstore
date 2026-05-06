@@ -99,17 +99,21 @@ Do not add partial-ownership patterns (block-patching, lineinfile into a shared 
 **Read ops → `internal/zfs` package (direct exec)**
 `zpool`/`zfs` CLI commands are called directly via `exec.Command` for low latency. No Ansible for reads.
 
-**Write ops → Ansible playbooks**
-Create/destroy operations go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=ndjson` (custom callback plugin at `playbooks/callback_plugins/ndjson.py`). The runner in `internal/ansible/runner.go` parses the ndjson output to extract task results.
+**Configuration writes → Ansible playbooks**
+Idempotent mutations of config files, service state, and OS-managed resources (smb.conf, /etc/exports, useradd, ZFS properties) go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=ndjson` (custom callback plugin at `playbooks/callback_plugins/ndjson.py`). The runner in `internal/ansible/runner.go` parses the ndjson output to extract task results.
 
-Do not change this split without a good reason — it exists to avoid Ansible's Python startup overhead on every API call.
+**Data-plane writes → `internal/jobs` manager (direct exec)**
+Long-running streaming operations like `zfs send | zfs recv` use `exec.Command` via `internal/jobs.Manager`, not Ansible. They can run for hours, far past any reasonable HTTP timeout, and need fire-and-forget dispatch with separate cancellation and durable status tracking. Ansible's request/response model and idempotency aren't a fit. The manager spawns the child in its own process group, captures bounded stdout/stderr tails, persists job records under `internal/platform.StateDir(goos) + "/jobs"`, marks any job that was running at shutdown as `interrupted`, and publishes `jobs.update` SSE events on every state change.
+
+Do not change this split without a good reason — the Ansible side avoids Python startup overhead on every API call; the jobs side keeps long transfers from blocking HTTP.
 
 ### Adding a new operation
 
 1. **Read**: add a function to `internal/zfs/zfs.go` and a handler in `internal/api/handlers.go`.
-2. **Write**: add a playbook in `playbooks/`, wire it up in `handlers.go` using `h.runner.Run(...)`.
-3. Register the route in `handlers.go:RegisterRoutes`.
-4. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
+2. **Configuration write**: add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(...)`.
+3. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
+4. Register the route in `handlers.go:RegisterRoutes`.
+5. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
 
 ---
 
@@ -130,6 +134,14 @@ Do not change this split without a good reason — it exists to avoid Ansible's 
 - Always escape user-controlled strings through `esc()` before inserting into HTML.
 - The `api()` helper throws on non-2xx responses with the server's `error` field.
 - **Always show the Ansible op-log dialog** (`showOpLog`) after every write operation, success or failure. Never use `toast()` alone for Ansible-backed actions.
+
+#### UI consistency
+
+- **Reuse existing button classes; don't invent new ones.** Row actions in tables share one visual language: subtle muted-grey buttons with a hover state. Look at what an adjacent row action uses (e.g. `.btn-rename`, `.btn-clone`, `.btn-acl`, `.btn-iscsi`) and either reuse that class or add the new selector to the existing comma-separated rule in `style.css`. Adding a `.btn-foo` class without a matching CSS rule means the button falls back to browser defaults — looks broken. This is a recurring miss; check before shipping.
+- **Destructive actions are red** — use `.btn-danger` for full-size buttons and `.btn-cancel-job` / `.btn-del` for row actions. Don't introduce yet another red variant.
+- **Primary dialog confirms are blue/accent** — use `.btn-primary`. Cancel/back is `.btn-secondary`.
+- **Never set inline `style="background:..."` or `style="color:..."` on buttons.** If the design system doesn't have what you need, add a class to `style.css` (and reuse it).
+- After adding any new button: open the relevant tab in a browser and visually verify it matches its siblings before declaring done.
 
 ### Security
 

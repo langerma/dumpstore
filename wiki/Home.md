@@ -18,6 +18,8 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Snapshot management** — list, create (recursive), and delete snapshots
 - **Dataset rename** — rename a dataset or volume in place
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
+- **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab; optional incremental and `--raw`
+- **Background jobs** — long-running operations run outside Ansible via the jobs manager; cancel, runtime, output tails, durable status across restarts
 - **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for automatic snapshot rotation
 - **User management** — list, create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default
 - **Group management** — list, create, edit, and delete local groups; system groups hidden by default
