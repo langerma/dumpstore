@@ -22,6 +22,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume |
 | POST   | `/api/snapshots`            | Create a snapshot |
+| POST   | `/api/snapshots/clone`      | Clone a snapshot to a new dataset |
+| POST   | `/api/snapshots/send`       | Send a snapshot to a target dataset (local or remote SSH) |
 | DELETE | `/api/snapshots/{name}`     | Destroy a snapshot |
 | GET    | `/api/users`                | List local users |
 | POST   | `/api/users`                | Create a local user |
@@ -123,6 +125,55 @@ Pool roots (e.g. `tank`) cannot be deleted via this endpoint — use `zpool dest
   "recursive": false
 }
 ```
+
+### POST /api/snapshots/send
+
+Dispatch `zfs send | zfs recv` as a background job. Returns `202 Accepted` immediately with the job metadata; live status is published on the `jobs.update` SSE topic and visible in the Jobs tab. Local target:
+
+```json
+{
+  "snapshot": "tank/data@2026-05-06",
+  "target": "backup/data",
+  "incremental_from": "tank/data@2026-05-05",
+  "raw": false
+}
+```
+
+Add `"remote": "user@host"` to receive over SSH (`ssh -o BatchMode=yes`); the dumpstore service account must have SSH keys pre-configured for `host`. `incremental_from` and `raw` are optional. Response shape:
+
+```json
+{
+  "job_id": "8f3c…",
+  "type": "snapshot.send",
+  "started_at": "2026-05-06T15:21:33Z",
+  "snapshot": "tank/data@2026-05-06",
+  "target": "user@host:backup/data"
+}
+```
+
+Use `GET /api/jobs/{id}` to poll status, or subscribe to the `jobs.update` SSE topic.
+
+---
+
+## Jobs
+
+Long-running data-plane operations (currently snapshot send/receive) run as direct child processes outside Ansible, since they may run for hours. Each job has a status (`running`, `success`, `failed`, `cancelled`, `interrupted`), the captured argv, bounded stdout/stderr tails (last 64 KiB each), and timestamps. Records are persisted to disk so status survives a restart; any job left in `running` at shutdown is rewritten to `interrupted` on next boot.
+
+### GET /api/jobs
+
+Returns the list of known jobs, newest first.
+
+### GET /api/jobs/{id}
+
+Returns a single job's full record (including stdout/stderr tail).
+
+### POST /api/jobs/{id}/cancel
+
+Sends SIGTERM to the job's process group, escalating to SIGKILL after a 10 s grace. Returns `204 No Content` on success, `400` if the job is already terminal.
+
+### DELETE /api/jobs/{id}
+
+Removes a terminal job from the manager and deletes its on-disk record. Returns `204 No Content` on success, `400` if the job is still running (cancel it first).
 
 ### DELETE /api/snapshots/{dataset}@{snapname}
 

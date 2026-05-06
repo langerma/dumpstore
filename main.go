@@ -17,6 +17,7 @@ import (
 	"dumpstore/internal/api"
 	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
+	"dumpstore/internal/jobs"
 	"dumpstore/internal/logging"
 	"dumpstore/internal/platform"
 	"dumpstore/internal/schema"
@@ -107,7 +108,15 @@ func main() {
 	defer cancel()
 	broker.StartPoller(ctx, b)
 
-	apiHandler := api.NewHandler(runner, version, b, cfg, store, *configPath)
+	jobMgr, err := jobs.NewManager(platform.StateDir(runtime.GOOS), func(j jobs.Job) {
+		b.PublishNoCache("jobs.update", j)
+	})
+	if err != nil {
+		slog.Error("failed to initialise job manager", "err", err)
+		os.Exit(1)
+	}
+
+	apiHandler := api.NewHandler(runner, version, b, jobMgr, cfg, store, *configPath)
 
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, cfg, store, rl)

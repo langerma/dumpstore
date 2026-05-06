@@ -1,6 +1,7 @@
 import { state, storeSet, storeBatch } from './store.js';
 import { api, esc, toast, setRefreshing, appendOpLogStep, opLogDialog } from './utils.js';
 import { refreshACLStatus } from './datasets.js';
+import { mergeJob } from './jobs.js';
 
 // ── Schema helpers ────────────────────────────────────────────────────────────
 // Populate all schema-driven <select> elements from state.schema.
@@ -42,7 +43,7 @@ export async function loadAll() {
   try {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
-    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbStatus, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbStatus, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services, jobs] = await Promise.all([
       api('GET', '/api/pools').catch(() => null),
       api('GET', '/api/poolstatus').catch(() => null),
       api('GET', '/api/version').catch(() => null),
@@ -62,6 +63,7 @@ export async function loadAll() {
       api('GET', '/api/auto-snapshot-schedules').catch(() => null),
       api('GET', '/api/schema').catch(() => null),
       api('GET', '/api/services').catch(() => null),
+      api('GET', '/api/jobs').catch(() => null),
     ]);
     storeBatch(() => {
       if (pools !== null) storeSet('pools', pools);
@@ -96,6 +98,7 @@ export async function loadAll() {
       if (autoSnapshotSchedules !== null) storeSet('autoSnapshot', autoSnapshotSchedules);
       if (schema !== null) storeSet('schema', schema);
       if (services !== null) storeSet('services', services);
+      if (jobs !== null) storeSet('jobs', jobs);
     });
   } catch (e) {
     toast('Load failed: ' + e.message, 'err');
@@ -157,7 +160,7 @@ function stopPolling() {
 
 export function startSSE() {
   if (_es) { _es.close(); _es = null; }
-  const topics = [...Object.keys(sseTopicMap), 'ansible.progress'].join(',');
+  const topics = [...Object.keys(sseTopicMap), 'ansible.progress', 'jobs.update'].join(',');
   const es = new EventSource('/api/events?topics=' + encodeURIComponent(topics));
   _es = es;
 
@@ -179,6 +182,14 @@ export function startSSE() {
         appendOpLogStep(step);
       }
     } catch (err) { console.warn('[SSE] ansible.progress parse error', err); }
+  });
+
+  // jobs.update publishes a single Job per event; merge into state.jobs by id.
+  es.addEventListener('jobs.update', e => {
+    try {
+      const job = JSON.parse(e.data);
+      if (job && job.id) mergeJob(job);
+    } catch (err) { console.warn('[SSE] jobs.update parse error', err); }
   });
 
   for (const [topic, key] of Object.entries(sseTopicMap)) {

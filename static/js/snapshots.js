@@ -42,6 +42,7 @@ export function renderSnapshots() {
       <td>
         <div class="row-actions">
           <button class="btn-clone btn-small" data-snap="${esc(s.name)}">Clone</button>
+          <button class="btn-send btn-small" data-snap="${esc(s.name)}">Send</button>
           <button class="btn-del" data-snap="${esc(s.name)}">Delete</button>
         </div>
       </td>
@@ -61,6 +62,10 @@ export function renderSnapshots() {
 
   wrap.querySelectorAll('.btn-clone').forEach(btn => {
     btn.addEventListener('click', () => openCloneSnapDialog(btn.dataset.snap));
+  });
+
+  wrap.querySelectorAll('.btn-send').forEach(btn => {
+    btn.addEventListener('click', () => openSendSnapDialog(btn.dataset.snap));
   });
 
   wrap.querySelectorAll('.btn-del').forEach(btn => {
@@ -212,5 +217,68 @@ document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
     storeSet('datasets', datasets || []);
   } catch (err) {
     showOpLog('Clone failed', err.tasks, err.message);
+  }
+});
+
+// ── Send Snapshot dialog ──────────────────────────────────────────────────────
+const sendSnapDialog = document.getElementById('sendSnapDialog');
+document.getElementById('sendSnapCancelBtn').addEventListener('click', () => sendSnapDialog.close());
+
+const reRemoteSpec = /^[a-zA-Z_][a-zA-Z0-9._-]*@[a-zA-Z0-9.-]+$/;
+
+function openSendSnapDialog(snapshotName) {
+  document.getElementById('sendSnapSource').value = snapshotName;
+  const at = snapshotName.indexOf('@');
+  const dsName = at >= 0 ? snapshotName.substring(0, at) : snapshotName;
+
+  // Suggest target: same dataset path under "backup/"
+  const lastSlash = dsName.lastIndexOf('/');
+  const tail = lastSlash >= 0 ? dsName.substring(lastSlash + 1) : dsName;
+  document.getElementById('sendSnapTarget').value = 'backup/' + tail;
+  document.getElementById('sendSnapRemote').value = '';
+  document.getElementById('sendSnapRaw').checked = false;
+
+  // Populate "incremental from" with other snapshots of the same dataset,
+  // older than the selected one.
+  const sel = document.getElementById('sendSnapIncremental');
+  sel.innerHTML = '<option value="">— full send —</option>';
+  const candidates = state.snapshots
+    .filter(s => s.dataset === dsName && s.name !== snapshotName)
+    .sort((a, b) => (b.creation || 0) - (a.creation || 0));
+  for (const s of candidates) {
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = s.snap_label;
+    sel.appendChild(opt);
+  }
+
+  sendSnapDialog.showModal();
+  document.getElementById('sendSnapTarget').focus();
+}
+
+document.getElementById('sendSnapForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const snapshot = document.getElementById('sendSnapSource').value;
+  const target = document.getElementById('sendSnapTarget').value.trim();
+  const incremental_from = document.getElementById('sendSnapIncremental').value;
+  const remote = document.getElementById('sendSnapRemote').value.trim();
+  const raw = document.getElementById('sendSnapRaw').checked;
+  if (!reZFSName.test(target) || !target.includes('/')) {
+    toast('Invalid target dataset name', 'err');
+    return;
+  }
+  if (remote && !reRemoteSpec.test(remote)) {
+    toast('Invalid remote (expected user@host)', 'err');
+    return;
+  }
+  sendSnapDialog.close();
+  try {
+    const body = { snapshot, target, raw };
+    if (incremental_from) body.incremental_from = incremental_from;
+    if (remote) body.remote = remote;
+    await api('POST', '/api/snapshots/send', body);
+    toast('Replication started — see Jobs tab', 'ok');
+  } catch (err) {
+    toast(`Send failed to start: ${err.message}`, 'err');
   }
 });

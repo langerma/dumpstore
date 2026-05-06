@@ -17,6 +17,7 @@
         <button class="tab-btn" data-tab="snapshots">Snapshots</button>
         <button class="tab-btn" data-tab="users">Users &amp; Groups</button>
         <button class="tab-btn" data-tab="services">Services</button>
+        <button class="tab-btn" data-tab="jobs">Jobs</button>
       </nav>
       <span id="sseStatus" class="sse-badge live">live</span>
       <span id="appVersion" class="app-version"></span>
@@ -164,7 +165,41 @@
         <div class="loading">Loading services…</div>
       </div>
     </section>
+
+    <section class="tab-pane" id="tab-jobs">
+      <div class="section-header">
+        <h2>Jobs</h2>
+        <span class="muted">Background data-plane operations (e.g. snapshot send/receive)</span>
+      </div>
+      <div id="jobs-wrap">
+        <div class="loading">Loading jobs…</div>
+      </div>
+    </section>
   </main>
+
+  <!-- CANCEL JOB DIALOG -->
+  <dialog id="cancelJobDialog">
+    <h3>Cancel Job</h3>
+    <div class="dialog-body">
+      <div class="delete-warning">
+        <p>Cancel job <strong id="cancelJobDisplayName"></strong>?</p>
+        <p class="delete-child-warning">The running process will receive SIGTERM, then SIGKILL after a 10 s grace. Any partial transfer on the destination will be left in place.</p>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="cancelJobBackBtn" class="btn-secondary">Keep running</button>
+      <button type="button" id="cancelJobConfirmBtn" class="btn-danger">Cancel job</button>
+    </div>
+  </dialog>
+
+  <!-- JOB DETAIL DIALOG -->
+  <dialog id="jobDetailDialog">
+    <h3 id="jobDetailTitle">Job</h3>
+    <div class="dialog-body" id="jobDetailBody"></div>
+    <div class="dialog-actions">
+      <button type="button" id="jobDetailCloseBtn" class="btn-secondary">Close</button>
+    </div>
+  </dialog>
 
   <!-- NEW DATASET DIALOG -->
   <dialog id="newDatasetDialog">
@@ -391,6 +426,41 @@
       <div class="dialog-actions">
         <button type="button" id="cloneSnapCancelBtn" class="btn-secondary">Cancel</button>
         <button type="submit" id="cloneSnapConfirmBtn" class="btn-primary">Clone</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- SEND SNAPSHOT DIALOG -->
+  <dialog id="sendSnapDialog">
+    <form id="sendSnapForm" method="dialog">
+      <h3>Send Snapshot</h3>
+      <fieldset class="form-section">
+        <label>Snapshot
+          <input type="text" id="sendSnapSource" readonly class="mono">
+        </label>
+        <label>Target dataset
+          <input type="text" id="sendSnapTarget" required autocomplete="off" spellcheck="false" class="mono" placeholder="pool/path">
+        </label>
+        <label>Incremental from (optional)
+          <select id="sendSnapIncremental" class="mono">
+            <option value="">— full send —</option>
+          </select>
+        </label>
+        <label>Remote host (optional)
+          <input type="text" id="sendSnapRemote" autocomplete="off" spellcheck="false" class="mono" placeholder="user@host (empty = local)">
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="sendSnapRaw">
+          <span>Raw send (<code>--raw</code>, preserves encryption)</span>
+        </label>
+        <p class="muted" style="margin-top:0.5rem">
+          Remote sends use <code>ssh</code> with <code>BatchMode=yes</code>; SSH keys must be pre-configured for the dumpstore service account.
+          Large sends may take a long time — the op-log appears once the transfer finishes.
+        </p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="sendSnapCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" id="sendSnapConfirmBtn" class="btn-primary">Send</button>
       </div>
     </form>
   </dialog>

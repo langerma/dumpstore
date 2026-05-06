@@ -35,6 +35,8 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
+- **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab (status, runtime, output tails, cancel); optional incremental (`-i`) using a prior snapshot of the same dataset and `--raw` for encrypted datasets; SSH keys must be pre-configured for the dumpstore service account
+- **Background jobs** — long-running data-plane operations (currently snapshot send/receive) run outside Ansible via the jobs manager; each runs in its own process group with SIGTERM→SIGKILL cancel; status persists across service restarts (interrupted jobs are surfaced as such); live updates via SSE
 - **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for configurable hourly/daily/weekly/monthly rotation
 - **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
@@ -255,6 +257,13 @@ PATCH  /api/datasets/{n}      → zfs_dataset_set.yml       (ansible)
 DELETE /api/datasets/{n}      → zfs_dataset_destroy.yml   (ansible)
 POST   /api/snapshots         → zfs_snapshot_create.yml   (ansible)
 DELETE /api/snapshots/{n}     → zfs_snapshot_destroy.yml  (ansible)
+POST   /api/snapshots/clone   → zfs_snapshot_clone.yml    (ansible)
+POST   /api/snapshots/send    → internal/jobs (direct exec, fire-and-forget)
+
+GET    /api/jobs              → list of background jobs   (direct)
+GET    /api/jobs/{id}         → single job status         (direct)
+POST   /api/jobs/{id}/cancel  → SIGTERM → SIGKILL grace   (direct)
+DELETE /api/jobs/{id}         → remove terminal job       (direct)
 
 GET    /api/users                    → /etc/passwd               (direct)
 POST   /api/users                    → user_create.yml           (ansible)

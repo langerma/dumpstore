@@ -465,6 +465,109 @@ func (h *Handler) cloneSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, map[string]any{"snapshot": req.Snapshot, "target": req.Target, "tasks": out.Steps()})
 }
 
+// sendSnapshot handles POST /api/snapshots/send
+// Body: {"snapshot":"tank/data@snap1", "target":"backup/data",
+//        "incremental_from":"tank/data@prev", "raw":false, "remote":"user@host"}
+//
+// Dispatches the transfer as a background job and returns 202 with the job
+// metadata. Progress and result are tracked in the jobs panel; clients should
+// subscribe to the `jobs.update` SSE topic for live updates. `remote` is
+// optional; when set, the receive runs over SSH and the operator must have
+// keys pre-configured for the dumpstore service account on `host`.
+//
+// This is a deliberate exception to the "writes go through Ansible" rule:
+// `zfs send | zfs recv` is a streaming data-plane operation, not an
+// idempotent configuration write, and may run for hours.
+func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Snapshot        string `json:"snapshot"`
+		Target          string `json:"target"`
+		IncrementalFrom string `json:"incremental_from"`
+		Raw             bool   `json:"raw"`
+		Remote          string `json:"remote"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Snapshot == "" || req.Target == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshot and target are required"), nil)
+		return
+	}
+	at := strings.IndexByte(req.Snapshot, '@')
+	if at < 0 {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("snapshot must contain '@'"), nil)
+		return
+	}
+	if !validZFSName(req.Snapshot[:at]) || !validSnapLabel(req.Snapshot[at+1:]) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name"), nil)
+		return
+	}
+	if !validZFSName(req.Target) || !strings.Contains(req.Target, "/") {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("target must be a dataset path with a pool prefix"), nil)
+		return
+	}
+	if req.IncrementalFrom != "" {
+		iat := strings.IndexByte(req.IncrementalFrom, '@')
+		if iat < 0 || !validZFSName(req.IncrementalFrom[:iat]) || !validSnapLabel(req.IncrementalFrom[iat+1:]) {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid incremental_from snapshot"), nil)
+			return
+		}
+	}
+	if req.Remote != "" && !validRemoteSpec(req.Remote) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid remote (expected user@host)"), nil)
+		return
+	}
+	if ok, err := snapshotExists(req.Snapshot); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", req.Snapshot), nil)
+		return
+	}
+
+	dest := req.Target
+	if req.Remote != "" {
+		dest = req.Remote + ":" + req.Target
+	}
+
+	// Build argv directly — no shell involved, so no bash dependency on
+	// FreeBSD and no portability issues with `pipefail`. Pipefail-equivalent
+	// semantics are implemented by jobs.RunPipeline (see Manager.RunPipeline).
+	send := []string{"zfs", "send"}
+	if req.Raw {
+		send = append(send, "--raw")
+	}
+	if req.IncrementalFrom != "" {
+		send = append(send, "-i", req.IncrementalFrom)
+	}
+	send = append(send, req.Snapshot)
+
+	var recv []string
+	if req.Remote != "" {
+		recv = []string{"ssh", "-o", "BatchMode=yes", req.Remote, "zfs", "recv", req.Target}
+	} else {
+		recv = []string{"zfs", "recv", req.Target}
+	}
+
+	job, err := h.jobs.RunPipeline("snapshot.send", send, recv)
+	auditLog(r.Context(), r, "snapshot.send", req.Snapshot+" -> "+dest, err)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to start job: %w", err), nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"job_id":     job.ID,
+		"type":       job.Type,
+		"started_at": job.StartedAt,
+		"snapshot":   req.Snapshot,
+		"target":     dest,
+	})
+}
+
 // deleteSnapshot handles DELETE /api/snapshots/{dataset@snapname}
 func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	snapshot := r.PathValue("snapshot")

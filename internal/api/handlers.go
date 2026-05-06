@@ -16,6 +16,7 @@ import (
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
+	"dumpstore/internal/jobs"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
@@ -55,6 +56,10 @@ var (
 
 	// reSSHKeyType matches the key-type prefix of an SSH public key.
 	reSSHKeyType = regexp.MustCompile(`^(ssh-|ecdsa-sha2-|sk-)`)
+
+	// reRemoteSpec matches a `user@host` SSH destination. Host may be a
+	// hostname or IPv4 literal; IPv6 in brackets is not supported.
+	reRemoteSpec = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9._-]*@[a-zA-Z0-9.-]+$`)
 )
 
 // validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
@@ -71,6 +76,9 @@ func validSMBShare(s string) bool { return reSMBShare.MatchString(s) }
 
 // validShellPath returns true if s is a safe absolute path.
 func validShellPath(s string) bool { return reShellPath.MatchString(s) }
+
+// validRemoteSpec returns true if s is a safe `user@host` SSH destination.
+func validRemoteSpec(s string) bool { return reRemoteSpec.MatchString(s) }
 
 // validSSHKey returns true if s looks like an SSH public key (single line, known prefix).
 func validSSHKey(s string) bool {
@@ -164,6 +172,7 @@ type Handler struct {
 	runner     *ansible.Runner
 	version    string
 	broker     *broker.Broker
+	jobs       *jobs.Manager
 	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
@@ -173,11 +182,12 @@ type Handler struct {
 }
 
 // NewHandler creates a Handler with the given dependencies.
-func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
+func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
 	return &Handler{
 		runner:     runner,
 		version:    version,
 		broker:     b,
+		jobs:       jm,
 		authCfg:    authCfg,
 		authStore:  authStore,
 		configPath: configPath,
@@ -237,6 +247,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/iostat", h.getIOStat)
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("POST /api/snapshots/clone", h.cloneSnapshot)
+	mux.HandleFunc("POST /api/snapshots/send", h.sendSnapshot)
+	mux.HandleFunc("GET /api/jobs", h.listJobs)
+	mux.HandleFunc("GET /api/jobs/{id}", h.getJob)
+	mux.HandleFunc("POST /api/jobs/{id}/cancel", h.cancelJob)
+	mux.HandleFunc("DELETE /api/jobs/{id}", h.removeJob)
 	mux.HandleFunc("POST /api/snapshots/delete-batch", h.deleteSnapshotBatch)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)

@@ -4,6 +4,15 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Background jobs runner** (`internal/jobs`) — new manager that runs long-lived data-plane operations as direct child processes outside Ansible, since `zfs send | zfs recv` can run for hours and doesn't fit Ansible's request/response model. Each job is spawned in its own process group; cancel sends SIGTERM and escalates to SIGKILL after 10 s. Bounded 64 KiB stdout/stderr tails are captured in memory. Each job is persisted as a JSON record under `/var/lib/dumpstore/jobs/` (Linux) / `/var/db/dumpstore/jobs/` (FreeBSD); on restart, any record left in `running` state is rewritten to `interrupted`. Auto-prune keeps up to 50 terminal records; explicit `DELETE /api/jobs/{id}` removes a terminal job on demand. New `jobs.update` SSE topic publishes per-job snapshots on every state change. Endpoints: `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`, `DELETE /api/jobs/{id}`. New Jobs tab in the UI with Cancel for running jobs and Remove for terminal jobs.
+- **Snapshot send/receive** — `POST /api/snapshots/send` dispatches `zfs send [-i prev] [--raw] <snap> | [ssh user@host] zfs recv <target>` as a background job and returns `202 {job_id}` immediately. The pipeline is wired with an OS pipe between two child processes (no shell, no `bash` dependency on FreeBSD); pipefail-equivalent semantics are implemented in the jobs runner. Supports local targets and remote hosts (`user@host` over SSH with `BatchMode=yes`), optional incremental by picking a prior snapshot of the same dataset, and `--raw` for encrypted datasets. UI surfaces the transfer in the Jobs tab with live status, runtime, output tails, and a cancel button. Operator must pre-configure SSH keys for the dumpstore service account. Closes #26.
+
+### Changed
+
+- **Architecture rule split: configuration writes vs. data-plane writes** — Ansible playbooks are now reserved for idempotent configuration writes (config files, service state, OS resources). Long-running streaming data-plane operations go through the new jobs manager. CLAUDE.md updated accordingly.
+
 ### Changed
 
 - **Password hashing: bcrypt → argon2id** ⚠️ **BREAKING** — existing `password_hash` in `dumpstore.conf` is no longer valid after upgrade. Upgrade path: stop the service, install the new binary, run `dumpstore --set-password`, start the service. Argon2id parameters: `time=3, memory=64 MiB, threads=4` (OWASP minimum). If a bcrypt hash is detected at login, a warning is emitted to the journal. Closes #67
