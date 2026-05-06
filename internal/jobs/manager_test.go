@@ -133,6 +133,62 @@ func TestPersistence_RunningBecomesInterrupted(t *testing.T) {
 	}
 }
 
+func TestRunPipeline_Success(t *testing.T) {
+	m := newTestManager(t)
+	// `printf hello | tr a-z A-Z` should write HELLO to stdout.
+	j, err := m.RunPipeline("test",
+		[]string{"sh", "-c", "printf hello"},
+		[]string{"tr", "a-z", "A-Z"},
+	)
+	if err != nil {
+		t.Fatalf("RunPipeline: %v", err)
+	}
+	final := waitTerminal(t, m, j.ID)
+	if final.Status != StatusSuccess {
+		t.Fatalf("status = %s, want success", final.Status)
+	}
+	if !strings.Contains(final.Stdout, "HELLO") {
+		t.Errorf("stdout = %q, want to contain HELLO", final.Stdout)
+	}
+}
+
+func TestRunPipeline_LeftFails(t *testing.T) {
+	m := newTestManager(t)
+	// Left exits non-zero; the right side may or may not have produced output,
+	// but the job result must be failure.
+	j, _ := m.RunPipeline("test",
+		[]string{"sh", "-c", "exit 5"},
+		[]string{"cat"},
+	)
+	final := waitTerminal(t, m, j.ID)
+	if final.Status != StatusFailed {
+		t.Fatalf("status = %s, want failed", final.Status)
+	}
+	if !strings.Contains(final.Error, "exit status 5") {
+		t.Errorf("error = %q, want to mention exit status 5", final.Error)
+	}
+}
+
+func TestRemove_RefusesRunning(t *testing.T) {
+	m := newTestManager(t)
+	j, _ := m.Run("test", []string{"sh", "-c", "sleep 5"})
+	time.Sleep(50 * time.Millisecond)
+	if err := m.Remove(j.ID); err == nil {
+		t.Fatalf("Remove on running job should fail")
+	}
+	_ = m.Cancel(j.ID)
+	final := waitTerminal(t, m, j.ID)
+	if !final.Status.terminal() {
+		t.Fatalf("job did not terminate")
+	}
+	if err := m.Remove(j.ID); err != nil {
+		t.Fatalf("Remove on terminal job: %v", err)
+	}
+	if _, ok := m.Get(j.ID); ok {
+		t.Errorf("job still present after Remove")
+	}
+}
+
 func TestNotifier_FiresOnStartAndFinish(t *testing.T) {
 	dir := t.TempDir()
 	var events []Status

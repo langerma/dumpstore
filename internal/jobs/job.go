@@ -4,10 +4,15 @@
 // through Ansible playbooks. Data-plane operations — long-running streaming
 // transfers like `zfs send | zfs recv` — don't fit Ansible's request/response
 // model: a single transfer can run for hours, far exceeding any reasonable
-// HTTP timeout. The jobs package handles those: it spawns a child process
-// (typically `bash -c "..."`), tracks status and output in memory, persists
-// each job record to disk so state survives a restart, and exposes
-// cancellation by signalling the child's process group.
+// HTTP timeout. The jobs package handles those.
+//
+// Two entry points: Manager.Run for a single child process, and
+// Manager.RunPipeline for a two-process pipeline wired together with an
+// os.Pipe (no shell — avoids any bash/dash/pipefail portability issues
+// across Linux and FreeBSD). Children are placed in their own process
+// group so cancellation reaches the whole group, output is captured into
+// bounded ring-buffer tails, and each job record is persisted to disk so
+// status survives a service restart.
 package jobs
 
 import "time"

@@ -531,23 +531,26 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 		dest = req.Remote + ":" + req.Target
 	}
 
-	// Build the shell pipeline. All interpolated values have already been
-	// validated against strict whitelist regexes, so direct substitution is
-	// safe — but we still single-quote them as a belt-and-braces guard.
-	pipe := "set -o pipefail; zfs send"
+	// Build argv directly — no shell involved, so no bash dependency on
+	// FreeBSD and no portability issues with `pipefail`. Pipefail-equivalent
+	// semantics are implemented by jobs.RunPipeline (see Manager.RunPipeline).
+	send := []string{"zfs", "send"}
 	if req.Raw {
-		pipe += " --raw"
+		send = append(send, "--raw")
 	}
 	if req.IncrementalFrom != "" {
-		pipe += " -i " + shellQuote(req.IncrementalFrom)
+		send = append(send, "-i", req.IncrementalFrom)
 	}
-	pipe += " " + shellQuote(req.Snapshot) + " | "
-	if req.Remote != "" {
-		pipe += "ssh -o BatchMode=yes " + shellQuote(req.Remote) + " "
-	}
-	pipe += "zfs recv " + shellQuote(req.Target)
+	send = append(send, req.Snapshot)
 
-	job, err := h.jobs.Run("snapshot.send", []string{"bash", "-c", pipe})
+	var recv []string
+	if req.Remote != "" {
+		recv = []string{"ssh", "-o", "BatchMode=yes", req.Remote, "zfs", "recv", req.Target}
+	} else {
+		recv = []string{"zfs", "recv", req.Target}
+	}
+
+	job, err := h.jobs.RunPipeline("snapshot.send", send, recv)
 	auditLog(r.Context(), r, "snapshot.send", req.Snapshot+" -> "+dest, err)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to start job: %w", err), nil)
@@ -563,13 +566,6 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 		"snapshot":   req.Snapshot,
 		"target":     dest,
 	})
-}
-
-// shellQuote wraps s in single quotes, escaping any embedded single quotes
-// using the standard `'\''` POSIX trick. Inputs to this function are already
-// regex-validated (no shell metachars present), so this is defence in depth.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // deleteSnapshot handles DELETE /api/snapshots/{dataset@snapname}

@@ -23,16 +23,28 @@ function fmtDuration(startedAt, finishedAt) {
 }
 
 function jobTarget(job) {
-  // For snapshot.send the wrapper command is: ["bash","-c","set -o pipefail; ..."]
-  if (job.type === 'snapshot.send' && job.args && job.args[2]) {
-    const cmd = job.args[2];
-    const sendMatch = cmd.match(/zfs send[^|]*'([^']+)'\s*\|/);
-    const recvMatch = cmd.match(/zfs recv\s+'([^']+)'/);
-    const remoteMatch = cmd.match(/ssh -o BatchMode=yes\s+'([^']+)'/);
-    const src = sendMatch ? sendMatch[1] : '?';
-    const dst = recvMatch ? recvMatch[1] : '?';
-    const remote = remoteMatch ? remoteMatch[1] + ':' : '';
-    return `${src} → ${remote}${dst}`;
+  // RunPipeline records argv as left + ["|"] + right. For snapshot.send:
+  //   left  = zfs send [--raw] [-i prev] <snapshot>
+  //   right = zfs recv <target>
+  //         | ssh -o BatchMode=yes <remote> zfs recv <target>
+  if (job.type === 'snapshot.send' && Array.isArray(job.args)) {
+    const pipeIdx = job.args.indexOf('|');
+    if (pipeIdx > 0) {
+      const left = job.args.slice(0, pipeIdx);
+      const right = job.args.slice(pipeIdx + 1);
+      const src = left[left.length - 1] || '?';
+      let dst = '?';
+      let remote = '';
+      if (right[0] === 'ssh') {
+        // ["ssh","-o","BatchMode=yes","user@host","zfs","recv","target"]
+        remote = right[3] + ':';
+        dst = right[right.length - 1];
+      } else {
+        // ["zfs","recv","target"]
+        dst = right[right.length - 1];
+      }
+      return `${src} → ${remote}${dst}`;
+    }
   }
   return job.type;
 }
@@ -47,9 +59,10 @@ export function renderJobs() {
   }
   const rows = jobs.map(j => {
     const badge = STATUS_BADGES[j.status] || 'badge-blue';
-    const cancelBtn = j.status === 'running' || j.status === 'pending'
-      ? `<button class="btn-cancel-job btn-small btn-danger" data-id="${esc(j.id)}">Cancel</button>`
-      : '';
+    const isRunning = j.status === 'running' || j.status === 'pending';
+    const actionBtn = isRunning
+      ? `<button class="btn-cancel-job btn-small" data-id="${esc(j.id)}">Cancel</button>`
+      : `<button class="btn-remove-job btn-small" data-id="${esc(j.id)}">Remove</button>`;
     return `<tr>
       <td><span class="health-badge ${badge}">${esc(j.status)}</span></td>
       <td class="mono">${esc(j.type)}</td>
@@ -59,7 +72,7 @@ export function renderJobs() {
       <td>
         <div class="row-actions">
           <button class="btn-job-detail btn-small" data-id="${esc(j.id)}">Details</button>
-          ${cancelBtn}
+          ${actionBtn}
         </div>
       </td>
     </tr>`;
@@ -78,9 +91,21 @@ export function renderJobs() {
   wrap.querySelectorAll('.btn-cancel-job').forEach(btn => {
     btn.addEventListener('click', () => openCancelJobDialog(btn.dataset.id));
   });
+  wrap.querySelectorAll('.btn-remove-job').forEach(btn => {
+    btn.addEventListener('click', () => removeJob(btn.dataset.id));
+  });
   wrap.querySelectorAll('.btn-job-detail').forEach(btn => {
     btn.addEventListener('click', () => openJobDetailDialog(btn.dataset.id));
   });
+}
+
+async function removeJob(id) {
+  try {
+    await api('DELETE', `/api/jobs/${encodeURIComponent(id)}`);
+    storeSet('jobs', (state.jobs || []).filter(j => j.id !== id));
+  } catch (err) {
+    toast(`Remove failed: ${err.message}`, 'err');
+  }
 }
 
 // ── Cancel dialog ─────────────────────────────────────────────────────────────

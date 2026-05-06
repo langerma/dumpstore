@@ -198,6 +198,145 @@ func (m *Manager) Run(jobType string, argv []string) (Job, error) {
 	return snap, nil
 }
 
+// RunPipeline spawns `left | right` as two child processes connected by an
+// OS pipe, with no shell involved. Both children are placed in the same
+// process group so cancel signals reach both. The job's recorded result
+// follows pipefail semantics: a non-zero exit on the left (the producer)
+// takes precedence over the right's status, since a failed `zfs send`
+// usually causes a derived failure on `zfs recv`.
+//
+// Args is recorded as left + ["|"] + right purely for display.
+func (m *Manager) RunPipeline(jobType string, left, right []string) (Job, error) {
+	if len(left) == 0 || len(right) == 0 {
+		return Job{}, errors.New("both left and right argv required")
+	}
+	id, err := newID()
+	if err != nil {
+		return Job{}, err
+	}
+
+	dataR, dataW, err := os.Pipe()
+	if err != nil {
+		return Job{}, fmt.Errorf("data pipe: %w", err)
+	}
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		dataR.Close()
+		dataW.Close()
+		return Job{}, fmt.Errorf("stdout pipe: %w", err)
+	}
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		dataR.Close()
+		dataW.Close()
+		stdoutR.Close()
+		stdoutW.Close()
+		return Job{}, fmt.Errorf("stderr pipe: %w", err)
+	}
+
+	leftCmd := exec.Command(left[0], left[1:]...)
+	leftCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	leftCmd.Stdout = dataW
+	leftCmd.Stderr = stderrW
+
+	rightCmd := exec.Command(right[0], right[1:]...)
+	rightCmd.Stdin = dataR
+	rightCmd.Stdout = stdoutW
+	rightCmd.Stderr = stderrW
+
+	// closeAll closes every pipe end the parent still holds; used on early-exit.
+	closeAll := func() {
+		_ = dataR.Close()
+		_ = dataW.Close()
+		_ = stdoutR.Close()
+		_ = stdoutW.Close()
+		_ = stderrR.Close()
+		_ = stderrW.Close()
+	}
+
+	if err := leftCmd.Start(); err != nil {
+		closeAll()
+		return Job{}, fmt.Errorf("start %s: %w", left[0], err)
+	}
+	rightCmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		Pgid:    leftCmd.Process.Pid,
+	}
+	if err := rightCmd.Start(); err != nil {
+		_ = leftCmd.Process.Kill()
+		_, _ = leftCmd.Process.Wait()
+		closeAll()
+		return Job{}, fmt.Errorf("start %s: %w", right[0], err)
+	}
+
+	// Parent must close its copies of the children's FDs. The child has its
+	// own dup; not closing here means the pipe never sees EOF and `zfs recv`
+	// hangs forever waiting for more data after `zfs send` exits.
+	_ = dataR.Close()
+	_ = dataW.Close()
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	leaderPid := leftCmd.Process.Pid
+	e := &entry{
+		job: Job{
+			ID:        id,
+			Type:      jobType,
+			Args:      append(append([]string{}, left...), append([]string{"|"}, right...)...),
+			Status:    StatusRunning,
+			StartedAt: time.Now().UTC(),
+		},
+		cancel: func() error {
+			pgid, err := syscall.Getpgid(leaderPid)
+			if err != nil {
+				return err
+			}
+			if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil {
+				return err
+			}
+			go func() {
+				time.Sleep(cancelGracePeriod)
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}()
+			return nil
+		},
+	}
+
+	m.mu.Lock()
+	m.entries[id] = e
+	m.mu.Unlock()
+	snap := e.snapshot()
+	if err := m.writeRecord(snap); err != nil {
+		slog.Warn("jobs: persist failed", "id", id, "err", err)
+	}
+	m.fire(snap)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); m.collect(e, stdoutR, true) }()
+	go func() { defer wg.Done(); m.collect(e, stderrR, false) }()
+
+	go func() {
+		leftErr := leftCmd.Wait()
+		rightErr := rightCmd.Wait()
+		// Now that both children are dead, closing the read ends lets the
+		// collect goroutines see EOF and return.
+		_ = stdoutR.Close()
+		_ = stderrR.Close()
+		wg.Wait()
+		var runErr error
+		switch {
+		case leftErr != nil:
+			runErr = fmt.Errorf("%s: %w", left[0], leftErr)
+		case rightErr != nil:
+			runErr = fmt.Errorf("%s: %w", right[0], rightErr)
+		}
+		m.finish(e, runErr)
+	}()
+
+	return snap, nil
+}
+
 func (m *Manager) collect(e *entry, r io.Reader, stdout bool) {
 	buf := make([]byte, 4096)
 	var tail []byte
@@ -278,6 +417,33 @@ func (m *Manager) Cancel(id string) error {
 	}
 	if err := cancel(); err != nil {
 		return fmt.Errorf("signal: %w", err)
+	}
+	return nil
+}
+
+// Remove drops a terminal job from the manager and deletes its on-disk
+// record. Refuses to remove a job that is still running — cancel it first.
+func (m *Manager) Remove(id string) error {
+	m.mu.Lock()
+	e, ok := m.entries[id]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("job %q not found", id)
+	}
+	e.mu.Lock()
+	if !e.job.Status.terminal() {
+		current := e.job.Status
+		e.mu.Unlock()
+		m.mu.Unlock()
+		return fmt.Errorf("job %q is %s — cancel it first", id, current)
+	}
+	e.mu.Unlock()
+	delete(m.entries, id)
+	m.mu.Unlock()
+
+	path := filepath.Join(m.stateDir, id+".json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		slog.Warn("jobs: remove file failed", "id", id, "err", err)
 	}
 	return nil
 }

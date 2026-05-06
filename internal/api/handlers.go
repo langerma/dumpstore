@@ -251,6 +251,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/jobs", h.listJobs)
 	mux.HandleFunc("GET /api/jobs/{id}", h.getJob)
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", h.cancelJob)
+	mux.HandleFunc("DELETE /api/jobs/{id}", h.removeJob)
 	mux.HandleFunc("POST /api/snapshots/delete-batch", h.deleteSnapshotBatch)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)

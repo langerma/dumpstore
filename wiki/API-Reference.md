@@ -171,6 +171,10 @@ Returns a single job's full record (including stdout/stderr tail).
 
 Sends SIGTERM to the job's process group, escalating to SIGKILL after a 10 s grace. Returns `204 No Content` on success, `400` if the job is already terminal.
 
+### DELETE /api/jobs/{id}
+
+Removes a terminal job from the manager and deletes its on-disk record. Returns `204 No Content` on success, `400` if the job is still running (cancel it first).
+
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
 Append `?recursive=true` to also destroy clones.

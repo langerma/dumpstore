@@ -263,6 +263,7 @@ POST   /api/snapshots/send    → internal/jobs (direct exec, fire-and-forget)
 GET    /api/jobs              → list of background jobs   (direct)
 GET    /api/jobs/{id}         → single job status         (direct)
 POST   /api/jobs/{id}/cancel  → SIGTERM → SIGKILL grace   (direct)
+DELETE /api/jobs/{id}         → remove terminal job       (direct)
 
 GET    /api/users                    → /etc/passwd               (direct)
 POST   /api/users                    → user_create.yml           (ansible)

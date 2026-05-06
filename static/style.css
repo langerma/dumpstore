@@ -783,11 +783,11 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover {
   background: var(--surface); color: var(--text);
 }
-.btn-cancel-job {
+.btn-cancel-job, .btn-remove-job {
   background: var(--surface2); color: var(--red);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
 }
-.btn-cancel-job:hover { background: #3d1010; border-color: var(--red); }
+.btn-cancel-job:hover, .btn-remove-job:hover { background: #3d1010; border-color: var(--red); }
 
 /* ── Services tab ───────────────────────────────────────────────────────────── */
 .svc-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
