@@ -84,7 +84,10 @@ func (s *Scheduler) Start(ctx context.Context) {
 	s.done = make(chan struct{})
 	s.mu.Unlock()
 
-	go s.run(ctx)
+	// Capture stop/done as locals so the run goroutine never races with Stop
+	// nilling the struct fields. A nil channel in a select blocks forever, so
+	// without this the goroutine could deadlock instead of exiting on close.
+	go s.run(ctx, s.stop, s.done)
 }
 
 // Stop halts the tick loop and blocks until the loop goroutine exits.
@@ -101,8 +104,8 @@ func (s *Scheduler) Stop() {
 	<-done
 }
 
-func (s *Scheduler) run(ctx context.Context) {
-	defer close(s.done)
+func (s *Scheduler) run(ctx context.Context, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
 
 	// Wait until the start of the next wall-clock minute so subsequent ticks
 	// land cleanly at :00 seconds.
@@ -115,7 +118,7 @@ func (s *Scheduler) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.stop:
+		case <-stop:
 			return
 		case <-timer.C:
 		}
