@@ -19,8 +19,9 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Dataset rename** — rename a dataset or volume in place
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab; optional incremental and `--raw`
+- **Scheduled replication** — cron-scheduled `zfs send` → `zfs recv` tasks for local and remote-over-SSH targets; per-run snapshot + hold + incremental selection + dispatch via the jobs runner + destination pruning; manual "Run now"; orphaned holds reclaimed at startup
 - **Background jobs** — long-running operations run outside Ansible via the jobs manager; cancel, runtime, output tails, durable status across restarts
-- **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for automatic snapshot rotation
+- **Auto-snapshot scheduling (native)** — dumpstore executes `com.sun:auto-snapshot:*` snapshots itself via the built-in scheduler; property inheritance honoured correctly on both Linux and FreeBSD; one-click takeover from / release back to the OS daemon (`zfs-auto-snapshot` / `zfstools`); no external dependency required after takeover
 - **User management** — list, create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default
 - **Group management** — list, create, edit, and delete local groups; system groups hidden by default
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform
@@ -41,7 +42,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 
 - **ZFS native encryption** — load/unload keys, encryption status per dataset, keyformat/keylocation support
 - **Pool import/export** — import available pools from attached devices; export pools safely
-- **ZFS send/receive** — pool replication and off-site backup
+- **Drive replacement** — replace faulted disks, monitor resilver progress, offline/online devices
 
 ## Quick start
 
