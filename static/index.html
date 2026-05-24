@@ -77,6 +77,7 @@
         </label>
         <button class="btn-primary" id="newDatasetBtn">+ New Dataset</button>
       </div>
+      <div id="autosnap-status-banner"></div>
       <div id="datasets-table-wrap">
         <div class="loading">Loading datasets…</div>
       </div>
@@ -970,8 +971,8 @@
         </div>
       </fieldset>
       <p class="field-note" style="margin:0 0 0.75rem">
-        Requires <code>zfs-auto-snapshot</code> (Linux) or <code>zfstools</code> (FreeBSD).
-        Check the System Info tab to verify it is installed.
+        Snapshots are executed by dumpstore's built-in scheduler when it has taken over auto-snapshot management.
+        See the banner above the Datasets table for current state.
       </p>
       <div class="dialog-actions">
         <button type="button" id="autoSnapCancelBtn" class="btn-secondary">Cancel</button>

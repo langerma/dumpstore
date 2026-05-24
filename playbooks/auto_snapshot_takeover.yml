@@ -1,0 +1,58 @@
+---
+# Disable the OS auto-snapshot daemon so dumpstore can take over.
+# Linux: stop and disable the five systemd timers shipped by `zfs-auto-snapshot`
+#        plus remove `/etc/cron.d/zfs-auto-snapshot` if present.
+# FreeBSD: clear `daily_zfs_snapshot_enable="YES"` from /etc/periodic.conf.
+#
+# Idempotent: re-running is safe. Reports the state in changed_when so the
+# op-log dialog shows which things were actually touched.
+- name: Take over auto-snapshot execution from the OS daemon
+  hosts: localhost
+  gather_facts: true
+  tasks:
+    # ── Linux ────────────────────────────────────────────────────────────
+    - name: Linux — stop and disable zfs-auto-snapshot systemd timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+      loop:
+        - zfs-auto-snapshot-frequent.timer
+        - zfs-auto-snapshot-hourly.timer
+        - zfs-auto-snapshot-daily.timer
+        - zfs-auto-snapshot-weekly.timer
+        - zfs-auto-snapshot-monthly.timer
+      when: ansible_system == "Linux"
+      register: linux_systemd
+      failed_when:
+        # systemctl returns non-zero if the unit doesn't exist (package not
+        # installed) — that's the desired state, so swallow it.
+        - linux_systemd.failed | default(false)
+        - "'could not be found' not in (linux_systemd.msg | default(''))"
+        - "'not loaded' not in (linux_systemd.msg | default(''))"
+
+    - name: Linux — remove /etc/cron.d/zfs-auto-snapshot if present
+      ansible.builtin.file:
+        path: /etc/cron.d/zfs-auto-snapshot
+        state: absent
+      when: ansible_system == "Linux"
+
+    # ── FreeBSD ──────────────────────────────────────────────────────────
+    - name: FreeBSD — disable daily_zfs_snapshot_enable in periodic.conf
+      ansible.builtin.lineinfile:
+        path: /etc/periodic.conf
+        regexp: '^daily_zfs_snapshot_enable\s*='
+        line: 'daily_zfs_snapshot_enable="NO"'
+        create: true
+        mode: "0644"
+      when: ansible_system == "FreeBSD"
+
+    - name: FreeBSD — also disable in periodic.conf.local if it exists
+      ansible.builtin.lineinfile:
+        path: /etc/periodic.conf.local
+        regexp: '^daily_zfs_snapshot_enable\s*='
+        line: 'daily_zfs_snapshot_enable="NO"'
+        state: present
+      when: ansible_system == "FreeBSD"
+      register: fbsd_local
+      failed_when: fbsd_local.failed | default(false) and 'does not exist' not in (fbsd_local.msg | default(''))

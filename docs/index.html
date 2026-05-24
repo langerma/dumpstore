@@ -584,7 +584,7 @@
           <span class="pool-name">auto-snapshot scheduling</span>
           <span class="health-badge badge-green">com.sun:auto-snapshot</span>
         </div>
-        <p>Manage <code>com.sun:auto-snapshot*</code> ZFS properties per dataset. Integrates with <strong>zfs-auto-snapshot</strong> (Linux) and <strong>zfstools</strong> (FreeBSD) for automatic snapshot rotation with configurable keep counts. Button state updates live via SSE (<code>autosnapshot.query</code> topic).</p>
+        <p>Manage <code>com.sun:auto-snapshot*</code> ZFS properties per dataset. dumpstore runs the bucket snapshots itself via the built-in 5-field cron scheduler — no <code>zfs-auto-snapshot</code> or <code>zfstools</code> daemon required. Inheritance honoured correctly on FreeBSD (fixes the upstream <code>zfstools</code> bug). One-click takeover/release for hosts where the OS daemon is still active. Button state updates live via SSE (<code>autosnapshot.query</code>, <code>autosnap.status</code>).</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

@@ -16,6 +16,7 @@ import (
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/api"
 	"dumpstore/internal/auth"
+	"dumpstore/internal/autosnap"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
 	"dumpstore/internal/logging"
@@ -129,10 +130,26 @@ func main() {
 		slog.Error("failed to register replication tasks", "err", err)
 		os.Exit(1)
 	}
+	autosnapRunner := autosnap.New(sched, b)
+	// Only register tasks if the OS daemon isn't already managing snapshots.
+	// Takeover (POST /api/auto-snapshot/takeover) disables the daemon and
+	// calls Register at runtime; release reverses that.
+	if status := autosnap.DetectStatus(); !status.OSDaemonActive {
+		if err := autosnapRunner.Register(); err != nil {
+			slog.Error("failed to register autosnap tasks", "err", err)
+		} else {
+			slog.Info("autosnap: scheduler registered — dumpstore is managing com.sun:auto-snapshot:* execution",
+				"buckets", "frequent,hourly,daily,weekly,monthly")
+		}
+	} else {
+		slog.Warn("autosnap: OS daemon active — dumpstore scheduler not registered until takeover",
+			"daemon", status.OSDaemon)
+	}
+
 	sched.Start(ctx)
 	defer sched.Stop()
 
-	apiHandler := api.NewHandler(runner, version, b, jobMgr, replRunner, cfg, store, *configPath)
+	apiHandler := api.NewHandler(runner, version, b, jobMgr, replRunner, autosnapRunner, cfg, store, *configPath)
 
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, cfg, store, rl)

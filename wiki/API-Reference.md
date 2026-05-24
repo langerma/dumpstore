@@ -59,6 +59,9 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | DELETE | `/api/scrub-schedule/{pool}`| Remove pool from periodic scrub schedule |
 | GET    | `/api/auto-snapshot/{dataset}` | Get auto-snapshot property values for a dataset |
 | PUT    | `/api/auto-snapshot/{dataset}` | Set auto-snapshot properties for a dataset |
+| GET    | `/api/auto-snapshot/status`    | Auto-snapshot ownership (OS daemon vs dumpstore) |
+| POST   | `/api/auto-snapshot/takeover`  | Disable the OS daemon and run snapshots from dumpstore |
+| POST   | `/api/auto-snapshot/release`   | Re-enable the OS daemon and stop dumpstore's scheduler |
 | GET    | `/api/iscsi-targets`           | List all iSCSI targets |
 | POST   | `/api/iscsi-targets`           | Create an iSCSI target for a zvol |
 | DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |

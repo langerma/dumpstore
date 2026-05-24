@@ -21,6 +21,7 @@ var ValidTopics = map[string]bool{
 	"service.query":      true,
 	"jobs.update":        true,
 	"replication.update": true,
+	"autosnap.status":    true,
 }
 
 // Broker is a thread-safe, topic-based pub/sub message broker.
