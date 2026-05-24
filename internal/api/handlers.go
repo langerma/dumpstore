@@ -17,6 +17,7 @@ import (
 	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
+	"dumpstore/internal/replication"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
@@ -173,6 +174,7 @@ type Handler struct {
 	version    string
 	broker     *broker.Broker
 	jobs       *jobs.Manager
+	repl       *replication.Runner
 	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
@@ -182,12 +184,13 @@ type Handler struct {
 }
 
 // NewHandler creates a Handler with the given dependencies.
-func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
+func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, repl *replication.Runner, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
 	return &Handler{
 		runner:     runner,
 		version:    version,
 		broker:     b,
 		jobs:       jm,
+		repl:       repl,
 		authCfg:    authCfg,
 		authStore:  authStore,
 		configPath: configPath,
@@ -308,6 +311,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/tls/config", h.tlsSetConfig)
 	mux.HandleFunc("POST /api/tls/acme/issue", h.tlsAcmeIssue)
 	mux.HandleFunc("POST /api/tls/acme/renew", h.tlsAcmeRenew)
+
+	mux.HandleFunc("GET /api/replication", h.listReplication)
+	mux.HandleFunc("POST /api/replication", h.createReplication)
+	mux.HandleFunc("PATCH /api/replication/{id}", h.updateReplication)
+	mux.HandleFunc("DELETE /api/replication/{id}", h.deleteReplication)
+	mux.HandleFunc("POST /api/replication/{id}/run", h.runReplication)
+	mux.HandleFunc("GET /api/replication/{id}/history", h.getReplicationHistory)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {

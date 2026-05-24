@@ -35,6 +35,7 @@ export const state = {
   schema: null,                 // GET /api/schema response
   network: null,                // GET /api/network response
   services: [],                 // GET /api/services — [{name, display_name, unit_name, active, enabled, state}]
+  replication: [],              // GET /api/replication — [Task]
 };
 
 // ── Reactive store ──────────────────────────────────────────────────────────

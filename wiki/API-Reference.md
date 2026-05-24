@@ -64,6 +64,12 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |
 | GET    | `/api/services`                | List status of all managed services |
 | POST   | `/api/services/{name}/{action}` | Control a service (start/stop/restart/enable/disable) |
+| GET    | `/api/replication`             | List scheduled replication tasks |
+| POST   | `/api/replication`             | Create a replication task |
+| PATCH  | `/api/replication/{id}`        | Update a replication task |
+| DELETE | `/api/replication/{id}`        | Delete a replication task |
+| POST   | `/api/replication/{id}/run`    | Fire a replication task immediately (returns 202 + job_id) |
+| GET    | `/api/replication/{id}/history` | Recent run records for a task |
 
 ---
 
@@ -174,6 +180,64 @@ Sends SIGTERM to the job's process group, escalating to SIGKILL after a 10 s gra
 ### DELETE /api/jobs/{id}
 
 Removes a terminal job from the manager and deletes its on-disk record. Returns `204 No Content` on success, `400` if the job is still running (cancel it first).
+
+---
+
+## Scheduled replication
+
+Cron-scheduled replication tasks. Each fire creates a `dumpstore-repl-<UTC>` snapshot on the source, holds it for the duration of the transfer, picks the most recent common `dumpstore-repl-*` snapshot for an incremental send, dispatches the pipeline through the jobs runner, releases the hold, and prunes destination replication snapshots beyond the retention count.
+
+### GET /api/replication
+
+Returns all replication tasks (without `last_runs`). Use `/history` to retrieve run records.
+
+### POST /api/replication
+
+Create a task. `enabled` and `retention_count` default to `true` and `7` respectively.
+
+```json
+{
+  "name": "nightly-backup",
+  "source": "tank/data",
+  "target": "backup/data",
+  "remote": "user@host",
+  "schedule": "0 3 * * *",
+  "retention_count": 7,
+  "raw": false,
+  "recursive": false,
+  "enabled": true
+}
+```
+
+`schedule` is a standard 5-field cron expression (minute, hour, day-of-month, month, day-of-week) with 1-minute resolution and no catch-up on missed firings. `remote` is optional; when empty the task replicates between local pools.
+
+### PATCH /api/replication/{id}
+
+Partial update; any subset of the above fields is accepted. Re-registers the task with the scheduler.
+
+### DELETE /api/replication/{id}
+
+Unregister and remove the task. Replicated snapshots on the destination, and `dumpstore-repl-*` snapshots on the source, are **not** deleted.
+
+### POST /api/replication/{id}/run
+
+Fire the task immediately, off-schedule. Returns `202 Accepted` with the job_id of the dispatched send/recv pipeline. The body of the running task continues asynchronously; subscribe to `jobs.update` for completion.
+
+### GET /api/replication/{id}/history
+
+Returns the recent `RunRecord` list (capped at 20):
+
+```json
+[
+  {
+    "job_id": "8f3c…",
+    "snapshot": "tank/data@dumpstore-repl-20260524T030000Z",
+    "started_at": "2026-05-24T03:00:00Z",
+    "finished_at": "2026-05-24T03:11:42Z",
+    "status": "success"
+  }
+]
+```
 
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
