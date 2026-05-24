@@ -7,6 +7,7 @@ import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTime
 import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
 import { renderReplications } from './js/replication.js';
+import { renderAutoSnapStatus } from './js/autosnap.js';
 import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ subscribe(['timeMachineShares', 'smbInitialized'],                     renderTim
 subscribe(['services'],                                         renderServices);
 subscribe(['jobs'],                                             renderJobs);
 subscribe(['replication'],                                      renderReplications);
+subscribe(['autosnapStatus'],                                   renderAutoSnapStatus);
 subscribe(['schema'],                                           buildFormSelects);
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────

@@ -1,0 +1,35 @@
+---
+# Re-enable the OS auto-snapshot daemon so dumpstore can step back. Symmetric
+# to auto_snapshot_takeover.yml. Does NOT reinstall the package on Linux —
+# only enables units the package would have shipped. If the package is gone,
+# the systemd step is a no-op (swallowed via failed_when).
+- name: Release auto-snapshot execution back to the OS daemon
+  hosts: localhost
+  gather_facts: true
+  tasks:
+    - name: Linux — enable and start zfs-auto-snapshot systemd timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - zfs-auto-snapshot-frequent.timer
+        - zfs-auto-snapshot-hourly.timer
+        - zfs-auto-snapshot-daily.timer
+        - zfs-auto-snapshot-weekly.timer
+        - zfs-auto-snapshot-monthly.timer
+      when: ansible_system == "Linux"
+      register: linux_systemd
+      failed_when:
+        - linux_systemd.failed | default(false)
+        - "'could not be found' not in (linux_systemd.msg | default(''))"
+        - "'not loaded' not in (linux_systemd.msg | default(''))"
+
+    - name: FreeBSD — re-enable daily_zfs_snapshot_enable in periodic.conf
+      ansible.builtin.lineinfile:
+        path: /etc/periodic.conf
+        regexp: '^daily_zfs_snapshot_enable\s*='
+        line: 'daily_zfs_snapshot_enable="YES"'
+        create: true
+        mode: "0644"
+      when: ansible_system == "FreeBSD"

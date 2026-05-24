@@ -172,6 +172,20 @@ main {
 .badge-yellow { background: #3d2d0d; color: var(--yellow); }
 .badge-blue   { background: #0d2a3d; color: var(--accent); }
 
+.autosnap-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 13px;
+}
+.autosnap-banner-ok   { background: #0d3d2e22; border: 1px solid #0d3d2e; }
+.autosnap-banner-warn { background: #3d2d0d22; border: 1px solid #3d2d0d; }
+.autosnap-banner code { font-size: 12px; }
+.autosnap-banner button { margin-left: auto; }
+
 .pool-bar-wrap {
   background: var(--surface2);
   border-radius: 4px;

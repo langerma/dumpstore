@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dumpstore/internal/ansible"
+	"dumpstore/internal/autosnap"
 	"dumpstore/internal/auth"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
@@ -175,6 +176,7 @@ type Handler struct {
 	broker     *broker.Broker
 	jobs       *jobs.Manager
 	repl       *replication.Runner
+	autosnap   *autosnap.Runner
 	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
@@ -184,13 +186,14 @@ type Handler struct {
 }
 
 // NewHandler creates a Handler with the given dependencies.
-func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, repl *replication.Runner, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
+func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, repl *replication.Runner, autosnap *autosnap.Runner, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
 	return &Handler{
 		runner:     runner,
 		version:    version,
 		broker:     b,
 		jobs:       jm,
 		repl:       repl,
+		autosnap:   autosnap,
 		authCfg:    authCfg,
 		authStore:  authStore,
 		configPath: configPath,
@@ -311,6 +314,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/tls/config", h.tlsSetConfig)
 	mux.HandleFunc("POST /api/tls/acme/issue", h.tlsAcmeIssue)
 	mux.HandleFunc("POST /api/tls/acme/renew", h.tlsAcmeRenew)
+
+	mux.HandleFunc("GET /api/auto-snapshot/status", h.getAutoSnapshotStatus)
+	mux.HandleFunc("POST /api/auto-snapshot/takeover", h.takeoverAutoSnapshot)
+	mux.HandleFunc("POST /api/auto-snapshot/release", h.releaseAutoSnapshot)
 
 	mux.HandleFunc("GET /api/replication", h.listReplication)
 	mux.HandleFunc("POST /api/replication", h.createReplication)
