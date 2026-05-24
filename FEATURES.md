@@ -46,6 +46,7 @@
 | Password hashing (argon2id)| v0.1.12 | argon2id replaces bcrypt; PHC string format; OWASP parameters; **breaking** — run `--set-password` after upgrade; closes #67 |
 | Snapshot send/receive      | v0.1.12 | One-shot `zfs send` piped to `zfs recv` between local pools or to a remote host over SSH; optional incremental (`-i`) and `--raw`; runs as a background job tracked in the Jobs tab (status, runtime, cancel); SSH keys must be pre-configured; closes #26 |
 | Background jobs runner     | v0.1.12 | `internal/jobs.Manager` spawns long-running data-plane operations (`zfs send` piped into `zfs recv`) outside Ansible; per-job process group + 10 s SIGTERM→SIGKILL cancel; 64 KiB stdout/stderr tail; JSON record per job persisted under `/var/lib/dumpstore/jobs/` (Linux) or `/var/db/dumpstore/jobs/` (FreeBSD); `running` jobs marked `interrupted` after a service restart; live updates via `jobs.update` SSE topic; new Jobs tab |
+| Scheduled replication      | v0.1.13 | Cron-scheduled `zfs send` → `zfs recv` tasks; new `internal/scheduler` (5-field cron, 1-min resolution) and `internal/replication` (JSON task store under StateDir, snapshot → hold → send → release → prune pipeline); per-run records with bounded history; manual "run now"; new Replication tab; runs surface in Jobs tab tagged `replication.run`; SSE topic `replication.update`; closes #53 |
 
 ---
 
@@ -64,7 +65,6 @@
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
 | wsdd configuration management      | Medium   | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares |
 | Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
-| Scheduled replication              | High     | [#53](https://github.com/langerma/dumpstore/issues/53) | Cron-based ZFS send/receive jobs with retention; builds on shipped one-shot send/receive |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
 | Snapshot scheduling UI             | Medium   | [#56](https://github.com/langerma/dumpstore/issues/56) | Manage auto-snapshot schedules and retention per dataset |

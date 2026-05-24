@@ -36,6 +36,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab (status, runtime, output tails, cancel); optional incremental (`-i`) using a prior snapshot of the same dataset and `--raw` for encrypted datasets; SSH keys must be pre-configured for the dumpstore service account
+- **Scheduled replication** — cron-scheduled replication tasks (5-field syntax, 1-minute resolution); each fire snapshots the source as `dumpstore-repl-<UTC>`, places a hold for the duration of the transfer, picks the most recent common `dumpstore-repl-*` for an incremental send, dispatches the pipeline via the jobs runner, releases the hold on completion, and prunes destination replication snapshots to a configurable retention count; per-task run history with "Run now" override; supports local and remote (`user@host`) targets
 - **Background jobs** — long-running data-plane operations (currently snapshot send/receive) run outside Ansible via the jobs manager; each runs in its own process group with SIGTERM→SIGKILL cancel; status persists across service restarts (interrupted jobs are surfaced as such); live updates via SSE
 - **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for configurable hourly/daily/weekly/monthly rotation
 - **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
@@ -264,6 +265,13 @@ GET    /api/jobs              → list of background jobs   (direct)
 GET    /api/jobs/{id}         → single job status         (direct)
 POST   /api/jobs/{id}/cancel  → SIGTERM → SIGKILL grace   (direct)
 DELETE /api/jobs/{id}         → remove terminal job       (direct)
+
+GET    /api/replication              → list scheduled replication tasks  (direct)
+POST   /api/replication              → create replication task           (direct)
+PATCH  /api/replication/{id}         → update replication task           (direct)
+DELETE /api/replication/{id}         → delete replication task           (direct)
+POST   /api/replication/{id}/run     → fire immediately, returns job_id  (direct → internal/jobs)
+GET    /api/replication/{id}/history → recent RunRecord entries          (direct)
 
 GET    /api/users                    → /etc/passwd               (direct)
 POST   /api/users                    → user_create.yml           (ansible)
@@ -898,6 +906,7 @@ Server-Sent Events stream. The server pushes named events whenever data changes,
 | `user.query`         | Same JSON as `GET /api/users`                   | Pushed on write op + every 10 s on change |
 | `group.query`        | Same JSON as `GET /api/groups`                  | Pushed on write op + every 10 s on change |
 | `service.query`      | Same JSON as `GET /api/services`                | Pushed every 10 s on change               |
+| `replication.update` | Same JSON as `GET /api/replication`             | Pushed on task create/update/delete + after each scheduled run |
 
 Each event follows the SSE wire format:
 

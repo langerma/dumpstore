@@ -167,6 +167,10 @@ main {
 .health-FAULTED,
 .health-REMOVED,
 .health-UNAVAIL { background: #3d1010; color: var(--red); }
+.badge-green  { background: #0d3d2e; color: var(--green); }
+.badge-red    { background: #3d1010; color: var(--red); }
+.badge-yellow { background: #3d2d0d; color: var(--yellow); }
+.badge-blue   { background: #0d2a3d; color: var(--accent); }
 
 .pool-bar-wrap {
   background: var(--surface2);

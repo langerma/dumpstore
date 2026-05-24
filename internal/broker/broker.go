@@ -20,6 +20,7 @@ var ValidTopics = map[string]bool{
 	"ansible.progress":   true,
 	"service.query":      true,
 	"jobs.update":        true,
+	"replication.update": true,
 }
 
 // Broker is a thread-safe, topic-based pub/sub message broker.

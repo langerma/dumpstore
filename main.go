@@ -20,7 +20,9 @@ import (
 	"dumpstore/internal/jobs"
 	"dumpstore/internal/logging"
 	"dumpstore/internal/platform"
+	"dumpstore/internal/replication"
 	"dumpstore/internal/schema"
+	"dumpstore/internal/scheduler"
 )
 
 // version is overridden at build time via:
@@ -116,7 +118,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	apiHandler := api.NewHandler(runner, version, b, jobMgr, cfg, store, *configPath)
+	sched := scheduler.New()
+	replStore, err := replication.NewStore(platform.StateDir(runtime.GOOS))
+	if err != nil {
+		slog.Error("failed to initialise replication store", "err", err)
+		os.Exit(1)
+	}
+	replRunner := replication.NewRunner(replStore, sched, jobMgr, b)
+	if err := replRunner.LoadAndRegisterAll(); err != nil {
+		slog.Error("failed to register replication tasks", "err", err)
+		os.Exit(1)
+	}
+	sched.Start(ctx)
+	defer sched.Stop()
+
+	apiHandler := api.NewHandler(runner, version, b, jobMgr, replRunner, cfg, store, *configPath)
 
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, cfg, store, rl)

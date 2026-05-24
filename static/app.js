@@ -6,6 +6,7 @@ import { renderSnapshots } from './js/snapshots.js';
 import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine, renderSMBInitStatus } from './js/users.js';
 import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
+import { renderReplications } from './js/replication.js';
 import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ subscribe(['smbHomes', 'smbInitialized', 'datasets'],                  renderSMB
 subscribe(['timeMachineShares', 'smbInitialized'],                     renderTimeMachine);
 subscribe(['services'],                                         renderServices);
 subscribe(['jobs'],                                             renderJobs);
+subscribe(['replication'],                                      renderReplications);
 subscribe(['schema'],                                           buildFormSelects);
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────

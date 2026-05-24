@@ -17,6 +17,7 @@
         <button class="tab-btn" data-tab="snapshots">Snapshots</button>
         <button class="tab-btn" data-tab="users">Users &amp; Groups</button>
         <button class="tab-btn" data-tab="services">Services</button>
+        <button class="tab-btn" data-tab="replication">Replication</button>
         <button class="tab-btn" data-tab="jobs">Jobs</button>
       </nav>
       <span id="sseStatus" class="sse-badge live">live</span>
@@ -163,6 +164,17 @@
       </div>
       <div id="services-wrap">
         <div class="loading">Loading services…</div>
+      </div>
+    </section>
+
+    <section class="tab-pane" id="tab-replication">
+      <div class="section-header">
+        <h2>Replication</h2>
+        <span class="muted">Scheduled <code>zfs send | zfs recv</code> tasks. Job runs surface in the Jobs tab.</span>
+        <button class="btn-primary" id="newReplBtn" style="margin-left:auto">New replication task</button>
+      </div>
+      <div id="replication-wrap">
+        <div class="loading">Loading replication tasks…</div>
       </div>
     </section>
 
@@ -1131,6 +1143,74 @@
         <button type="submit" class="btn-primary">Issue Certificate</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- REPLICATION TASK DIALOG (create/edit) -->
+  <dialog id="replDialog">
+    <h3 id="replDialogTitle">New replication task</h3>
+    <form id="replForm">
+      <fieldset class="form-grid">
+        <input type="hidden" id="repl-id">
+        <label>Name
+          <input type="text" id="repl-name" placeholder="nightly-backup" required spellcheck="false">
+        </label>
+        <label>Source dataset
+          <input type="text" id="repl-source" placeholder="tank/data" required spellcheck="false">
+        </label>
+        <label>Target dataset
+          <input type="text" id="repl-target" placeholder="backup/data" required spellcheck="false">
+        </label>
+        <label>Remote (optional)
+          <input type="text" id="repl-remote" placeholder="user@host (leave blank for local)" spellcheck="false">
+        </label>
+        <label>Schedule (cron, 5 fields)
+          <input type="text" id="repl-schedule" placeholder="0 3 * * *" required spellcheck="false">
+        </label>
+        <p class="field-note" style="grid-column: 1 / -1; margin:0">
+          Examples: <code>*/5 * * * *</code> every 5 min · <code>0 * * * *</code> hourly · <code>0 3 * * *</code> daily 03:00 · <code>0 3 * * 0</code> Sundays 03:00.
+        </p>
+        <label>Retention (destination snapshots to keep)
+          <input type="number" id="repl-retention" min="0" value="7" required>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="repl-raw"> Raw send (<code>--raw</code>; required for encrypted datasets)
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="repl-recursive"> Recursive (<code>-R</code>; include child datasets)
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="repl-enabled" checked> Enabled
+        </label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="replCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary" id="replSaveBtn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- REPLICATION DELETE CONFIRM DIALOG -->
+  <dialog id="replDeleteDialog">
+    <h3>Delete replication task</h3>
+    <div class="dialog-body">
+      <div class="delete-warning">
+        <p>Delete <strong id="replDeleteName"></strong>?</p>
+        <p class="delete-child-warning">The schedule will stop firing. Snapshots already replicated to the destination, and snapshots on the source, are left in place.</p>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="replDeleteCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="replDeleteConfirmBtn" class="btn-danger">Delete</button>
+    </div>
+  </dialog>
+
+  <!-- REPLICATION HISTORY DIALOG -->
+  <dialog id="replHistoryDialog">
+    <h3 id="replHistoryTitle">Run history</h3>
+    <div class="dialog-body" id="replHistoryBody"></div>
+    <div class="dialog-actions">
+      <button type="button" id="replHistoryCloseBtn" class="btn-primary">Close</button>
+    </div>
   </dialog>
 
   <!-- OPERATION LOG DIALOG -->

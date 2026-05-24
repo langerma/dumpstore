@@ -639,6 +639,13 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-release any dumpstore-repl holds we placed during replication runs.
+	// Without this, `zfs destroy` fails with "dataset is busy" on snapshots
+	// the user is trying to delete from the UI.
+	if h.repl != nil {
+		h.repl.ReleaseHoldsFor(body.Snapshots)
+	}
+
 	out, err := h.runOp("zfs_snapshot_destroy_batch.yml", map[string]string{
 		"snapshots_json": string(snapsJSON),
 	})
