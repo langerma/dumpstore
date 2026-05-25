@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -191,23 +192,46 @@ func TestRemove_RefusesRunning(t *testing.T) {
 
 func TestNotifier_FiresOnStartAndFinish(t *testing.T) {
 	dir := t.TempDir()
-	var events []Status
-	notify := func(j Job) { events = append(events, j.Status) }
+	var (
+		mu     sync.Mutex
+		events []Status
+	)
+	notify := func(j Job) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, j.Status)
+	}
 	m, err := NewManager(dir, notify)
 	if err != nil {
 		t.Fatal(err)
 	}
 	j, _ := m.Run("test", []string{"sh", "-c", "exit 0"})
 	waitTerminal(t, m, j.ID)
-	// at least one running and one terminal event
-	if len(events) < 2 {
-		t.Fatalf("got %d events, want >= 2: %v", len(events), events)
+
+	// m.fire(snap) for the terminal event runs after the job's status becomes
+	// visible to m.Get, so waitTerminal can return before the notifier has
+	// observed the finish. Poll the events slice until we see both edges.
+	snapshot := func() []Status {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]Status(nil), events...)
 	}
-	if events[0] != StatusRunning {
-		t.Errorf("first event = %s, want running", events[0])
+	deadline := time.Now().Add(2 * time.Second)
+	var evs []Status
+	for time.Now().Before(deadline) {
+		evs = snapshot()
+		if len(evs) >= 2 && evs[len(evs)-1].terminal() {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	last := events[len(events)-1]
-	if last != StatusSuccess {
+	if len(evs) < 2 {
+		t.Fatalf("got %d events, want >= 2: %v", len(evs), evs)
+	}
+	if evs[0] != StatusRunning {
+		t.Errorf("first event = %s, want running", evs[0])
+	}
+	if last := evs[len(evs)-1]; last != StatusSuccess {
 		t.Errorf("last event = %s, want success", last)
 	}
 }
