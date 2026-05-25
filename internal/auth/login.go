@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"html"
 	"net/http"
 )
 
@@ -77,6 +78,7 @@ func handleLogout(store *SessionStore) http.HandlerFunc {
 			HttpOnly: true,
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   -1,
+			Secure:   r.TLS != nil,
 		})
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
@@ -108,7 +110,7 @@ func handleWhoami(cfg *Config, store *SessionStore) http.HandlerFunc {
 func loginPage(username, errMsg string) string {
 	errHTML := ""
 	if errMsg != "" {
-		errHTML = `<p class="login-error">` + htmlEsc(errMsg) + `</p>`
+		errHTML = `<p class="login-error">` + html.EscapeString(errMsg) + `</p>`
 	}
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -149,7 +151,7 @@ button:hover{opacity:.85;}
   ` + errHTML + `
   <form method="POST" action="/auth/login">
     <label><span>Username</span>
-      <input type="text" name="username" value="` + htmlEsc(username) + `" autocomplete="username" required>
+      <input type="text" name="username" value="` + html.EscapeString(username) + `" autocomplete="username" required>
     </label>
     <label><span>Password</span>
       <input type="password" name="password" autocomplete="current-password" required autofocus>
@@ -161,24 +163,3 @@ button:hover{opacity:.85;}
 </html>`
 }
 
-// htmlEsc escapes the five HTML special characters for safe inline injection.
-func htmlEsc(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '&':
-			out = append(out, '&', 'a', 'm', 'p', ';')
-		case '<':
-			out = append(out, '&', 'l', 't', ';')
-		case '>':
-			out = append(out, '&', 'g', 't', ';')
-		case '"':
-			out = append(out, '&', 'q', 'u', 'o', 't', ';')
-		case '\'':
-			out = append(out, '&', '#', '3', '9', ';')
-		default:
-			out = append(out, s[i])
-		}
-	}
-	return string(out)
-}

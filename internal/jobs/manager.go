@@ -234,12 +234,16 @@ func (m *Manager) RunPipeline(jobType string, left, right []string) (Job, error)
 		return Job{}, fmt.Errorf("stderr pipe: %w", err)
 	}
 
-	leftCmd := exec.Command(left[0], left[1:]...)
+	// Callers build argv from validated input (see validZFSName / validRemoteSpec
+	// in internal/api). No shell is involved — argv[0] is a fixed binary name
+	// and argv[1:] are passed as discrete arguments, so shell metacharacters
+	// cannot reach a parser. CodeQL's taint tracker can't see the validators.
+	leftCmd := exec.Command(left[0], left[1:]...) //nolint:gosec // G204: argv pre-validated, no shell
 	leftCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	leftCmd.Stdout = dataW
 	leftCmd.Stderr = stderrW
 
-	rightCmd := exec.Command(right[0], right[1:]...)
+	rightCmd := exec.Command(right[0], right[1:]...) //nolint:gosec // G204: argv pre-validated, no shell
 	rightCmd.Stdin = dataR
 	rightCmd.Stdout = stdoutW
 	rightCmd.Stderr = stderrW

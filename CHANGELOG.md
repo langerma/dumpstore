@@ -4,6 +4,12 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **Logout cookie now sets `Secure` on TLS** — the session-clearing cookie in `handleLogout` previously omitted the `Secure` attribute (the login cookie already had it). Aligns the clearing cookie with the login cookie. Closes #94.
+- **Login error param uses stdlib `html.EscapeString`** — replaced the in-tree `htmlEsc` helper with `html.EscapeString` so static analysers recognise the sanitiser. No behaviour change. Closes #95.
+- **GitHub Actions workflows pinned to least privilege** — `ci.yml` and `check-docs.yml` now declare `permissions: contents: read` explicitly instead of inheriting the broader default `GITHUB_TOKEN` scope. Closes #97.
+
 ---
 
 ## [v0.1.13] — 2026-05-25
