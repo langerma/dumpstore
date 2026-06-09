@@ -32,6 +32,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
 - **Dataset editing** — update properties in place (set or inherit)
+- **Dataset rewrite** — apply updated properties (compression, checksum, copies) to already-stored data via `zfs rewrite` from the Edit Dataset dialog; recurse/skip-snapshot-shared/skip-clone-shared options; runs as a background job in the Jobs tab
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
@@ -715,6 +716,7 @@ sudo make uninstall
 | GET    | `/metrics`                  | Prometheus text exposition            |
 | POST   | `/api/datasets`             | Create a dataset or volume            |
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties             |
+| POST   | `/api/rewrite/{name}`       | Rewrite existing blocks (`zfs rewrite`, background job) |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume           |
 | POST   | `/api/snapshots`            | Create a snapshot                     |
 | DELETE | `/api/snapshots/{name}`     | Destroy a snapshot                    |

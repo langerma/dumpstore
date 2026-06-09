@@ -262,6 +262,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/smart", h.getSMART)
 	mux.HandleFunc("GET /api/dataset-props/{name...}", h.getDatasetProps)
 	mux.HandleFunc("PATCH /api/datasets/{name...}", h.setDatasetProps)
+	mux.HandleFunc("POST /api/rewrite/{name...}", h.rewriteDataset)
 	mux.HandleFunc("GET /api/snapshots", h.getSnapshots)
 	mux.HandleFunc("GET /api/iostat", h.getIOStat)
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)

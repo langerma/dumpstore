@@ -21,6 +21,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | POST   | `/api/datasets`             | Create a dataset or volume |
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume |
+| POST   | `/api/rewrite/{name}`       | Rewrite existing blocks (`zfs rewrite`, background job) |
 | POST   | `/api/snapshots`            | Create a snapshot |
 | POST   | `/api/snapshots/clone`      | Clone a snapshot to a new dataset |
 | POST   | `/api/snapshots/send`       | Send a snapshot to a target dataset (local or remote SSH) |
@@ -118,6 +119,24 @@ Update dataset properties. Any subset of editable properties may be sent. An emp
 ```
 
 Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`, `sharenfs`, `sharesmb`.
+
+### POST /api/rewrite/{name}
+
+Rewrite the existing blocks of a mounted filesystem via `zfs rewrite` so that updated properties (compression, checksum, dedup, copies) apply to already-stored data. Runs as a **background job** — returns `202 Accepted` with a `job_id`; progress and output appear in the Jobs tab (`GET /api/jobs`).
+
+```json
+{
+  "recursive": true,
+  "skip_snapshot_shared": true,
+  "skip_clone_shared": false
+}
+```
+
+- `recursive` → `-r` (recurse into directories; crosses into child dataset mountpoints)
+- `skip_snapshot_shared` → `-S` (don't duplicate blocks shared with snapshots)
+- `skip_clone_shared` → `-C` (don't duplicate blocks shared via block cloning)
+
+Caveats: `recordsize` changes are **not** applied by rewrite; rewriting blocks shared with snapshots/clones duplicates them (pool usage can increase) unless skipped; rewritten blocks appear as modified in incremental send streams. Volumes are rejected with `400` — rewrite operates through the mounted filesystem. Requires OpenZFS with `zfs rewrite` support (2.3+).
 
 ### DELETE /api/datasets/{name}
 
