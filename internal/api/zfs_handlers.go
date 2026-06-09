@@ -568,6 +568,60 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// maxDiffEntries caps the number of diff entries returned to the client so a
+// huge diff on a busy dataset cannot produce an unbounded response.
+const maxDiffEntries = 10000
+
+// getSnapshotDiff handles GET /api/snapshots/diff?from=<snap>&to=<snap|empty>
+// Runs `zfs diff` between two snapshots of a dataset, or between a snapshot
+// and the live filesystem when to is omitted.
+func (h *Handler) getSnapshotDiff(w http.ResponseWriter, r *http.Request) {
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+
+	at := strings.IndexByte(from, '@')
+	if at < 0 || !validZFSName(from[:at]) || !validSnapLabel(from[at+1:]) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("from must be a valid snapshot name (dataset@label)"), nil)
+		return
+	}
+	dataset := from[:at]
+	if to != "" {
+		tat := strings.IndexByte(to, '@')
+		if tat < 0 || !validSnapLabel(to[tat+1:]) {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("to must be a valid snapshot name (dataset@label)"), nil)
+			return
+		}
+		if to[:tat] != dataset {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("to must be a snapshot of the same dataset (%s)", dataset), nil)
+			return
+		}
+	}
+	if ok, err := snapshotExists(from); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", from), nil)
+		return
+	}
+
+	entries, err := zfs.DiffSnapshots(from, to)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("zfs diff: %w", err), nil)
+		return
+	}
+	truncated := false
+	if len(entries) > maxDiffEntries {
+		entries = entries[:maxDiffEntries]
+		truncated = true
+	}
+	writeJSON(r.Context(), w, map[string]any{
+		"from":      from,
+		"to":        to,
+		"entries":   entries,
+		"truncated": truncated,
+	})
+}
+
 // rewriteDataset handles POST /api/rewrite/{name...}
 // Body: { "recursive": bool, "skip_snapshot_shared": bool, "skip_clone_shared": bool }
 // Dispatches `zfs rewrite` on the dataset's mountpoint as a background job —

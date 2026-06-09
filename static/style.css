@@ -801,13 +801,31 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-iscsi:hover { background: var(--surface); color: var(--text); }
 .btn-iscsi.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
 .btn-iscsi.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
-.btn-rename, .btn-clone, .btn-send, .btn-job-detail, .btn-vdev {
+.btn-rename, .btn-clone, .btn-send, .btn-job-detail, .btn-vdev, .btn-diff {
   background: var(--surface2); color: var(--text-muted);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
 }
-.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover, .btn-vdev:hover {
+.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover, .btn-vdev:hover, .btn-diff:hover {
   background: var(--surface); color: var(--text);
 }
+
+/* Snapshot diff dialog */
+.diff-list {
+  max-height: 45vh;
+  overflow-y: auto;
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  font-size: 11px;
+  font-family: var(--font);
+}
+.diff-line { display: flex; gap: 8px; padding: 1px 0; word-break: break-all; }
+.diff-change { font-weight: 700; min-width: 12px; text-align: center; }
+.diff-added .diff-change    { color: var(--green); }
+.diff-removed .diff-change  { color: var(--red); }
+.diff-modified .diff-change { color: var(--yellow); }
+.diff-renamed .diff-change  { color: var(--accent); }
 .btn-cancel-job, .btn-remove-job {
   background: var(--surface2); color: var(--red);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;

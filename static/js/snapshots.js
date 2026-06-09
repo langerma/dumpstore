@@ -41,6 +41,7 @@ export function renderSnapshots() {
       <td class="muted">${s.clones && s.clones !== '-' ? esc(s.clones) : '—'}</td>
       <td>
         <div class="row-actions">
+          <button class="btn-diff btn-small" data-snap="${esc(s.name)}">Diff</button>
           <button class="btn-clone btn-small" data-snap="${esc(s.name)}">Clone</button>
           <button class="btn-send btn-small" data-snap="${esc(s.name)}">Send</button>
           <button class="btn-del" data-snap="${esc(s.name)}">Delete</button>
@@ -59,6 +60,10 @@ export function renderSnapshots() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  wrap.querySelectorAll('.btn-diff').forEach(btn => {
+    btn.addEventListener('click', () => openDiffSnapDialog(btn.dataset.snap));
+  });
 
   wrap.querySelectorAll('.btn-clone').forEach(btn => {
     btn.addEventListener('click', () => openCloneSnapDialog(btn.dataset.snap));
@@ -217,6 +222,92 @@ document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
     storeSet('datasets', datasets || []);
   } catch (err) {
     showOpLog('Clone failed', err.tasks, err.message);
+  }
+});
+
+// ── Snapshot Diff dialog ──────────────────────────────────────────────────────
+const diffSnapDialog = document.getElementById('diffSnapDialog');
+document.getElementById('diffSnapCloseBtn').addEventListener('click', () => diffSnapDialog.close());
+
+let _diffEntries = [];
+
+function openDiffSnapDialog(snapshotName) {
+  document.getElementById('diffSnapSource').textContent = snapshotName;
+  const at = snapshotName.indexOf('@');
+  const dsName = at >= 0 ? snapshotName.substring(0, at) : snapshotName;
+  const fromSnap = state.snapshots.find(s => s.name === snapshotName);
+
+  // Comparison targets: the live filesystem, or any later snapshot of the
+  // same dataset (zfs diff requires from to be the older snapshot).
+  const sel = document.getElementById('diffSnapTo');
+  sel.innerHTML = '<option value="">current filesystem state</option>';
+  state.snapshots
+    .filter(s => s.dataset === dsName && s.name !== snapshotName
+              && (s.creation || 0) >= (fromSnap?.creation || 0))
+    .sort((a, b) => (a.creation || 0) - (b.creation || 0))
+    .forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.snap_label;
+      sel.appendChild(opt);
+    });
+
+  _diffEntries = [];
+  document.getElementById('diffSnapFilter').value = '';
+  document.getElementById('diffSnapCount').textContent = '';
+  document.getElementById('diffSnapResults').innerHTML =
+    '<div class="loading">Choose a comparison target and run the diff.</div>';
+  diffSnapDialog.showModal();
+}
+
+const _diffChangeMeta = {
+  '+': { cls: 'diff-added',    label: '+' },
+  '-': { cls: 'diff-removed',  label: '−' },
+  'M': { cls: 'diff-modified', label: 'M' },
+  'R': { cls: 'diff-renamed',  label: 'R' },
+};
+
+// Cap rendered rows — the full result stays in _diffEntries for filtering.
+const DIFF_RENDER_LIMIT = 2000;
+
+function renderDiffResults() {
+  const wrap = document.getElementById('diffSnapResults');
+  const q = document.getElementById('diffSnapFilter').value.toLowerCase();
+  const items = q
+    ? _diffEntries.filter(e => e.path.toLowerCase().includes(q) || (e.new_path || '').toLowerCase().includes(q))
+    : _diffEntries;
+  if (!items.length) {
+    wrap.innerHTML = '<div class="loading">No changes.</div>';
+    return;
+  }
+  const overflow = items.length > DIFF_RENDER_LIMIT
+    ? `<div class="loading">… ${items.length - DIFF_RENDER_LIMIT} more — refine the filter</div>`
+    : '';
+  wrap.innerHTML = items.slice(0, DIFF_RENDER_LIMIT).map(e => {
+    const meta = _diffChangeMeta[e.change] || { cls: '', label: e.change };
+    const path = e.new_path ? `${esc(e.path)} → ${esc(e.new_path)}` : esc(e.path);
+    return `<div class="diff-line ${meta.cls}"><span class="diff-change">${esc(meta.label)}</span><span>${path}</span></div>`;
+  }).join('') + overflow;
+}
+
+document.getElementById('diffSnapFilter').addEventListener('input', renderDiffResults);
+
+document.getElementById('diffSnapRunBtn').addEventListener('click', async () => {
+  const from = document.getElementById('diffSnapSource').textContent;
+  const to = document.getElementById('diffSnapTo').value;
+  const wrap = document.getElementById('diffSnapResults');
+  wrap.innerHTML = '<div class="loading">Running zfs diff…</div>';
+  document.getElementById('diffSnapCount').textContent = '';
+  try {
+    const data = await api('GET', `/api/snapshots/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    _diffEntries = data.entries || [];
+    renderDiffResults();
+    const note = data.truncated ? ' (truncated)' : '';
+    document.getElementById('diffSnapCount').textContent =
+      `${_diffEntries.length} change${_diffEntries.length === 1 ? '' : 's'}${note}`;
+  } catch (err) {
+    wrap.innerHTML = '<div class="loading">Diff failed.</div>';
+    toast(`Diff failed: ${err.message}`, 'err');
   }
 });
 
