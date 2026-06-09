@@ -140,6 +140,7 @@ export function renderPools() {
           : `<button class="btn-secondary btn-sm" onclick="startScrub('${esc(p.name)}')">Start Scrub</button>`
         }
         <button class="btn-secondary btn-sm" onclick="openScrubScheduleDialog('${esc(p.name)}')">Schedule&hellip;</button>
+        <button class="btn-secondary btn-sm" onclick="openExpandPoolDialog('${esc(p.name)}')">Expand&hellip;</button>
         <button class="btn-secondary btn-sm" onclick="exportPool('${esc(p.name)}')">Export</button>
         ${schedBadge}
       </div>`;
@@ -159,22 +160,43 @@ export function renderPools() {
       <div class="pool-bar-wrap"><div class="pool-bar warn" style="width:${Math.min(resilver.pct ?? 0, 100).toFixed(1)}%"></div></div>`
       : '';
 
+    // Walk the flat vdev list tracking which zpool-status section we are in:
+    // depth-0 rows are either the pool root (data section) or an auxiliary
+    // section header (logs / cache / spares / special / dedup). Devices in
+    // auxiliary sections get a Remove action; data devices get
+    // Replace/Offline/Online.
+    let vdevSectionName = 'data';
     const vdevRows = (detail?.vdevs || [])
-      .filter(v => v.depth > 0)   // skip the root pool entry (depth 0)
       .map(v => {
+        if (v.depth === 0) {
+          if (['logs', 'cache', 'spares', 'special', 'dedup'].includes(v.name)) {
+            vdevSectionName = v.name;
+            return `<div class="vdev-row vdev-section-label">${esc(v.name)}</div>`;
+          }
+          vdevSectionName = 'data'; // pool root row — not rendered
+          return '';
+        }
         const indent = v.depth - 1;
         const errs = v.read || v.write || v.cksum
           ? `<span class="vdev-errs">${v.read}/${v.write}/${v.cksum}</span>`
           : '';
         // Grouping vdevs (mirror-0, raidz1-0, …) take no device actions.
         const isLeaf = !/^(mirror|raidz|draid|spare|replacing|logs|cache|special|dedup)/.test(v.name);
-        const actions = isLeaf ? `
+        let actions = '';
+        if (isLeaf && ['logs', 'cache', 'spares'].includes(vdevSectionName)) {
+          actions = `
+          <span class="vdev-actions">
+            <button class="btn-vdev" onclick="removePoolDevice('${esc(p.name)}','${esc(v.name)}')">Remove</button>
+          </span>`;
+        } else if (isLeaf && vdevSectionName === 'data') {
+          actions = `
           <span class="vdev-actions">
             <button class="btn-vdev" onclick="openReplaceDeviceDialog('${esc(p.name)}','${esc(v.name)}')">Replace</button>
             ${v.state === 'OFFLINE'
               ? `<button class="btn-vdev" onclick="onlineDevice('${esc(p.name)}','${esc(v.name)}')">Online</button>`
               : `<button class="btn-vdev" onclick="offlineDevice('${esc(p.name)}','${esc(v.name)}')">Offline</button>`}
-          </span>` : '';
+          </span>`;
+        }
         return `
           <div class="vdev-row" style="--vdepth:${indent}">
             <span class="vdev-name">${esc(v.name)}</span>
@@ -458,6 +480,108 @@ async function exportPool(pool) {
     await loadAll();
   } catch (err) {
     showOpLog(`Export pool: ${pool}`, err.tasks, err.message);
+  }
+}
+
+// ── Pool expansion (add vdev / cache / log / spare, remove aux device) ────────
+let _expandPool = '';
+
+async function openExpandPoolDialog(pool) {
+  _expandPool = pool;
+  document.getElementById('expandPoolName').textContent = pool;
+  document.getElementById('expandPoolKind').value = 'data';
+  document.getElementById('expandPoolVdevType').value = 'mirror';
+  document.getElementById('expandPoolLogMirror').checked = false;
+  document.getElementById('expandPoolConfirmInput').value = '';
+  _syncExpandPoolUI();
+  const picker = document.getElementById('expandPoolDevices');
+  picker.innerHTML = '<div class="loading">Loading devices&hellip;</div>';
+  document.getElementById('expandPoolDialog').showModal();
+  try {
+    const devs = await api('GET', '/api/devices');
+    const free = (devs || []).filter(d => !d.in_use_by);
+    picker.innerHTML = free.length
+      ? free.map(d => `
+          <label class="checkbox-label">
+            <input type="checkbox" class="expand-pool-dev" value="${esc(d.path)}">
+            <span class="mono">${esc(d.path)}</span> · ${fmtBytes(d.size_bytes)}${d.model ? ' · ' + esc(d.model) : ''}
+          </label>`).join('')
+      : '<div class="loading">No unused devices found.</div>';
+  } catch (err) {
+    picker.innerHTML = '<div class="loading">Failed to list devices.</div>';
+  }
+}
+
+// Data vdev additions are irreversible — they need the typed confirmation.
+// The vdev-type select only applies to data; the mirror checkbox only to log.
+function _syncExpandPoolUI() {
+  const kind = document.getElementById('expandPoolKind').value;
+  document.getElementById('expandPoolVdevTypeRow').style.display = kind === 'data' ? '' : 'none';
+  document.getElementById('expandPoolLogMirrorRow').style.display = kind === 'log' ? '' : 'none';
+  document.getElementById('expandPoolDataWarning').style.display = kind === 'data' ? '' : 'none';
+  document.getElementById('expandPoolConfirmRow').style.display = kind === 'data' ? '' : 'none';
+  _syncExpandPoolConfirm();
+}
+
+function _syncExpandPoolConfirm() {
+  const kind = document.getElementById('expandPoolKind').value;
+  const typed = document.getElementById('expandPoolConfirmInput').value.trim();
+  document.getElementById('expandPoolConfirmBtn').disabled = kind === 'data' && typed !== _expandPool;
+}
+
+document.getElementById('expandPoolKind').addEventListener('change', _syncExpandPoolUI);
+document.getElementById('expandPoolConfirmInput').addEventListener('input', _syncExpandPoolConfirm);
+
+async function confirmExpandPool() {
+  const kind = document.getElementById('expandPoolKind').value;
+  const devices = [...document.querySelectorAll('.expand-pool-dev:checked')].map(cb => cb.value);
+  if (!devices.length) { toast('Select at least one device', 'err'); return; }
+
+  let path, body;
+  if (kind === 'data') {
+    const vdevType = document.getElementById('expandPoolVdevType').value;
+    const min = _vdevMinDevices[vdevType] || 1;
+    if (devices.length < min) { toast(`${vdevType} needs at least ${min} device${min === 1 ? '' : 's'}`, 'err'); return; }
+    path = 'vdevs';
+    body = { vdev_type: vdevType, devices };
+  } else if (kind === 'log') {
+    const mirror = document.getElementById('expandPoolLogMirror').checked;
+    if (mirror && devices.length < 2) { toast('A mirrored log needs at least 2 devices', 'err'); return; }
+    path = 'log';
+    body = { devices, mirror };
+  } else {
+    path = kind; // cache | spare
+    body = { devices };
+  }
+
+  document.getElementById('expandPoolDialog').close();
+  const title = `Add ${kind} to ${_expandPool}`;
+  showOpLogRunning(title);
+  try {
+    const data = await api('POST', `/api/pools/${encodeURIComponent(_expandPool)}/${path}`, body);
+    showOpLog(title, data.tasks, null);
+    toast(`Devices added to ${_expandPool}`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(title, err.tasks, err.message);
+  }
+}
+
+document.getElementById('expandPoolConfirmBtn').addEventListener('click', confirmExpandPool);
+document.getElementById('expandPoolCancelBtn').addEventListener('click', () => document.getElementById('expandPoolDialog').close());
+
+async function removePoolDevice(pool, device) {
+  if (!confirm(`Remove ${device} from pool ${pool}?`)) return;
+  const title = `Remove ${device} from ${pool}`;
+  showOpLogRunning(title);
+  try {
+    const encDev = device.split('/').map(encodeURIComponent).join('/');
+    const data = await api('DELETE', `/api/pools/${encodeURIComponent(pool)}/devices/${encDev}`);
+    showOpLog(title, data.tasks, null);
+    toast(`${device} removed from ${pool}`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(title, err.tasks, err.message);
   }
 }
 
@@ -765,5 +889,7 @@ window.openReplaceDeviceDialog = openReplaceDeviceDialog;
 window.offlineDevice = offlineDevice;
 window.onlineDevice = onlineDevice;
 window.exportPool = exportPool;
+window.openExpandPoolDialog = openExpandPoolDialog;
+window.removePoolDevice = removePoolDevice;
 window.openScrubScheduleDialog = openScrubScheduleDialog;
 window.openAutoSnapDialog = openAutoSnapDialog;

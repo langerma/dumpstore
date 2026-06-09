@@ -1,0 +1,24 @@
+---
+# Required extra vars:
+#   pool    - pool name (e.g. tank)
+#   device  - device to remove (cache, log, or spare vdev member)
+- name: Remove a device from a ZFS pool
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - pool is defined and pool is match("^[a-zA-Z][a-zA-Z0-9_.:-]*$")
+          - device is defined and device is match("^/?[a-zA-Z0-9][a-zA-Z0-9/_.:-]*$")
+        fail_msg: "pool and device must be valid identifiers"
+
+    - name: Remove device
+      ansible.builtin.command:
+        argv:
+          - zpool
+          - remove
+          - "{{ pool }}"
+          - "{{ device }}"
+      register: remove_result
+      changed_when: remove_result.rc == 0

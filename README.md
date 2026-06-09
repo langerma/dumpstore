@@ -27,6 +27,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **Pool scrub management** — trigger and cancel scrubs; last scrub time, status, and progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **Pool lifecycle** — create pools (single/mirror/raidz1-3/draid1-3) with an unused-device picker, optional ashift/compression, and confirm-by-typing; import exported pools (with force option); export pools from the pool card
+- **Pool expansion** — add data vdevs (confirm-by-typing — irreversible), L2ARC cache devices, SLOG log devices (optionally mirrored), and hot spares; remove cache/log/spare devices from the vdev tree
 - **Drive replacement & resilver monitoring** — replace a (faulted) device from the vdev tree with a picker of unused block devices (`zpool replace`); take devices offline / bring them online for maintenance; resilver progress bar with live percentage and a completion notification; faulted/degraded devices highlighted in the vdev tree
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
@@ -717,6 +718,11 @@ sudo make uninstall
 | GET    | `/api/pools/importable`     | List pools available for import       |
 | POST   | `/api/pools/import`         | Import a pool (`zpool import [-f]`)   |
 | POST   | `/api/pools/{pool}/export`  | Export a pool (`zpool export`)        |
+| POST   | `/api/pools/{pool}/vdevs`   | Add a data vdev (`zpool add`)         |
+| POST   | `/api/pools/{pool}/cache`   | Add an L2ARC cache device             |
+| POST   | `/api/pools/{pool}/log`     | Add a SLOG log device (opt. mirrored) |
+| POST   | `/api/pools/{pool}/spare`   | Add a hot spare                       |
+| DELETE | `/api/pools/{pool}/devices/{device}` | Remove a cache/log/spare device (`zpool remove`) |
 | POST   | `/api/pools/{pool}/replace` | Replace a pool device (`zpool replace`, starts resilver) |
 | POST   | `/api/pools/{pool}/offline` | Take a pool device offline (`zpool offline`) |
 | POST   | `/api/pools/{pool}/online`  | Bring a pool device online (`zpool online`) |

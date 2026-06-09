@@ -197,6 +197,8 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `playbooks/zfs_pool_create.yml` | Creates a pool; vars: `name`, `vdev_type`, `devices` (space-separated), optional `ashift`, `compression` |
 | `playbooks/zfs_pool_import.yml` | Imports a pool; vars: `pool`, optional `force` |
 | `playbooks/zfs_pool_export.yml` | Exports a pool; vars: `pool` |
+| `playbooks/zfs_pool_add.yml` | Adds devices to a pool (`zpool add`); vars: `pool`, `kind` (data\|cache\|log\|spare), `devices`, optional `vdev_type` |
+| `playbooks/zfs_pool_remove_device.yml` | Removes a cache/log/spare device (`zpool remove`); vars: `pool`, `device` |
 | `playbooks/acl_set_posix.yml` | Adds/updates a POSIX ACL entry; vars: `dataset`, `entry`, `recursive` |
 | `playbooks/acl_remove_posix.yml` | Removes a POSIX ACL entry; vars: `mountpoint`, `entry`, `recursive` |
 | `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |
