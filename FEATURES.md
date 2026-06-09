@@ -69,11 +69,18 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
+| VM integration tests in CI         | High     | [#117](https://github.com/langerma/dumpstore/issues/117) | Nightly CI runs the integration suite against real pools (file-backed vdevs on Linux); FreeBSD pre-release checklist |
+| Go ops layer (shrink Ansible)      | Medium   | [#115](https://github.com/langerma/dumpstore/issues/115) | Single-command mutations move from playbooks to an in-process executor; Ansible keeps config files + OS resources |
+| Privilege separation               | Medium   | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
+| Release build smoke test           | Medium   | [#118](https://github.com/langerma/dumpstore/issues/118) | CI cross-builds the release matrix on every PR so release.yml can't drift (v0.1.14 tag build broke on a pinned Go version) |
+| ZFS capability gating              | Medium   | [#119](https://github.com/langerma/dumpstore/issues/119) | Probe OpenZFS features at startup; hide/disable rewrite (needs 2.3+), draid, etc. instead of failing at runtime |
 | wsdd configuration management      | Medium   | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares |
+| FreeBSD port (sysutils/dumpstore)  | Medium   | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
 | Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
-| Password hashing (argon2id)        | Low      | [#67](https://github.com/langerma/dumpstore/issues/67) | Migrate from bcrypt to argon2id; OWASP-recommended; **breaking change** — existing password hash is dropped, `--set-password` required after upgrade |
+| Frontend event delegation          | Low      | [#120](https://github.com/langerma/dumpstore/issues/120) | Unify the two event-wiring styles; delegated listeners per tab; groundwork for #63 |
+| Scope boundary docs                | Low      | [#121](https://github.com/langerma/dumpstore/issues/121) | Define manage-vs-integrate rule in CLAUDE.md/README; re-triage backlog against it |
 | Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
 | Historical I/O graphs              | Low      | [#61](https://github.com/langerma/dumpstore/issues/61) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
 | UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc`   |
