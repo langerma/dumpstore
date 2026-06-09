@@ -166,6 +166,8 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `internal/logging/handler.go` | `NewJournalHandler` — slog handler with systemd journal priority prefixes |
 | `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation |
 | `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot |
+| `internal/api/device_handlers.go` | Block device list, `zpool replace`, device offline/online |
+| `internal/blockdev/blockdev.go` | `List` — physical block devices (`/sys/block` on Linux, `geom disk list` on FreeBSD); `MarkInUse` — best-effort vdev→device matching |
 | `internal/api/user_handlers.go` | User + group handlers, SSH key management |
 | `internal/api/acl_handlers.go` | ACL handlers (POSIX + NFSv4) |
 | `internal/api/smb_handlers.go` | SMB handlers: shares, users, homes, Time Machine |
@@ -188,6 +190,9 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `playbooks/zfs_snapshot_destroy.yml` | Destroys snapshot; vars: `snapshot`, `recursive` |
 | `playbooks/zfs_scrub_start.yml` | Starts pool scrub; vars: `pool` |
 | `playbooks/zfs_scrub_cancel.yml` | Cancels running pool scrub; vars: `pool` |
+| `playbooks/zfs_disk_replace.yml` | Replaces a pool device (`zpool replace`); vars: `pool`, `old_device`, `new_device` |
+| `playbooks/zfs_device_offline.yml` | Takes a device offline (`zpool offline`); vars: `pool`, `device` |
+| `playbooks/zfs_device_online.yml` | Brings a device online (`zpool online`); vars: `pool`, `device` |
 | `playbooks/acl_set_posix.yml` | Adds/updates a POSIX ACL entry; vars: `dataset`, `entry`, `recursive` |
 | `playbooks/acl_remove_posix.yml` | Removes a POSIX ACL entry; vars: `mountpoint`, `entry`, `recursive` |
 | `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |

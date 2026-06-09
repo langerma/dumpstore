@@ -151,6 +151,13 @@ export function renderPools() {
       ? `<div class="pool-errors">${esc(detail.errors)}</div>`
       : '';
 
+    const resilver = detail?.scan ? resilverInfoOf(detail.scan) : null;
+    _trackResilver(p.name, resilver);
+    const resilverLine = resilver?.state === 'in_progress' ? `
+      <div class="resilver-label">Resilver in progress${resilver.pct != null ? ` — ${resilver.pct.toFixed(1)}%` : ''}</div>
+      <div class="pool-bar-wrap"><div class="pool-bar warn" style="width:${Math.min(resilver.pct ?? 0, 100).toFixed(1)}%"></div></div>`
+      : '';
+
     const vdevRows = (detail?.vdevs || [])
       .filter(v => v.depth > 0)   // skip the root pool entry (depth 0)
       .map(v => {
@@ -158,11 +165,20 @@ export function renderPools() {
         const errs = v.read || v.write || v.cksum
           ? `<span class="vdev-errs">${v.read}/${v.write}/${v.cksum}</span>`
           : '';
+        // Grouping vdevs (mirror-0, raidz1-0, …) take no device actions.
+        const isLeaf = !/^(mirror|raidz|draid|spare|replacing|logs|cache|special|dedup)/.test(v.name);
+        const actions = isLeaf ? `
+          <span class="vdev-actions">
+            <button class="btn-vdev" onclick="openReplaceDeviceDialog('${esc(p.name)}','${esc(v.name)}')">Replace</button>
+            ${v.state === 'OFFLINE'
+              ? `<button class="btn-vdev" onclick="onlineDevice('${esc(p.name)}','${esc(v.name)}')">Online</button>`
+              : `<button class="btn-vdev" onclick="offlineDevice('${esc(p.name)}','${esc(v.name)}')">Offline</button>`}
+          </span>` : '';
         return `
           <div class="vdev-row" style="--vdepth:${indent}">
             <span class="vdev-name">${esc(v.name)}</span>
             <span class="vdev-state state-${esc(v.state || 'UNKNOWN')}">${esc(v.state || '—')}</span>
-            ${errs}
+            ${errs}${actions}
           </div>`;
       }).join('');
 
@@ -205,10 +221,104 @@ export function renderPools() {
             <div class="stat-value">${esc(p.dedup)}</div>
           </div>
         </div>
-        ${scanLine}${scrubActions}${statusLine}${errLine}${vdevSection}
+        ${resilverLine}${scanLine}${scrubActions}${statusLine}${errLine}${vdevSection}
       </div>`;
   }).join('');
 }
+
+// ── Resilver helpers ──────────────────────────────────────────────────────────
+// Parses the raw scan string from `zpool status`. Returns
+// { state: 'in_progress', pct } while a resilver runs, { state: 'done' } right
+// after one finished, or null when the scan line is about something else.
+function resilverInfoOf(scan) {
+  if (!scan) return null;
+  if (scan.startsWith('resilver in progress')) {
+    const m = scan.match(/([\d.]+)% done/);
+    return { state: 'in_progress', pct: m ? parseFloat(m[1]) : null };
+  }
+  if (scan.startsWith('resilvered')) return { state: 'done' };
+  return null;
+}
+
+// Tracks pools with an active resilver so completion can be announced when a
+// poolstatus SSE update flips the scan line from in-progress to resilvered.
+const _resilveringPools = new Set();
+
+function _trackResilver(pool, resilver) {
+  if (resilver?.state === 'in_progress') {
+    _resilveringPools.add(pool);
+  } else if (_resilveringPools.has(pool)) {
+    _resilveringPools.delete(pool);
+    toast(`Resilver finished on ${pool}`, 'ok');
+  }
+}
+
+// ── Device actions (replace / offline / online) ───────────────────────────────
+let _replaceCtx = { pool: '', old: '' };
+
+async function openReplaceDeviceDialog(pool, oldDev) {
+  _replaceCtx = { pool, old: oldDev };
+  document.getElementById('replaceDevicePool').textContent = pool;
+  document.getElementById('replaceDeviceOld').textContent = oldDev;
+  document.getElementById('replaceDeviceManual').value = '';
+  const sel = document.getElementById('replaceDeviceNew');
+  sel.innerHTML = '<option value="">Loading devices&hellip;</option>';
+  document.getElementById('replaceDeviceDialog').showModal();
+  try {
+    const devs = await api('GET', '/api/devices');
+    const free = (devs || []).filter(d => !d.in_use_by);
+    sel.innerHTML = free.length
+      ? '<option value="">— select a device —</option>' + free.map(d =>
+          `<option value="${esc(d.path)}">${esc(d.path)} · ${fmtBytes(d.size_bytes)}${d.model ? ' · ' + esc(d.model) : ''}</option>`).join('')
+      : '<option value="">No unused devices found</option>';
+  } catch (err) {
+    sel.innerHTML = '<option value="">Failed to list devices</option>';
+  }
+}
+
+async function confirmReplaceDevice() {
+  const manual = document.getElementById('replaceDeviceManual').value.trim();
+  const newDev = manual || document.getElementById('replaceDeviceNew').value;
+  if (!newDev) { toast('Choose a replacement device', 'err'); return; }
+  const { pool, old } = _replaceCtx;
+  document.getElementById('replaceDeviceDialog').close();
+  showOpLogRunning(`Replace ${old} in ${pool}`);
+  try {
+    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/replace`,
+      { old_device: old, new_device: newDev });
+    showOpLog(`Replace ${old} in ${pool}`, data.tasks, null);
+    toast(`Replace started on ${pool} — resilver running`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Replace ${old} in ${pool}`, err.tasks, err.message);
+  }
+}
+
+async function offlineDevice(pool, device) {
+  if (!confirm(`Take ${device} offline?\n\nPool ${pool} will run without this device — redundancy is reduced until it is brought back online.`)) return;
+  await _deviceStateOp(pool, device, 'offline');
+}
+
+async function onlineDevice(pool, device) {
+  await _deviceStateOp(pool, device, 'online');
+}
+
+async function _deviceStateOp(pool, device, op) {
+  const title = `${op === 'offline' ? 'Offline' : 'Online'} ${device} (${pool})`;
+  showOpLogRunning(title);
+  try {
+    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/${op}`, { device });
+    showOpLog(title, data.tasks, null);
+    toast(`${device} is now ${op}`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(title, err.tasks, err.message);
+  }
+}
+
+// ── Replace-device dialog wiring ──────────────────────────────────────────────
+document.getElementById('replaceDeviceConfirmBtn').addEventListener('click', confirmReplaceDevice);
+document.getElementById('replaceDeviceCancelBtn').addEventListener('click', () => document.getElementById('replaceDeviceDialog').close());
 
 // ── Pool scrub helpers ────────────────────────────────────────────────────────
 // Returns 'in_progress', 'paused', or 'idle' based on the raw scan string.
@@ -510,5 +620,8 @@ function renderDriveCard(d) {
 // ── window assignments for inline onclick handlers and cross-module calls ─────
 window.startScrub = startScrub;
 window.cancelScrub = cancelScrub;
+window.openReplaceDeviceDialog = openReplaceDeviceDialog;
+window.offlineDevice = offlineDevice;
+window.onlineDevice = onlineDevice;
 window.openScrubScheduleDialog = openScrubScheduleDialog;
 window.openAutoSnapDialog = openAutoSnapDialog;

@@ -52,6 +52,10 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/smb/timemachine`      | List all Time Machine shares |
 | POST   | `/api/smb/timemachine`      | Create/update a Time Machine share |
 | DELETE | `/api/smb/timemachine/{name}` | Remove a Time Machine share |
+| GET    | `/api/devices`              | List physical block devices (vdev candidates, in-use flag) |
+| POST   | `/api/pools/{pool}/replace` | Replace a pool device (starts resilver) |
+| POST   | `/api/pools/{pool}/offline` | Take a pool device offline |
+| POST   | `/api/pools/{pool}/online`  | Bring a pool device online |
 | POST   | `/api/scrub/{pool}`         | Start a pool scrub |
 | DELETE | `/api/scrub/{pool}`         | Cancel a running pool scrub |
 | GET    | `/api/scrub-schedules`      | List periodic scrub schedule config |
@@ -245,6 +249,39 @@ Returns the recent `RunRecord` list (capped at 20):
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
 Append `?recursive=true` to also destroy clones.
+
+---
+
+## Devices & drive replacement
+
+### GET /api/devices
+
+Returns the physical block devices on the host (Linux: `/sys/block`, skipping loop/ram/zvol/dm pseudo-devices; FreeBSD: `geom disk list`). `in_use_by` carries the pool name when the device currently backs a vdev (best-effort matching: by-id/by-path symlinks resolved, partition suffixes stripped).
+
+```json
+[
+  { "name": "sdb", "path": "/dev/sdb", "size_bytes": 4000787030016, "model": "WDC WD40EFRX", "in_use_by": "tank" },
+  { "name": "sdc", "path": "/dev/sdc", "size_bytes": 4000787030016, "model": "WDC WD40EFRX", "in_use_by": "" }
+]
+```
+
+### POST /api/pools/{pool}/replace
+
+Replace a vdev with a new device via `zpool replace`. A resilver onto the new device starts automatically; progress is visible in the pool's `scan` field (`GET /api/poolstatus`, `poolstatus` SSE topic).
+
+```json
+{ "old_device": "sdb", "new_device": "/dev/sdc" }
+```
+
+`old_device` accepts a device name, path, or the numeric guid `zpool status` prints for missing devices. Returns Ansible task steps.
+
+### POST /api/pools/{pool}/offline
+
+Take a device offline for maintenance via `zpool offline`. Body: `{ "device": "sdb" }`. Returns Ansible task steps.
+
+### POST /api/pools/{pool}/online
+
+Bring an offlined device back via `zpool online`. Body: `{ "device": "sdb" }`. Returns Ansible task steps.
 
 ---
 

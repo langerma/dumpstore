@@ -931,6 +931,30 @@
     </div>
   </dialog>
 
+  <!-- REPLACE DEVICE DIALOG -->
+  <dialog id="replaceDeviceDialog">
+    <h3>Replace Device &mdash; <span id="replaceDevicePool"></span></h3>
+    <div class="dialog-body">
+      <p class="muted" style="margin:0 0 1rem">
+        Replace <code id="replaceDeviceOld"></code>. The pool resilvers onto the
+        new device automatically; the old device is detached when the resilver
+        completes.
+      </p>
+      <div class="form-row">
+        <label for="replaceDeviceNew">New device</label>
+        <select id="replaceDeviceNew"></select>
+      </div>
+      <div class="form-row">
+        <label for="replaceDeviceManual">or enter manually</label>
+        <input type="text" id="replaceDeviceManual" placeholder="/dev/sdX (overrides selection)">
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="replaceDeviceConfirmBtn" class="btn-primary">Replace</button>
+        <button type="button" id="replaceDeviceCancelBtn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- AUTO-SNAPSHOT SCHEDULE DIALOG -->
   <dialog id="autoSnapDialog">
     <h3>Auto-Snapshot &mdash; <span id="autoSnapDatasetName"></span></h3>

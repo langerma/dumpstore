@@ -48,6 +48,7 @@
 | Background jobs runner     | v0.1.13 | `internal/jobs.Manager` spawns long-running data-plane operations (`zfs send` piped into `zfs recv`) outside Ansible; per-job process group + 10 s SIGTERM→SIGKILL cancel; 64 KiB stdout/stderr tail; JSON record per job persisted under `/var/lib/dumpstore/jobs/` (Linux) or `/var/db/dumpstore/jobs/` (FreeBSD); `running` jobs marked `interrupted` after a service restart; live updates via `jobs.update` SSE topic; new Jobs tab |
 | Native auto-snapshot       | v0.1.13 | dumpstore executes `com.sun:auto-snapshot:*` snapshots itself via the built-in scheduler — replaces the `zfs-auto-snapshot` (Linux) / `zfstools` (FreeBSD) OS daemons. Property inheritance honoured correctly (closes #74). One-click takeover/release; legacy `zfs-auto-snap_*` naming preserved; closes #56 |
 | Scheduled replication      | v0.1.13 | Cron-scheduled `zfs send` → `zfs recv` tasks; new `internal/scheduler` (5-field cron, 1-min resolution) and `internal/replication` (JSON task store under StateDir, snapshot → hold → send → release → prune pipeline); per-run records with bounded history; manual "run now"; new Replication tab; runs surface in Jobs tab tagged `replication.run`; SSE topic `replication.update`; closes #53 |
+| Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
 
 ---
 
@@ -64,7 +65,6 @@
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
 | wsdd configuration management      | Medium   | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares |
-| Drive replacement                  | High     | [#55](https://github.com/langerma/dumpstore/issues/55) | Replace faulted disks, monitor resilver progress, offline/online devices |
 | Pool create/import/export          | Medium   | [#23](https://github.com/langerma/dumpstore/issues/23) | Create pools (mirror, raidz1/2/3, draid); import/export existing pools |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
 | Pool expansion                     | Medium   | [#57](https://github.com/langerma/dumpstore/issues/57) | Add vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools |
