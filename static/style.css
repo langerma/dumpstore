@@ -801,11 +801,11 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-iscsi:hover { background: var(--surface); color: var(--text); }
 .btn-iscsi.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
 .btn-iscsi.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
-.btn-rename, .btn-clone, .btn-send, .btn-job-detail, .btn-vdev, .btn-diff {
+.btn-rename, .btn-clone, .btn-send, .btn-job-detail, .btn-vdev, .btn-diff, .btn-usage {
   background: var(--surface2); color: var(--text-muted);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
 }
-.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover, .btn-vdev:hover, .btn-diff:hover {
+.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover, .btn-vdev:hover, .btn-diff:hover, .btn-usage:hover {
   background: var(--surface); color: var(--text);
 }
 

@@ -70,6 +70,7 @@ export function renderDatasets() {
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
             ${d.type === 'volume' ? (() => { const _it = state.iscsiTargets.find(t => t.zvol_name === d.name); return `<button class="btn-iscsi btn-small${_it ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_it ? 'iSCSI target: ' + esc(_it.iqn) : 'Not exposed as iSCSI target'}">iSCSI</button>`; })() : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-usage btn-small" data-ds="${esc(d.name)}" title="Per-user/group space and quotas">Usage</button>` : ''}
             <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
             ${canDelete ? `<button class="btn-rename btn-small" data-ds="${esc(d.name)}">Rename</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
@@ -135,6 +136,10 @@ export function renderDatasets() {
 
   wrap.querySelectorAll('.btn-autosnap[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => window.openAutoSnapDialog(btn.dataset.ds));
+  });
+
+  wrap.querySelectorAll('.btn-usage[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openUserSpaceDialog(btn.dataset.ds));
   });
 }
 
@@ -379,6 +384,108 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
       toast(`Rewrite failed to start: ${e.message}`, 'err');
     }
   }
+});
+
+// ── User/Group space dialog ───────────────────────────────────────────────────
+const userSpaceDialog = document.getElementById('userSpaceDialog');
+document.getElementById('userSpaceCloseBtn').addEventListener('click', () => userSpaceDialog.close());
+
+let _userSpaceDataset = '';
+const reUnixNameJS = /^[a-zA-Z_][a-zA-Z0-9._-]{0,31}$/;
+const reQuotaJS = /^[1-9][0-9]{0,17}[KMGTPEkmgtpe]?[Bb]?$/;
+
+function openUserSpaceDialog(name) {
+  _userSpaceDataset = name;
+  document.getElementById('userSpaceDataset').textContent = name;
+  document.getElementById('userSpaceKind').value = 'user';
+  document.getElementById('userSpacePrincipal').value = '';
+  document.getElementById('userSpaceQuota').value = '';
+  userSpaceDialog.showModal();
+  loadUserSpace();
+}
+
+function _populatePrincipalList(kind) {
+  const list = document.getElementById('userSpacePrincipalList');
+  const names = kind === 'group'
+    ? state.groups.map(g => g.name)
+    : state.users.map(u => u.username);
+  list.innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+}
+
+async function loadUserSpace() {
+  const kind = document.getElementById('userSpaceKind').value;
+  _populatePrincipalList(kind);
+  const wrap = document.getElementById('userSpaceTable');
+  wrap.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const encodedName = _userSpaceDataset.split('/').map(encodeURIComponent).join('/');
+    const data = await api('GET', `/api/userspace/${encodedName}?kind=${kind}`);
+    const rows = data.rows || [];
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="loading">No space consumers found.</div>';
+      return;
+    }
+    wrap.innerHTML = `
+      <table>
+        <thead><tr><th>Name</th><th>Used</th><th>Quota</th><th>% Used</th><th></th></tr></thead>
+        <tbody>${rows.map(row => {
+          const pct = row.quota > 0 ? (row.used / row.quota * 100).toFixed(0) + '%' : '—';
+          return `<tr>
+            <td class="mono">${esc(row.name)}</td>
+            <td>${fmtBytes(row.used)}</td>
+            <td>${row.quota > 0 ? fmtBytes(row.quota) : '—'}</td>
+            <td>${pct}</td>
+            <td><div class="row-actions">
+              <button class="btn-rename btn-small usp-edit" data-name="${esc(row.name)}">Quota…</button>
+              ${row.quota > 0 ? `<button class="btn-del usp-remove" data-name="${esc(row.name)}">Remove</button>` : ''}
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    wrap.querySelectorAll('.usp-edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('userSpacePrincipal').value = btn.dataset.name;
+        document.getElementById('userSpaceQuota').focus();
+      });
+    });
+    wrap.querySelectorAll('.usp-remove').forEach(btn => {
+      btn.addEventListener('click', () => setUserQuota(btn.dataset.name, 'none'));
+    });
+  } catch (e) {
+    wrap.innerHTML = `<div class="loading">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+document.getElementById('userSpaceKind').addEventListener('change', loadUserSpace);
+
+async function setUserQuota(principal, quota) {
+  const kind = document.getElementById('userSpaceKind').value;
+  const title = quota === 'none'
+    ? `Remove ${kind} quota for ${principal}`
+    : `Set ${kind} quota: ${principal} = ${quota}`;
+  showOpLogRunning(title);
+  try {
+    const encodedName = _userSpaceDataset.split('/').map(encodeURIComponent).join('/');
+    const result = await api('POST', `/api/userquota/${encodedName}`, { kind, principal, quota });
+    showOpLog(title, result.tasks, null);
+    await loadUserSpace();
+  } catch (e) {
+    showOpLog(title, e.tasks, e.message);
+  }
+}
+
+document.getElementById('userSpaceSetBtn').addEventListener('click', () => {
+  const principal = document.getElementById('userSpacePrincipal').value.trim();
+  const quota = document.getElementById('userSpaceQuota').value.trim();
+  if (!reUnixNameJS.test(principal)) {
+    toast('Invalid user/group name', 'err');
+    return;
+  }
+  if (quota !== 'none' && !reQuotaJS.test(quota)) {
+    toast("Invalid quota — use a size like 10G, or 'none' to remove", 'err');
+    return;
+  }
+  setUserQuota(principal, quota);
 });
 
 // ── ACL dialog ────────────────────────────────────────────────────────────────

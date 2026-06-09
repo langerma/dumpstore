@@ -454,3 +454,19 @@ func TestParseDiffOutputEmpty(t *testing.T) {
 		t.Errorf("expected no entries, got %+v", entries)
 	}
 }
+
+func TestParseSpaceRows(t *testing.T) {
+	out := "root\t53248\t-\n" +
+		"alice\t1073741824\t10737418240\n" +
+		"bob\t512000\t-\n"
+	rows := parseSpaceRows(out)
+	if len(rows) != 3 {
+		t.Fatalf("got %d rows, want 3: %+v", len(rows), rows)
+	}
+	if rows[0].Name != "root" || rows[0].Used != 53248 || rows[0].Quota != 0 {
+		t.Errorf("row 0 = %+v", rows[0])
+	}
+	if rows[1].Name != "alice" || rows[1].Used != 1073741824 || rows[1].Quota != 10737418240 {
+		t.Errorf("row 1 = %+v", rows[1])
+	}
+}

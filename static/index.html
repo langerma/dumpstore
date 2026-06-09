@@ -783,6 +783,37 @@
   </dialog>
 
   <!-- NFS SHARE DIALOG -->
+  <!-- USER/GROUP SPACE DIALOG -->
+  <dialog id="userSpaceDialog" style="min-width:480px;max-width:640px">
+    <h3>User / Group Space &mdash; <span id="userSpaceDataset" class="mono"></span></h3>
+    <div class="dialog-body">
+      <div class="form-row">
+        <label for="userSpaceKind">Show</label>
+        <select id="userSpaceKind">
+          <option value="user">Users</option>
+          <option value="group">Groups</option>
+        </select>
+      </div>
+      <div id="userSpaceTable" class="table-wrap" style="max-height:40vh;overflow-y:auto"></div>
+      <fieldset class="form-section">
+        <legend>Set quota</legend>
+        <div class="form-grid">
+          <label>Name
+            <input type="text" id="userSpacePrincipal" list="userSpacePrincipalList" placeholder="user or group name">
+            <datalist id="userSpacePrincipalList"></datalist>
+          </label>
+          <label>Quota
+            <input type="text" id="userSpaceQuota" placeholder="e.g. 10G — 'none' removes">
+          </label>
+        </div>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="userSpaceSetBtn" class="btn-primary">Set quota</button>
+        <button type="button" id="userSpaceCloseBtn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="nfsDialog">
     <h3 id="nfsDialogTitle">NFS Share</h3>
     <div class="dialog-body">

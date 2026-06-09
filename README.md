@@ -34,6 +34,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset rewrite** — apply updated properties (compression, checksum, copies) to already-stored data via `zfs rewrite` from the Edit Dataset dialog; recurse/skip-snapshot-shared/skip-clone-shared options; runs as a background job in the Jobs tab
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
+- **Per-user/group space & quotas** — see who consumes space on a filesystem (`zfs userspace`/`zfs groupspace`) and set or remove `userquota@`/`groupquota@` limits inline
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
@@ -719,6 +720,8 @@ sudo make uninstall
 | POST   | `/api/datasets`             | Create a dataset or volume            |
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties             |
 | POST   | `/api/rewrite/{name}`       | Rewrite existing blocks (`zfs rewrite`, background job) |
+| GET    | `/api/userspace/{name}`     | Per-user/group space usage (`?kind=user\|group`) |
+| POST   | `/api/userquota/{name}`     | Set or remove a per-user/group quota  |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume           |
 | POST   | `/api/snapshots`            | Create a snapshot                     |
 | DELETE | `/api/snapshots/{name}`     | Destroy a snapshot                    |

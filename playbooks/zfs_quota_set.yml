@@ -1,0 +1,28 @@
+---
+# Required extra vars:
+#   dataset    - dataset name (e.g. tank/data)
+#   kind       - "user" or "group"
+#   principal  - user or group name the quota applies to
+#   quota      - size value (e.g. 10G) or "none" to remove the quota
+- name: Set per-user or per-group quota
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - dataset is defined and dataset is match("^[a-zA-Z][a-zA-Z0-9_.:-]*(/[a-zA-Z][a-zA-Z0-9_.:-]*)*$")
+          - kind is defined and kind in ['user', 'group']
+          - principal is defined and principal is match("^[a-zA-Z_][a-zA-Z0-9._-]{0,31}$")
+          - quota is defined and (quota == 'none' or quota is match("(?i)^[1-9][0-9]{0,17}[KMGTPE]?B?$"))
+        fail_msg: "dataset, kind (user|group), principal and quota (size or 'none') must be valid"
+
+    - name: Set quota
+      ansible.builtin.command:
+        argv:
+          - zfs
+          - set
+          - "{{ kind }}quota@{{ principal }}={{ quota }}"
+          - "{{ dataset }}"
+      register: quota_result
+      changed_when: quota_result.rc == 0
