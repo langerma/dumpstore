@@ -469,6 +469,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">pool lifecycle</span>
+          <span class="health-badge badge-green">create</span>
+        </div>
+        <p>Create pools with a structured topology picker (mirror, raidz1-3, draid) and unused-device picker. Import exported pools (with force option). Export pools safely from the pool card.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">scrub management</span>
           <span class="health-badge badge-blue">scrub</span>
         </div>
@@ -709,10 +716,10 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
-          <span class="pool-name">drive replacement</span>
+          <span class="pool-name">pool expansion</span>
           <span class="health-badge badge-blue">planned</span>
         </div>
-        <p>Replace faulted disks from the UI, monitor resilver progress, and offline/online devices safely.</p>
+        <p>Add data vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools.</p>
       </div>
     </div>
   </section>

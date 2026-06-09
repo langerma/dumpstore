@@ -470,3 +470,44 @@ func TestParseSpaceRows(t *testing.T) {
 		t.Errorf("row 1 = %+v", rows[1])
 	}
 }
+
+func TestParseImportablePools(t *testing.T) {
+	out := `   pool: tank
+     id: 11536261005894085344
+  state: ONLINE
+ action: The pool can be imported using its name or numeric identifier.
+ config:
+
+	tank        ONLINE
+	  mirror-0  ONLINE
+	    sdb     ONLINE
+	    sdc     ONLINE
+
+   pool: backup
+     id: 9183745610293847561
+  state: DEGRADED
+ status: One or more devices are missing from the system.
+ action: The pool can be imported despite missing or damaged devices.
+ config:
+
+	backup      DEGRADED
+	  sdd       ONLINE
+	  sde       UNAVAIL
+`
+	pools := parseImportablePools(out)
+	if len(pools) != 2 {
+		t.Fatalf("got %d pools, want 2: %+v", len(pools), pools)
+	}
+	if pools[0].Name != "tank" || pools[0].ID != "11536261005894085344" || pools[0].State != "ONLINE" || pools[0].Status != "" {
+		t.Errorf("pool 0 = %+v", pools[0])
+	}
+	if pools[1].Name != "backup" || pools[1].State != "DEGRADED" || pools[1].Status != "One or more devices are missing from the system." {
+		t.Errorf("pool 1 = %+v", pools[1])
+	}
+}
+
+func TestParseImportablePoolsEmpty(t *testing.T) {
+	if pools := parseImportablePools(""); len(pools) != 0 {
+		t.Errorf("expected no pools, got %+v", pools)
+	}
+}

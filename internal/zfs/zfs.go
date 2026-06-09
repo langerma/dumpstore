@@ -254,6 +254,55 @@ func parseDiffOutput(out string) []DiffEntry {
 	return entries
 }
 
+// ImportablePool is one exported/orphaned pool visible to `zpool import`.
+type ImportablePool struct {
+	Name   string `json:"name"`
+	ID     string `json:"id"`
+	State  string `json:"state"`
+	Status string `json:"status,omitempty"` // advisory message, if any
+}
+
+// ImportablePools runs `zpool import` (without a pool name) and returns the
+// pools available for import. An empty list is returned when there are none —
+// zpool exits non-zero with "no pools available" in that case.
+func ImportablePools() ([]ImportablePool, error) {
+	out, err := run("zpool", "import")
+	if err != nil {
+		if strings.Contains(err.Error(), "no pools available") {
+			return []ImportablePool{}, nil
+		}
+		return nil, err
+	}
+	return parseImportablePools(out), nil
+}
+
+func parseImportablePools(out string) []ImportablePool {
+	pools := make([]ImportablePool, 0)
+	var cur *ImportablePool
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "pool: "):
+			if cur != nil {
+				pools = append(pools, *cur)
+			}
+			cur = &ImportablePool{Name: strings.TrimPrefix(trimmed, "pool: ")}
+		case cur == nil:
+			continue
+		case strings.HasPrefix(trimmed, "id: "):
+			cur.ID = strings.TrimPrefix(trimmed, "id: ")
+		case strings.HasPrefix(trimmed, "state: "):
+			cur.State = strings.TrimPrefix(trimmed, "state: ")
+		case strings.HasPrefix(trimmed, "status: "):
+			cur.Status = strings.TrimPrefix(trimmed, "status: ")
+		}
+	}
+	if cur != nil {
+		pools = append(pools, *cur)
+	}
+	return pools
+}
+
 // SpaceRow is one row of `zfs userspace` / `zfs groupspace` output.
 type SpaceRow struct {
 	Name  string `json:"name"`

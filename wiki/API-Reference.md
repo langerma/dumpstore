@@ -57,6 +57,10 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | POST   | `/api/smb/timemachine`      | Create/update a Time Machine share |
 | DELETE | `/api/smb/timemachine/{name}` | Remove a Time Machine share |
 | GET    | `/api/devices`              | List physical block devices (vdev candidates, in-use flag) |
+| POST   | `/api/pools`                | Create a pool (`zpool create`) |
+| GET    | `/api/pools/importable`     | List pools available for import |
+| POST   | `/api/pools/import`         | Import a pool (`zpool import [-f]`) |
+| POST   | `/api/pools/{pool}/export`  | Export a pool (`zpool export`) |
 | POST   | `/api/pools/{pool}/replace` | Replace a pool device (starts resilver) |
 | POST   | `/api/pools/{pool}/offline` | Take a pool device offline |
 | POST   | `/api/pools/{pool}/online`  | Bring a pool device online |
@@ -322,6 +326,49 @@ Returns the recent `RunRecord` list (capped at 20):
 ### DELETE /api/snapshots/{dataset}@{snapname}
 
 Append `?recursive=true` to also destroy clones.
+
+---
+
+## Pool lifecycle
+
+### POST /api/pools
+
+Create a new pool via `zpool create`. **Destroys all existing data on the selected devices** — the UI gates this behind confirm-by-typing.
+
+```json
+{
+  "name": "tank",
+  "vdev_type": "mirror",
+  "devices": ["/dev/sdb", "/dev/sdc"],
+  "ashift": "12",
+  "compression": "zstd"
+}
+```
+
+`vdev_type`: `single` (stripe, no redundancy keyword), `mirror`, `raidz1`, `raidz2`, `raidz3`, `draid`, `draid2`, `draid3`. Minimum device counts are enforced (mirror ≥ 2, raidzN ≥ N+1, draidN ≥ N+1). `ashift` (9–16) and `compression` are optional. Returns `409` if a pool with that name already exists. Returns Ansible task steps.
+
+### GET /api/pools/importable
+
+Scans with `zpool import` (no pool name) and returns pools available for import.
+
+```json
+[
+  { "name": "tank", "id": "11536261005894085344", "state": "ONLINE" },
+  { "name": "backup", "id": "9183745610293847561", "state": "DEGRADED", "status": "One or more devices are missing from the system." }
+]
+```
+
+### POST /api/pools/import
+
+```json
+{ "pool": "tank", "force": false }
+```
+
+`force: true` passes `-f` — needed for pools that were not cleanly exported or belonged to another system. Returns Ansible task steps.
+
+### POST /api/pools/{pool}/export
+
+Export the pool via `zpool export`. Fails when the pool is busy (open files, active shares, running jobs) — the error is surfaced in the op-log. Returns Ansible task steps.
 
 ---
 

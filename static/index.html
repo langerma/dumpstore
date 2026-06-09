@@ -49,6 +49,8 @@
       </div>
       <div class="section-header" style="margin-top:2rem">
         <h2>Storage Pools</h2>
+        <button class="btn-secondary" id="importPoolBtn">Import Pool</button>
+        <button class="btn-primary" id="createPoolBtn">+ Create Pool</button>
       </div>
       <div class="pools-iostat-wrap">
         <div id="pools-grid" class="pool-grid">
@@ -1009,6 +1011,84 @@
         <button type="button" id="scrubScheduleSaveBtn" class="btn-primary">Enable</button>
         <button type="button" id="scrubScheduleRemoveBtn" class="btn-danger">Remove</button>
         <button type="button" id="scrubScheduleCancelBtn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- CREATE POOL DIALOG -->
+  <dialog id="createPoolDialog" style="min-width:480px;max-width:640px">
+    <h3>Create Pool</h3>
+    <div class="dialog-body">
+      <div class="form-grid">
+        <label>Pool name
+          <input type="text" id="createPoolName" placeholder="e.g. tank">
+        </label>
+        <label>Topology
+          <select id="createPoolType">
+            <option value="single">single / stripe (no redundancy)</option>
+            <option value="mirror" selected>mirror</option>
+            <option value="raidz1">raidz1</option>
+            <option value="raidz2">raidz2</option>
+            <option value="raidz3">raidz3</option>
+            <option value="draid">draid1</option>
+            <option value="draid2">draid2</option>
+            <option value="draid3">draid3</option>
+          </select>
+        </label>
+        <label>ashift
+          <select id="createPoolAshift">
+            <option value="">auto-detect</option>
+            <option value="9">9 (512 B sectors)</option>
+            <option value="12">12 (4 KiB sectors)</option>
+            <option value="13">13 (8 KiB sectors)</option>
+          </select>
+        </label>
+        <label>Compression
+          <select id="createPoolCompression">
+            <option value="">default (inherit)</option>
+            <option value="lz4">lz4</option>
+            <option value="zstd">zstd</option>
+            <option value="gzip">gzip</option>
+            <option value="off">off</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row" style="margin-top:0.5rem">
+        <label>Devices</label>
+        <div id="createPoolDevices" class="device-picker">
+          <div class="loading">Loading devices&hellip;</div>
+        </div>
+      </div>
+      <div class="delete-warning">
+        ⚠ Creating a pool <strong>destroys all existing data</strong> on the
+        selected devices. This cannot be undone.
+      </div>
+      <label class="confirm-label">
+        Type the pool name to confirm:
+        <input type="text" id="createPoolConfirmInput" autocomplete="off">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="createPoolCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="createPoolConfirmBtn" class="btn-danger" disabled>Create Pool</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- IMPORT POOL DIALOG -->
+  <dialog id="importPoolDialog" style="min-width:440px;max-width:560px">
+    <h3>Import Pool</h3>
+    <div class="dialog-body">
+      <div id="importPoolList" class="table-wrap" style="max-height:40vh;overflow-y:auto">
+        <div class="loading">Scanning for importable pools&hellip;</div>
+      </div>
+      <label class="checkbox-label" style="margin-top:0.75rem">
+        <input type="checkbox" id="importPoolForce">
+        Force import (<code>-f</code>) — needed when the pool was not cleanly
+        exported or belonged to another system
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="importPoolCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="importPoolConfirmBtn" class="btn-primary" disabled>Import</button>
       </div>
     </div>
   </dialog>
