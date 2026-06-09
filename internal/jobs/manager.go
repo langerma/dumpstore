@@ -22,6 +22,11 @@ const (
 	defaultTailSize   = 64 * 1024 // 64 KiB stdout + stderr each
 	defaultRetention  = 50        // completed-job records to keep
 	cancelGracePeriod = 10 * time.Second
+	// collectGracePeriod bounds how long RunPipeline waits for the output
+	// collectors to drain after both children exited, before force-closing
+	// the pipe read ends (only relevant when a lingering grandchild keeps a
+	// write end open).
+	collectGracePeriod = 2 * time.Second
 )
 
 // Notifier is invoked when a job's state changes (creation, start, finish).
@@ -323,11 +328,24 @@ func (m *Manager) RunPipeline(jobType string, left, right []string) (Job, error)
 	go func() {
 		leftErr := leftCmd.Wait()
 		rightErr := rightCmd.Wait()
-		// Now that both children are dead, closing the read ends lets the
-		// collect goroutines see EOF and return.
+		// Both children are dead, so every write end they held is closed and
+		// the collect goroutines drain whatever is buffered in the pipes and
+		// then see EOF. Closing the read ends before the collectors finish
+		// would discard that buffered output (this was a real race: the final
+		// stdout tail was sometimes lost on loaded machines). The force-close
+		// after a grace window only exists for the pathological case of a
+		// lingering grandchild that inherited a write end and keeps the pipe
+		// open — without it this goroutine would hang and the job would stay
+		// "running" forever.
+		drained := make(chan struct{})
+		go func() { wg.Wait(); close(drained) }()
+		select {
+		case <-drained:
+		case <-time.After(collectGracePeriod):
+		}
 		_ = stdoutR.Close()
 		_ = stderrR.Close()
-		wg.Wait()
+		<-drained
 		var runErr error
 		switch {
 		case leftErr != nil:

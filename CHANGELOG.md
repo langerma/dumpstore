@@ -16,6 +16,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Pipeline jobs no longer lose their final output tail** — `RunPipeline` closed the stdout/stderr pipe read ends before the collector goroutines had drained them, so on loaded machines the buffered tail of a `zfs send | zfs recv` job's output was sometimes discarded (this also made `TestRunPipeline_Success` flaky in CI). The waiter now lets the collectors drain to EOF first, with a bounded grace window before force-closing in case a lingering grandchild keeps a write end open.
 - **Auto-snapshot takeover no longer fails on hosts missing zfs-auto-snapshot timers** — the Linux takeover task now enumerates installed `zfs-auto-snapshot-*.timer` units via `systemctl list-unit-files` and only stops/disables units that actually exist, instead of relying on fragile error-message matching. A new op-log task reports the per-timer outcome (stopped and disabled / not present). Closes #93.
 
 ### Security
