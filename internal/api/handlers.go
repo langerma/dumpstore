@@ -62,6 +62,12 @@ var (
 	// reRemoteSpec matches a `user@host` SSH destination. Host may be a
 	// hostname or IPv4 literal; IPv6 in brackets is not supported.
 	reRemoteSpec = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9._-]*@[a-zA-Z0-9.-]+$`)
+
+	// reVdevName matches a vdev identifier as accepted by zpool commands:
+	// a device path (/dev/sdb), a short device name (sdb, gpt/data,
+	// ata-FOO_BAR-part1) or a numeric guid printed by `zpool status` for
+	// missing devices.
+	reVdevName = regexp.MustCompile(`^/?[a-zA-Z0-9][a-zA-Z0-9/_.:-]*$`)
 )
 
 // validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
@@ -81,6 +87,13 @@ func validShellPath(s string) bool { return reShellPath.MatchString(s) }
 
 // validRemoteSpec returns true if s is a safe `user@host` SSH destination.
 func validRemoteSpec(s string) bool { return reRemoteSpec.MatchString(s) }
+
+// validVdevName returns true if s is a safe vdev identifier (device path,
+// short device name, or guid).
+func validVdevName(s string) bool { return reVdevName.MatchString(s) }
+
+// validPoolName returns true if s is a safe pool name (no dataset path).
+func validPoolName(s string) bool { return validZFSName(s) && !strings.Contains(s, "/") }
 
 // validSSHKey returns true if s looks like an SSH public key (single line, known prefix).
 func validSSHKey(s string) bool {
@@ -292,6 +305,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/smb/timemachine", h.getTimeMachineShares)
 	mux.HandleFunc("POST /api/smb/timemachine", h.createTimeMachineShare)
 	mux.HandleFunc("DELETE /api/smb/timemachine/{sharename}", h.deleteTimeMachineShare)
+	mux.HandleFunc("GET /api/devices", h.getDevices)
+	mux.HandleFunc("POST /api/pools/{pool}/replace", h.replaceDevice)
+	mux.HandleFunc("POST /api/pools/{pool}/offline", h.offlineDevice)
+	mux.HandleFunc("POST /api/pools/{pool}/online", h.onlineDevice)
 	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
 	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
 	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)

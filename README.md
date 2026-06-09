@@ -26,6 +26,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **Pool scrub management** — trigger and cancel scrubs; last scrub time, status, and progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
+- **Drive replacement & resilver monitoring** — replace a (faulted) device from the vdev tree with a picker of unused block devices (`zpool replace`); take devices offline / bring them online for maintenance; resilver progress bar with live percentage and a completion notification; faulted/degraded devices highlighted in the vdev tree
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
 - **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured
@@ -598,6 +599,7 @@ sudo make uninstall
 │   ├── api/
 │   │   ├── handlers.go              # Handler struct, RegisterRoutes, validation helpers, writeJSON/writeError
 │   │   ├── zfs_handlers.go          # ZFS: pools, datasets, snapshots, scrub, chown, auto-snapshot
+│   │   ├── device_handlers.go       # Block devices, zpool replace, device offline/online
 │   │   ├── user_handlers.go         # Users, groups, SSH key management
 │   │   ├── acl_handlers.go          # POSIX + NFSv4 ACL handlers
 │   │   ├── smb_handlers.go          # SMB: init, shares, users, homes, Time Machine
@@ -618,6 +620,8 @@ sudo make uninstall
 │   │   └── services.go              # ListServices, ServiceStatus — systemd (Linux) and rc.d (FreeBSD)
 │   ├── iscsi/
 │   │   └── iscsi.go                 # ListTargets — targetcli saveconfig (Linux) / /etc/ctl.conf (FreeBSD)
+│   ├── blockdev/
+│   │   └── blockdev.go              # List physical block devices (/sys/block, geom disk list) + vdev in-use matching
 │   └── smart/
 │       └── smart.go                 # ListDrives — smartctl per-disk health data
 ├── playbooks/
@@ -636,6 +640,9 @@ sudo make uninstall
 │   ├── zfs_scrub_periodic_disable.yml  # Disable periodic scrub via FreeBSD periodic.conf
 │   ├── zfs_scrub_zfsutils_enable.yml   # Enable periodic scrub via zfsutils-linux cron
 │   ├── zfs_scrub_zfsutils_disable.yml  # Disable periodic scrub via zfsutils-linux cron
+│   ├── zfs_disk_replace.yml         # zpool replace <pool> <old> <new> (starts resilver)
+│   ├── zfs_device_offline.yml       # zpool offline <pool> <device>
+│   ├── zfs_device_online.yml        # zpool online <pool> <device>
 │   │
 │   ├── dataset_chown.yml            # Set owner/group on dataset mountpoint
 │   ├── acl_set_posix.yml            # Add/modify POSIX ACL entry (setfacl -m)
@@ -700,6 +707,10 @@ sudo make uninstall
 | GET    | `/api/snapshots`            | List all snapshots                    |
 | GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk            |
+| GET    | `/api/devices`              | List physical block devices (vdev candidates, in-use flag) |
+| POST   | `/api/pools/{pool}/replace` | Replace a pool device (`zpool replace`, starts resilver) |
+| POST   | `/api/pools/{pool}/offline` | Take a pool device offline (`zpool offline`) |
+| POST   | `/api/pools/{pool}/online`  | Bring a pool device online (`zpool online`) |
 | GET    | `/api/events`               | Server-Sent Events stream (see below) |
 | GET    | `/metrics`                  | Prometheus text exposition            |
 | POST   | `/api/datasets`             | Create a dataset or volume            |

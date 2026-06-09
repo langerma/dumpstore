@@ -336,6 +336,13 @@ main {
   font-family: var(--font);
 }
 .vdev-state { font-weight: 600; min-width: 52px; font-size: 10px; }
+.vdev-actions { display: flex; gap: 4px; }
+.vdev-actions .btn-vdev { font-size: 10px; padding: 1px 6px; }
+.resilver-label {
+  font-size: 11px;
+  color: var(--yellow);
+  margin-bottom: 0.3rem;
+}
 .vdev-errs  { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .state-ONLINE   { color: var(--green); }
 .state-DEGRADED { color: var(--yellow); }
@@ -794,11 +801,11 @@ dialog label select:focus { border-color: var(--accent); }
 .btn-iscsi:hover { background: var(--surface); color: var(--text); }
 .btn-iscsi.active { background: color-mix(in srgb, var(--accent) 15%, var(--surface2)); color: var(--accent); border-color: var(--accent-dim); }
 .btn-iscsi.active:hover { background: color-mix(in srgb, var(--accent) 25%, var(--surface2)); }
-.btn-rename, .btn-clone, .btn-send, .btn-job-detail {
+.btn-rename, .btn-clone, .btn-send, .btn-job-detail, .btn-vdev {
   background: var(--surface2); color: var(--text-muted);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
 }
-.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover {
+.btn-rename:hover, .btn-clone:hover, .btn-send:hover, .btn-job-detail:hover, .btn-vdev:hover {
   background: var(--surface); color: var(--text);
 }
 .btn-cancel-job, .btn-remove-job {

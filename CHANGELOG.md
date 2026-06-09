@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Drive replacement and resilver management** — replace a pool device straight from the vdev tree (`zpool replace` via new `zfs_disk_replace.yml`), with a replacement-device picker backed by the new `GET /api/devices` endpoint (physical block devices from `/sys/block` on Linux / `geom disk list` on FreeBSD, with best-effort "in use by pool" detection). Devices can be taken offline / brought online for maintenance (`zpool offline`/`zpool online` via new playbooks). While a resilver runs the pool card shows a progress bar with live percentage (from the existing poolstatus SSE stream) and a toast announces completion. New endpoints: `GET /api/devices`, `POST /api/pools/{pool}/replace`, `POST /api/pools/{pool}/offline`, `POST /api/pools/{pool}/online`. New package `internal/blockdev`. Closes #55.
+
 ### Fixed
 
 - **Auto-snapshot takeover no longer fails on hosts missing zfs-auto-snapshot timers** — the Linux takeover task now enumerates installed `zfs-auto-snapshot-*.timer` units via `systemctl list-unit-files` and only stops/disables units that actually exist, instead of relying on fragile error-message matching. A new op-log task reports the per-timer outcome (stopped and disabled / not present). Closes #93.
