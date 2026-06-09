@@ -140,6 +140,7 @@ export function renderPools() {
           : `<button class="btn-secondary btn-sm" onclick="startScrub('${esc(p.name)}')">Start Scrub</button>`
         }
         <button class="btn-secondary btn-sm" onclick="openScrubScheduleDialog('${esc(p.name)}')">Schedule&hellip;</button>
+        <button class="btn-secondary btn-sm" onclick="exportPool('${esc(p.name)}')">Export</button>
         ${schedBadge}
       </div>`;
 
@@ -319,6 +320,146 @@ async function _deviceStateOp(pool, device, op) {
 // ── Replace-device dialog wiring ──────────────────────────────────────────────
 document.getElementById('replaceDeviceConfirmBtn').addEventListener('click', confirmReplaceDevice);
 document.getElementById('replaceDeviceCancelBtn').addEventListener('click', () => document.getElementById('replaceDeviceDialog').close());
+
+// ── Pool lifecycle (create / import / export) ─────────────────────────────────
+const reZFSPoolName = /^[a-zA-Z][a-zA-Z0-9_.:-]*$/;
+
+const _vdevMinDevices = {
+  single: 1, mirror: 2, raidz1: 2, raidz2: 3, raidz3: 4, draid: 2, draid2: 3, draid3: 4,
+};
+
+async function openCreatePoolDialog() {
+  document.getElementById('createPoolName').value = '';
+  document.getElementById('createPoolType').value = 'mirror';
+  document.getElementById('createPoolAshift').value = '';
+  document.getElementById('createPoolCompression').value = '';
+  document.getElementById('createPoolConfirmInput').value = '';
+  document.getElementById('createPoolConfirmBtn').disabled = true;
+  const picker = document.getElementById('createPoolDevices');
+  picker.innerHTML = '<div class="loading">Loading devices&hellip;</div>';
+  document.getElementById('createPoolDialog').showModal();
+  try {
+    const devs = await api('GET', '/api/devices');
+    const free = (devs || []).filter(d => !d.in_use_by);
+    picker.innerHTML = free.length
+      ? free.map(d => `
+          <label class="checkbox-label">
+            <input type="checkbox" class="create-pool-dev" value="${esc(d.path)}">
+            <span class="mono">${esc(d.path)}</span> · ${fmtBytes(d.size_bytes)}${d.model ? ' · ' + esc(d.model) : ''}
+          </label>`).join('')
+      : '<div class="loading">No unused devices found.</div>';
+  } catch (err) {
+    picker.innerHTML = '<div class="loading">Failed to list devices.</div>';
+  }
+}
+
+function _syncCreatePoolConfirm() {
+  const name = document.getElementById('createPoolName').value.trim();
+  const typed = document.getElementById('createPoolConfirmInput').value.trim();
+  document.getElementById('createPoolConfirmBtn').disabled = !(name && typed === name);
+}
+document.getElementById('createPoolName').addEventListener('input', _syncCreatePoolConfirm);
+document.getElementById('createPoolConfirmInput').addEventListener('input', _syncCreatePoolConfirm);
+
+async function confirmCreatePool() {
+  const name = document.getElementById('createPoolName').value.trim();
+  const vdevType = document.getElementById('createPoolType').value;
+  const devices = [...document.querySelectorAll('.create-pool-dev:checked')].map(cb => cb.value);
+  if (!reZFSPoolName.test(name)) { toast('Invalid pool name', 'err'); return; }
+  const min = _vdevMinDevices[vdevType] || 1;
+  if (devices.length < min) { toast(`${vdevType} needs at least ${min} device${min === 1 ? '' : 's'}`, 'err'); return; }
+  document.getElementById('createPoolDialog').close();
+  showOpLogRunning(`Create pool: ${name}`);
+  try {
+    const data = await api('POST', '/api/pools', {
+      name,
+      vdev_type: vdevType,
+      devices,
+      ashift: document.getElementById('createPoolAshift').value,
+      compression: document.getElementById('createPoolCompression').value,
+    });
+    showOpLog(`Create pool: ${name}`, data.tasks, null);
+    toast(`Pool ${name} created`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Create pool: ${name}`, err.tasks, err.message);
+  }
+}
+
+document.getElementById('createPoolBtn').addEventListener('click', openCreatePoolDialog);
+document.getElementById('createPoolConfirmBtn').addEventListener('click', confirmCreatePool);
+document.getElementById('createPoolCancelBtn').addEventListener('click', () => document.getElementById('createPoolDialog').close());
+
+let _importPoolSelected = '';
+
+async function openImportPoolDialog() {
+  _importPoolSelected = '';
+  document.getElementById('importPoolForce').checked = false;
+  document.getElementById('importPoolConfirmBtn').disabled = true;
+  const list = document.getElementById('importPoolList');
+  list.innerHTML = '<div class="loading">Scanning for importable pools&hellip;</div>';
+  document.getElementById('importPoolDialog').showModal();
+  try {
+    const pools = await api('GET', '/api/pools/importable');
+    if (!pools?.length) {
+      list.innerHTML = '<div class="loading">No importable pools found.</div>';
+      return;
+    }
+    list.innerHTML = `
+      <table>
+        <thead><tr><th></th><th>Pool</th><th>State</th><th>ID</th></tr></thead>
+        <tbody>${pools.map(p => `
+          <tr>
+            <td><input type="radio" name="importPoolPick" value="${esc(p.name)}"></td>
+            <td class="mono">${esc(p.name)}</td>
+            <td><span class="health-badge health-${esc(p.state)}">${esc(p.state)}</span></td>
+            <td class="muted mono">${esc(p.id)}</td>
+          </tr>${p.status ? `<tr><td></td><td colspan="3" class="muted">${esc(p.status)}</td></tr>` : ''}`).join('')}
+        </tbody>
+      </table>`;
+    list.querySelectorAll('input[name=importPoolPick]').forEach(rb => {
+      rb.addEventListener('change', () => {
+        _importPoolSelected = rb.value;
+        document.getElementById('importPoolConfirmBtn').disabled = false;
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="loading">Scan failed: ${esc(err.message)}</div>`;
+  }
+}
+
+async function confirmImportPool() {
+  const pool = _importPoolSelected;
+  if (!pool) return;
+  const force = document.getElementById('importPoolForce').checked;
+  document.getElementById('importPoolDialog').close();
+  showOpLogRunning(`Import pool: ${pool}`);
+  try {
+    const data = await api('POST', '/api/pools/import', { pool, force });
+    showOpLog(`Import pool: ${pool}`, data.tasks, null);
+    toast(`Pool ${pool} imported`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Import pool: ${pool}`, err.tasks, err.message);
+  }
+}
+
+document.getElementById('importPoolBtn').addEventListener('click', openImportPoolDialog);
+document.getElementById('importPoolConfirmBtn').addEventListener('click', confirmImportPool);
+document.getElementById('importPoolCancelBtn').addEventListener('click', () => document.getElementById('importPoolDialog').close());
+
+async function exportPool(pool) {
+  if (!confirm(`Export pool ${pool}?\n\nAll datasets are unmounted and the pool disappears from this host until it is re-imported. The export fails if the pool is busy (open files, active shares, running jobs).`)) return;
+  showOpLogRunning(`Export pool: ${pool}`);
+  try {
+    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/export`);
+    showOpLog(`Export pool: ${pool}`, data.tasks, null);
+    toast(`Pool ${pool} exported`, 'ok');
+    await loadAll();
+  } catch (err) {
+    showOpLog(`Export pool: ${pool}`, err.tasks, err.message);
+  }
+}
 
 // ── Pool scrub helpers ────────────────────────────────────────────────────────
 // Returns 'in_progress', 'paused', or 'idle' based on the raw scan string.
@@ -623,5 +764,6 @@ window.cancelScrub = cancelScrub;
 window.openReplaceDeviceDialog = openReplaceDeviceDialog;
 window.offlineDevice = offlineDevice;
 window.onlineDevice = onlineDevice;
+window.exportPool = exportPool;
 window.openScrubScheduleDialog = openScrubScheduleDialog;
 window.openAutoSnapDialog = openAutoSnapDialog;

@@ -343,6 +343,17 @@ main {
   color: var(--yellow);
   margin-bottom: 0.3rem;
 }
+
+/* Device picker (pool create / expansion dialogs) */
+.device-picker {
+  max-height: 30vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  font-size: 12px;
+}
+.device-picker .checkbox-label { margin-bottom: 0.25rem; }
 .vdev-errs  { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .state-ONLINE   { color: var(--green); }
 .state-DEGRADED { color: var(--yellow); }

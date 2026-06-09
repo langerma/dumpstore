@@ -194,6 +194,9 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `playbooks/zfs_device_offline.yml` | Takes a device offline (`zpool offline`); vars: `pool`, `device` |
 | `playbooks/zfs_device_online.yml` | Brings a device online (`zpool online`); vars: `pool`, `device` |
 | `playbooks/zfs_quota_set.yml` | Sets/removes per-user or per-group quota; vars: `dataset`, `kind`, `principal`, `quota` |
+| `playbooks/zfs_pool_create.yml` | Creates a pool; vars: `name`, `vdev_type`, `devices` (space-separated), optional `ashift`, `compression` |
+| `playbooks/zfs_pool_import.yml` | Imports a pool; vars: `pool`, optional `force` |
+| `playbooks/zfs_pool_export.yml` | Exports a pool; vars: `pool` |
 | `playbooks/acl_set_posix.yml` | Adds/updates a POSIX ACL entry; vars: `dataset`, `entry`, `recursive` |
 | `playbooks/acl_remove_posix.yml` | Removes a POSIX ACL entry; vars: `mountpoint`, `entry`, `recursive` |
 | `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |

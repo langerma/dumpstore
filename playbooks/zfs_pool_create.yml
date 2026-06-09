@@ -1,0 +1,39 @@
+---
+# Required extra vars:
+#   name       - pool name (e.g. tank)
+#   vdev_type  - single | mirror | raidz1 | raidz2 | raidz3 | draid | draid2 | draid3
+#   devices    - space-separated device paths (e.g. "/dev/sdb /dev/sdc")
+# Optional extra vars:
+#   ashift       - pool ashift (9-16)
+#   compression  - root dataset compression (e.g. lz4, zstd)
+- name: Create ZFS pool
+  hosts: localhost
+  gather_facts: false
+  vars:
+    device_list: "{{ devices | default('') | split }}"
+    # "single" (striped, no redundancy) passes devices without a vdev keyword;
+    # every other type is a valid zpool keyword as-is.
+    create_argv: >-
+      {{ ['zpool', 'create']
+         + (['-o', 'ashift=' ~ ashift] if (ashift | default('')) != '' else [])
+         + (['-O', 'compression=' ~ compression] if (compression | default('')) != '' else [])
+         + [name]
+         + ([] if vdev_type == 'single' else [vdev_type])
+         + device_list }}
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - name is defined and name is match("^[a-zA-Z][a-zA-Z0-9_.:-]*$")
+          - vdev_type is defined and vdev_type in ['single', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'draid', 'draid2', 'draid3']
+          - device_list | length > 0
+          - device_list | select('match', '^/?[a-zA-Z0-9][a-zA-Z0-9/_.:-]*$') | list | length == device_list | length
+          - (ashift | default('')) == '' or ashift | string is match("^(9|1[0-6])$")
+          - (compression | default('')) == '' or compression is match("^[a-z0-9-]+$")
+        fail_msg: "name, vdev_type, devices (and optional ashift/compression) must be valid"
+
+    - name: Create pool
+      ansible.builtin.command:
+        argv: "{{ create_argv }}"
+      register: create_result
+      changed_when: create_result.rc == 0

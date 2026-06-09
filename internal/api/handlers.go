@@ -68,6 +68,10 @@ var (
 	// ata-FOO_BAR-part1) or a numeric guid printed by `zpool status` for
 	// missing devices.
 	reVdevName = regexp.MustCompile(`^/?[a-zA-Z0-9][a-zA-Z0-9/_.:-]*$`)
+
+	// reCompressionValue matches a ZFS compression property value
+	// (off, on, lz4, zstd, zstd-fast, gzip-9, …).
+	reCompressionValue = regexp.MustCompile(`^[a-z0-9-]+$`)
 )
 
 // validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
@@ -254,6 +258,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/version", h.getVersion)
 	mux.HandleFunc("GET /api/poolstatus", h.getPoolStatuses)
 	mux.HandleFunc("GET /api/pools", h.getPools)
+	mux.HandleFunc("POST /api/pools", h.createPool)
+	mux.HandleFunc("GET /api/pools/importable", h.getImportablePools)
+	mux.HandleFunc("POST /api/pools/import", h.importPool)
+	mux.HandleFunc("POST /api/pools/{pool}/export", h.exportPool)
 	mux.HandleFunc("GET /api/datasets", h.getDatasets)
 	mux.HandleFunc("POST /api/datasets", h.createDataset)
 	mux.HandleFunc("POST /api/datasets/rename", h.renameDataset)
