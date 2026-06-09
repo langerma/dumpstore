@@ -568,6 +568,82 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// rewriteDataset handles POST /api/rewrite/{name...}
+// Body: { "recursive": bool, "skip_snapshot_shared": bool, "skip_clone_shared": bool }
+// Dispatches `zfs rewrite` on the dataset's mountpoint as a background job —
+// rewriting every block of a large dataset can run for hours, so it goes
+// through the jobs manager rather than Ansible.
+func (h *Handler) rewriteDataset(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validZFSName(name) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	var req struct {
+		Recursive          bool `json:"recursive"`
+		SkipSnapshotShared bool `json:"skip_snapshot_shared"`
+		SkipCloneShared    bool `json:"skip_clone_shared"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+
+	datasets, err := zfs.ListDatasets()
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	var ds *zfs.Dataset
+	for i := range datasets {
+		if datasets[i].Name == name {
+			ds = &datasets[i]
+			break
+		}
+	}
+	if ds == nil {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		return
+	}
+	// `zfs rewrite` operates on files through the mounted filesystem.
+	if ds.Type != "filesystem" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("only filesystems can be rewritten (got %s)", ds.Type), nil)
+		return
+	}
+	if !validShellPath(ds.Mountpoint) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset has no usable mountpoint (%q) — it must be mounted", ds.Mountpoint), nil)
+		return
+	}
+
+	argv := []string{"zfs", "rewrite"}
+	if req.Recursive {
+		argv = append(argv, "-r")
+	}
+	if req.SkipSnapshotShared {
+		argv = append(argv, "-S")
+	}
+	if req.SkipCloneShared {
+		argv = append(argv, "-C")
+	}
+	argv = append(argv, ds.Mountpoint)
+
+	job, err := h.jobs.Run("dataset.rewrite", argv)
+	auditLog(r.Context(), r, "dataset.rewrite", name, err)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to start job: %w", err), nil)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"job_id":     job.ID,
+		"type":       job.Type,
+		"started_at": job.StartedAt,
+		"dataset":    name,
+		"mountpoint": ds.Mountpoint,
+	})
+}
+
 // deleteSnapshot handles DELETE /api/snapshots/{dataset@snapname}
 func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	snapshot := r.PathValue("snapshot")

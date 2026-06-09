@@ -46,6 +46,10 @@ function jobTarget(job) {
       return `${src} → ${remote}${dst}`;
     }
   }
+  // dataset.rewrite argv: zfs rewrite [-r] [-S] [-C] <mountpoint>
+  if (job.type === 'dataset.rewrite' && Array.isArray(job.args) && job.args.length) {
+    return job.args[job.args.length - 1];
+  }
   return job.type;
 }
 

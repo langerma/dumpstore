@@ -373,6 +373,36 @@
         </label>
       </fieldset>
 
+      <fieldset class="form-section" id="edit-ds-rewrite-section">
+        <legend>Rewrite existing blocks</legend>
+        <label class="checkbox-label">
+          <input type="checkbox" id="edit-ds-rewrite">
+          Rewrite existing blocks (<code>zfs rewrite</code>)
+        </label>
+        <p class="muted" style="margin:0.3rem 0 0.5rem;font-size:0.85rem">
+          Applies updated properties (compression, checksum, copies, …) to data
+          that is already stored. Runs as a background job — track it in the
+          Jobs tab. Note: <code>recordsize</code> changes are <em>not</em>
+          applied by rewrite; blocks shared with snapshots or clones are
+          duplicated unless skipped below, which can increase pool usage;
+          rewritten blocks appear as modified in incremental sends.
+        </p>
+        <div id="edit-ds-rewrite-opts">
+          <label class="checkbox-label">
+            <input type="checkbox" id="edit-ds-rewrite-recursive" disabled>
+            Recurse into subdirectories and child datasets (<code>-r</code>)
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="edit-ds-rewrite-skip-snap" disabled>
+            Skip blocks shared with snapshots (<code>-S</code>)
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="edit-ds-rewrite-skip-clone" disabled>
+            Skip blocks shared via block cloning (<code>-C</code>)
+          </label>
+        </div>
+      </fieldset>
+
       <div class="dialog-actions">
         <button type="button" id="editDatasetCancelBtn" class="btn-secondary">Cancel</button>
         <button type="submit" class="btn-primary">Save</button>

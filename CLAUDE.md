@@ -165,7 +165,7 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
 | `internal/logging/handler.go` | `NewJournalHandler` — slog handler with systemd journal priority prefixes |
 | `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation |
-| `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot |
+| `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot, rewrite (background job) |
 | `internal/api/device_handlers.go` | Block device list, `zpool replace`, device offline/online |
 | `internal/blockdev/blockdev.go` | `List` — physical block devices (`/sys/block` on Linux, `geom disk list` on FreeBSD); `MarkInUse` — best-effort vdev→device matching |
 | `internal/api/user_handlers.go` | User + group handlers, SSH key management |

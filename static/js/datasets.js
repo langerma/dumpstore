@@ -277,18 +277,32 @@ function editTextFields() {
 
 document.getElementById('editDatasetCancelBtn').addEventListener('click', () => editDatasetDialog.close());
 
+// Rewrite sub-options only make sense when the master checkbox is ticked.
+const _rewriteOptIds = ['edit-ds-rewrite-recursive', 'edit-ds-rewrite-skip-snap', 'edit-ds-rewrite-skip-clone'];
+document.getElementById('edit-ds-rewrite').addEventListener('change', e => {
+  for (const id of _rewriteOptIds) document.getElementById(id).disabled = !e.target.checked;
+});
+
 async function openEditDatasetDialog(name, type) {
   _editDatasetName = name;
   _editDatasetType = type;
   document.getElementById('editDatasetTitle').textContent = `Edit: ${name}`;
 
-  // Show/hide filesystem-only section.
+  // Show/hide filesystem-only sections (zfs rewrite works through the
+  // mounted filesystem, so volumes can't be rewritten).
   document.getElementById('edit-ds-fs-section').style.display = type === 'filesystem' ? '' : 'none';
+  document.getElementById('edit-ds-rewrite-section').style.display = type === 'filesystem' ? '' : 'none';
 
   // Reset form before fetching.
   for (const f of [...editSelectFields(), ...editTextFields()]) {
     const el = document.getElementById('edit-ds-' + f);
     if (el) el.value = '';
+  }
+  document.getElementById('edit-ds-rewrite').checked = false;
+  for (const id of _rewriteOptIds) {
+    const el = document.getElementById(id);
+    el.checked = false;
+    el.disabled = true;
   }
   _editOriginalProps = {};
 
@@ -329,22 +343,41 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
     if (val !== (_editOriginalProps[f] ?? '')) body[f] = val;
   }
 
-  if (Object.keys(body).length === 0) {
+  const rewrite = _editDatasetType === 'filesystem' && document.getElementById('edit-ds-rewrite').checked;
+
+  if (Object.keys(body).length === 0 && !rewrite) {
     editDatasetDialog.close();
     toast('No changes to save', 'ok');
     return;
   }
 
   editDatasetDialog.close();
-  showOpLogRunning('Updating properties…');
-  try {
-    const encodedName = _editDatasetName.split('/').map(encodeURIComponent).join('/');
-    const result = await api('PATCH', '/api/datasets/' + encodedName, body);
-    showOpLog(`Properties updated: ${_editDatasetName}`, result.tasks, null);
-    const datasets = await api('GET', '/api/datasets');
-    storeSet('datasets', datasets || []);
-  } catch (e) {
-    showOpLog(`Failed to update ${_editDatasetName}`, e.tasks, e.message);
+  const encodedName = _editDatasetName.split('/').map(encodeURIComponent).join('/');
+
+  if (Object.keys(body).length > 0) {
+    showOpLogRunning('Updating properties…');
+    try {
+      const result = await api('PATCH', '/api/datasets/' + encodedName, body);
+      showOpLog(`Properties updated: ${_editDatasetName}`, result.tasks, null);
+      const datasets = await api('GET', '/api/datasets');
+      storeSet('datasets', datasets || []);
+    } catch (e) {
+      showOpLog(`Failed to update ${_editDatasetName}`, e.tasks, e.message);
+      return; // don't rewrite against properties that failed to apply
+    }
+  }
+
+  if (rewrite) {
+    try {
+      const data = await api('POST', '/api/rewrite/' + encodedName, {
+        recursive: document.getElementById('edit-ds-rewrite-recursive').checked,
+        skip_snapshot_shared: document.getElementById('edit-ds-rewrite-skip-snap').checked,
+        skip_clone_shared: document.getElementById('edit-ds-rewrite-skip-clone').checked,
+      });
+      toast(`Rewrite job ${data.job_id} started on ${_editDatasetName} — see Jobs tab`, 'ok');
+    } catch (e) {
+      toast(`Rewrite failed to start: ${e.message}`, 'err');
+    }
   }
 });
 
