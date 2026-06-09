@@ -254,6 +254,43 @@ func parseDiffOutput(out string) []DiffEntry {
 	return entries
 }
 
+// SpaceRow is one row of `zfs userspace` / `zfs groupspace` output.
+type SpaceRow struct {
+	Name  string `json:"name"`
+	Used  uint64 `json:"used"`
+	Quota uint64 `json:"quota"` // 0 = no quota set
+}
+
+// UserSpace returns per-user space consumption and quotas for a dataset.
+func UserSpace(dataset string) ([]SpaceRow, error) { return spaceRows("userspace", dataset) }
+
+// GroupSpace returns per-group space consumption and quotas for a dataset.
+func GroupSpace(dataset string) ([]SpaceRow, error) { return spaceRows("groupspace", dataset) }
+
+func spaceRows(sub, dataset string) ([]SpaceRow, error) {
+	out, err := run("zfs", sub, "-Hp", "-o", "name,used,quota", dataset)
+	if err != nil {
+		return nil, err
+	}
+	return parseSpaceRows(out), nil
+}
+
+func parseSpaceRows(out string) []SpaceRow {
+	rows := make([]SpaceRow, 0)
+	for _, line := range splitLines(out) {
+		f := strings.Split(line, "\t")
+		if len(f) < 3 {
+			continue
+		}
+		rows = append(rows, SpaceRow{
+			Name:  f[0],
+			Used:  parseUint(f[1]),
+			Quota: parseUint(f[2]),
+		})
+	}
+	return rows
+}
+
 // DatasetProp holds the value and source of a ZFS property.
 type DatasetProp struct {
 	Value  string `json:"value"`

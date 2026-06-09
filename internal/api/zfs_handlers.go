@@ -568,6 +568,95 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getUserSpace handles GET /api/userspace/{name...}?kind=user|group
+// Returns per-user or per-group space consumption and quotas for a dataset
+// via `zfs userspace` / `zfs groupspace`.
+func (h *Handler) getUserSpace(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validZFSName(name) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	kind := r.URL.Query().Get("kind")
+	if kind == "" {
+		kind = "user"
+	}
+	if kind != "user" && kind != "group" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("kind must be user or group"), nil)
+		return
+	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		return
+	}
+	var rows []zfs.SpaceRow
+	var err error
+	if kind == "group" {
+		rows, err = zfs.GroupSpace(name)
+	} else {
+		rows, err = zfs.UserSpace(name)
+	}
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(r.Context(), w, map[string]any{"dataset": name, "kind": kind, "rows": rows})
+}
+
+// setUserQuota handles POST /api/userquota/{name...}
+// Body: { "kind": "user"|"group", "principal": "alice", "quota": "10G"|"none" }
+// Sets userquota@<principal> / groupquota@<principal> on the dataset.
+func (h *Handler) setUserQuota(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !validZFSName(name) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	var req struct {
+		Kind      string `json:"kind"`
+		Principal string `json:"principal"`
+		Quota     string `json:"quota"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Kind != "user" && req.Kind != "group" {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("kind must be user or group"), nil)
+		return
+	}
+	if !validUnixName(req.Principal) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid %s name", req.Kind), nil)
+		return
+	}
+	if !validZFSSize(req.Quota) {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid quota (size like 10G, or 'none')"), nil)
+		return
+	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		return
+	}
+	out, err := h.runOp("zfs_quota_set.yml", map[string]string{
+		"dataset":   name,
+		"kind":      req.Kind,
+		"principal": req.Principal,
+		"quota":     req.Quota,
+	})
+	auditLog(r.Context(), r, "dataset.quota_set", name+" "+req.Kind+"quota@"+req.Principal+"="+req.Quota, err)
+	if err != nil {
+		writeRunOpError(r.Context(), w, err, out)
+		return
+	}
+	writeJSON(r.Context(), w, map[string]any{"dataset": name, "tasks": out.Steps()})
+}
+
 // maxDiffEntries caps the number of diff entries returned to the client so a
 // huge diff on a busy dataset cannot produce an unbounded response.
 const maxDiffEntries = 10000

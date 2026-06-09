@@ -23,6 +23,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume |
 | POST   | `/api/rewrite/{name}`       | Rewrite existing blocks (`zfs rewrite`, background job) |
+| GET    | `/api/userspace/{name}`     | Per-user/group space usage (`?kind=user\|group`) |
+| POST   | `/api/userquota/{name}`     | Set or remove a per-user/group quota |
 | POST   | `/api/snapshots`            | Create a snapshot |
 | POST   | `/api/snapshots/clone`      | Clone a snapshot to a new dataset |
 | POST   | `/api/snapshots/send`       | Send a snapshot to a target dataset (local or remote SSH) |
@@ -138,6 +140,33 @@ Rewrite the existing blocks of a mounted filesystem via `zfs rewrite` so that up
 - `skip_clone_shared` → `-C` (don't duplicate blocks shared via block cloning)
 
 Caveats: `recordsize` changes are **not** applied by rewrite; rewriting blocks shared with snapshots/clones duplicates them (pool usage can increase) unless skipped; rewritten blocks appear as modified in incremental send streams. Volumes are rejected with `400` — rewrite operates through the mounted filesystem. Requires OpenZFS with `zfs rewrite` support (2.3+).
+
+### GET /api/userspace/{name}
+
+Per-user or per-group space consumption and quotas for a dataset, via `zfs userspace -Hp` / `zfs groupspace -Hp`. Query parameter `kind` is `user` (default) or `group`.
+
+```json
+{
+  "dataset": "tank/data",
+  "kind": "user",
+  "rows": [
+    { "name": "alice", "used": 1073741824, "quota": 10737418240 },
+    { "name": "root", "used": 53248, "quota": 0 }
+  ]
+}
+```
+
+`quota: 0` means no quota is set.
+
+### POST /api/userquota/{name}
+
+Set or remove a per-user/per-group quota (`userquota@<principal>` / `groupquota@<principal>`).
+
+```json
+{ "kind": "user", "principal": "alice", "quota": "10G" }
+```
+
+`"quota": "none"` removes the limit. Returns Ansible task steps.
 
 ### DELETE /api/datasets/{name}
 
