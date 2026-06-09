@@ -14,6 +14,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/datasets`             | List all datasets and volumes |
 | GET    | `/api/dataset-props/{name}` | Editable properties for a dataset |
 | GET    | `/api/snapshots`            | List all snapshots |
+| GET    | `/api/snapshots/diff`       | Files changed between snapshots (`zfs diff`) |
 | GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk |
 | GET    | `/api/events`               | Server-Sent Events stream |
@@ -184,6 +185,30 @@ Add `"remote": "user@host"` to receive over SSH (`ssh -o BatchMode=yes`); the du
 ```
 
 Use `GET /api/jobs/{id}` to poll status, or subscribe to the `jobs.update` SSE topic.
+
+### GET /api/snapshots/diff
+
+Show files changed between two snapshots, or between a snapshot and the live dataset, via `zfs diff -H`.
+
+Query parameters:
+- `from` (required) — the older snapshot (`dataset@label`)
+- `to` (optional) — a later snapshot of the **same dataset**; omit to diff against the current filesystem state
+
+```json
+{
+  "from": "tank/data@before",
+  "to": "tank/data@after",
+  "truncated": false,
+  "entries": [
+    { "change": "+", "path": "/tank/data/new.txt" },
+    { "change": "-", "path": "/tank/data/gone.txt" },
+    { "change": "M", "path": "/tank/data/report.pdf" },
+    { "change": "R", "path": "/tank/data/old.txt", "new_path": "/tank/data/renamed.txt" }
+  ]
+}
+```
+
+Entries are capped at 10 000 (`truncated: true` when more changed). The dataset must be mounted for `zfs diff` to work.
 
 ---
 

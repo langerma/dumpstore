@@ -474,6 +474,27 @@
   </dialog>
 
   <!-- SEND SNAPSHOT DIALOG -->
+  <!-- SNAPSHOT DIFF DIALOG -->
+  <dialog id="diffSnapDialog" style="min-width:480px;max-width:680px">
+    <h3>Snapshot Diff &mdash; <span id="diffSnapSource" class="mono"></span></h3>
+    <div class="dialog-body">
+      <div class="form-row">
+        <label for="diffSnapTo">Compare against</label>
+        <select id="diffSnapTo"></select>
+      </div>
+      <div class="form-row">
+        <label for="diffSnapFilter">Filter</label>
+        <input type="text" id="diffSnapFilter" placeholder="filter paths&hellip;">
+      </div>
+      <div id="diffSnapResults" class="diff-list"></div>
+      <div class="dialog-actions">
+        <span id="diffSnapCount" class="muted" style="margin-right:auto"></span>
+        <button type="button" id="diffSnapRunBtn" class="btn-primary">Run Diff</button>
+        <button type="button" id="diffSnapCloseBtn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="sendSnapDialog">
     <form id="sendSnapForm" method="dialog">
       <h3>Send Snapshot</h3>

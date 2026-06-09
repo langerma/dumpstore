@@ -424,3 +424,33 @@ func searchSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+func TestParseDiffOutput(t *testing.T) {
+	out := "M\t/tank/data/\n" +
+		"+\t/tank/data/new file.txt\n" +
+		"-\t/tank/data/gone.txt\n" +
+		"R\t/tank/data/old.txt\t/tank/data/renamed.txt\n" +
+		"garbage-line-without-tab\n"
+	entries := parseDiffOutput(out)
+	if len(entries) != 4 {
+		t.Fatalf("got %d entries, want 4: %+v", len(entries), entries)
+	}
+	if entries[0].Change != "M" || entries[0].Path != "/tank/data/" {
+		t.Errorf("entry 0 = %+v", entries[0])
+	}
+	if entries[1].Change != "+" || entries[1].Path != "/tank/data/new file.txt" {
+		t.Errorf("entry 1 = %+v", entries[1])
+	}
+	if entries[2].Change != "-" || entries[2].Path != "/tank/data/gone.txt" {
+		t.Errorf("entry 2 = %+v", entries[2])
+	}
+	if entries[3].Change != "R" || entries[3].Path != "/tank/data/old.txt" || entries[3].NewPath != "/tank/data/renamed.txt" {
+		t.Errorf("entry 3 = %+v", entries[3])
+	}
+}
+
+func TestParseDiffOutputEmpty(t *testing.T) {
+	if entries := parseDiffOutput(""); len(entries) != 0 {
+		t.Errorf("expected no entries, got %+v", entries)
+	}
+}

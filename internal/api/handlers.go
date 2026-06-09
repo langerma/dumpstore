@@ -264,6 +264,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/datasets/{name...}", h.setDatasetProps)
 	mux.HandleFunc("POST /api/rewrite/{name...}", h.rewriteDataset)
 	mux.HandleFunc("GET /api/snapshots", h.getSnapshots)
+	mux.HandleFunc("GET /api/snapshots/diff", h.getSnapshotDiff)
 	mux.HandleFunc("GET /api/iostat", h.getIOStat)
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("POST /api/snapshots/clone", h.cloneSnapshot)

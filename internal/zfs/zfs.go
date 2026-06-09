@@ -215,6 +215,45 @@ func IOStats() ([]IOStat, error) {
 	return stats, nil
 }
 
+// DiffEntry is one line of `zfs diff` output.
+type DiffEntry struct {
+	Change  string `json:"change"`             // "-" removed, "+" created, "M" modified, "R" renamed
+	Path    string `json:"path"`               // affected path
+	NewPath string `json:"new_path,omitempty"` // rename target (R entries only)
+}
+
+// DiffSnapshots runs `zfs diff -H <from> [to]` and returns the parsed entries.
+// to may be a later snapshot of the same dataset, or empty to diff against the
+// live filesystem. Diffing a busy dataset can take a while, so this uses a
+// longer timeout than the regular read commands.
+func DiffSnapshots(from, to string) ([]DiffEntry, error) {
+	args := []string{"diff", "-H", from}
+	if to != "" {
+		args = append(args, to)
+	}
+	out, err := runWithTimeout(5*time.Minute, "zfs", args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseDiffOutput(out), nil
+}
+
+func parseDiffOutput(out string) []DiffEntry {
+	entries := make([]DiffEntry, 0)
+	for _, line := range splitLines(out) {
+		f := strings.Split(line, "\t")
+		if len(f) < 2 {
+			continue
+		}
+		e := DiffEntry{Change: f[0], Path: f[1]}
+		if len(f) >= 3 && e.Change == "R" {
+			e.NewPath = f[2]
+		}
+		entries = append(entries, e)
+	}
+	return entries
+}
+
 // DatasetProp holds the value and source of a ZFS property.
 type DatasetProp struct {
 	Value  string `json:"value"`
@@ -487,7 +526,12 @@ const cmdTimeout = 30 * time.Second
 // run executes a command and returns its stdout as a string.
 // The command is killed if it does not complete within cmdTimeout.
 func run(name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	return runWithTimeout(cmdTimeout, name, args...)
+}
+
+// runWithTimeout executes a command with an explicit timeout.
+func runWithTimeout(timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, name, args...)

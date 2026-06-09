@@ -37,6 +37,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
+- **Snapshot diff** — see what changed between a snapshot and a later snapshot or the live filesystem (`zfs diff`); color-coded change types with a path filter
 - **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab (status, runtime, output tails, cancel); optional incremental (`-i`) using a prior snapshot of the same dataset and `--raw` for encrypted datasets; SSH keys must be pre-configured for the dumpstore service account
 - **Scheduled replication** — cron-scheduled replication tasks (5-field syntax, 1-minute resolution); each fire snapshots the source as `dumpstore-repl-<UTC>`, places a hold for the duration of the transfer, picks the most recent common `dumpstore-repl-*` for an incremental send, dispatches the pipeline via the jobs runner, releases the hold on completion, and prunes destination replication snapshots to a configurable retention count; per-task run history with "Run now" override; supports local and remote (`user@host`) targets
 - **Background jobs** — long-running data-plane operations (currently snapshot send/receive) run outside Ansible via the jobs manager; each runs in its own process group with SIGTERM→SIGKILL cancel; status persists across service restarts (interrupted jobs are surfaced as such); live updates via SSE
@@ -706,6 +707,7 @@ sudo make uninstall
 | GET    | `/api/datasets`             | List all datasets and volumes         |
 | GET    | `/api/dataset-props/{name}` | Editable properties for a dataset     |
 | GET    | `/api/snapshots`            | List all snapshots                    |
+| GET    | `/api/snapshots/diff`       | Files changed between snapshots (`zfs diff`) |
 | GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk            |
 | GET    | `/api/devices`              | List physical block devices (vdev candidates, in-use flag) |
