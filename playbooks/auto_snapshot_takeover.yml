@@ -9,27 +9,53 @@
 - name: Take over auto-snapshot execution from the OS daemon
   hosts: localhost
   gather_facts: true
+  vars:
+    autosnap_known_timers:
+      - zfs-auto-snapshot-frequent.timer
+      - zfs-auto-snapshot-hourly.timer
+      - zfs-auto-snapshot-daily.timer
+      - zfs-auto-snapshot-weekly.timer
+      - zfs-auto-snapshot-monthly.timer
+    # first column of each `systemctl list-unit-files` row, restricted to
+    # the known timer names so stray matches can never be acted on
+    autosnap_installed_timers: >-
+      {{ (autosnap_timer_scan.stdout_lines | default([]))
+         | map('split') | map('first')
+         | select('in', autosnap_known_timers) | list }}
   tasks:
     # ── Linux ────────────────────────────────────────────────────────────
+    # A missing timer unit is not an error — it means there is nothing to
+    # take over for that frequency. Enumerate what is actually installed
+    # and only touch those units.
+    - name: Linux — detect installed zfs-auto-snapshot systemd timers
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - list-unit-files
+          - --no-legend
+          - zfs-auto-snapshot-*.timer
+      register: autosnap_timer_scan
+      changed_when: false
+      # newer systemd exits non-zero when no unit file matches the pattern
+      failed_when: false
+      when: ansible_system == "Linux"
+
     - name: Linux — stop and disable zfs-auto-snapshot systemd timers
       ansible.builtin.systemd:
         name: "{{ item }}"
         enabled: false
         state: stopped
-      loop:
-        - zfs-auto-snapshot-frequent.timer
-        - zfs-auto-snapshot-hourly.timer
-        - zfs-auto-snapshot-daily.timer
-        - zfs-auto-snapshot-weekly.timer
-        - zfs-auto-snapshot-monthly.timer
+      loop: "{{ autosnap_installed_timers }}"
       when: ansible_system == "Linux"
-      register: linux_systemd
-      failed_when:
-        # systemctl returns non-zero if the unit doesn't exist (package not
-        # installed) — that's the desired state, so swallow it.
-        - linux_systemd.failed | default(false)
-        - "'could not be found' not in (linux_systemd.msg | default(''))"
-        - "'not loaded' not in (linux_systemd.msg | default(''))"
+
+    - name: Linux — report per-timer takeover outcome
+      ansible.builtin.debug:
+        msg: >-
+          {% for t in autosnap_known_timers -%}
+          {{ t }}: {{ 'stopped and disabled' if t in autosnap_installed_timers else 'not present' }}
+          {{- '; ' if not loop.last }}
+          {%- endfor %}
+      when: ansible_system == "Linux"
 
     - name: Linux — remove /etc/cron.d/zfs-auto-snapshot if present
       ansible.builtin.file:

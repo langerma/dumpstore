@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-snapshot takeover no longer fails on hosts missing zfs-auto-snapshot timers** — the Linux takeover task now enumerates installed `zfs-auto-snapshot-*.timer` units via `systemctl list-unit-files` and only stops/disables units that actually exist, instead of relying on fragile error-message matching. A new op-log task reports the per-timer outcome (stopped and disabled / not present). Closes #93.
+
 ### Security
 
 - **Logout cookie now sets `Secure` on TLS** — the session-clearing cookie in `handleLogout` previously omitted the `Secure` attribute (the login cookie already had it). Aligns the clearing cookie with the login cookie. Closes #94.
