@@ -476,6 +476,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">pool expansion</span>
+          <span class="health-badge badge-green">zpool add</span>
+        </div>
+        <p>Add data vdevs (with irreversibility warning), L2ARC cache, SLOG log (optionally mirrored), and hot spares. Remove cache/log/spare devices from the vdev tree.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">scrub management</span>
           <span class="health-badge badge-blue">scrub</span>
         </div>
@@ -716,10 +723,10 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
-          <span class="pool-name">pool expansion</span>
+          <span class="pool-name">log viewer</span>
           <span class="health-badge badge-blue">planned</span>
         </div>
-        <p>Add data vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools.</p>
+        <p>Tail dumpstore logs, the system journal, and ZFS events directly from the UI.</p>
       </div>
     </div>
   </section>

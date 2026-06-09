@@ -61,6 +61,11 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/pools/importable`     | List pools available for import |
 | POST   | `/api/pools/import`         | Import a pool (`zpool import [-f]`) |
 | POST   | `/api/pools/{pool}/export`  | Export a pool (`zpool export`) |
+| POST   | `/api/pools/{pool}/vdevs`   | Add a data vdev (`zpool add`) |
+| POST   | `/api/pools/{pool}/cache`   | Add an L2ARC cache device |
+| POST   | `/api/pools/{pool}/log`     | Add a SLOG log device (optionally mirrored) |
+| POST   | `/api/pools/{pool}/spare`   | Add a hot spare |
+| DELETE | `/api/pools/{pool}/devices/{device}` | Remove a cache/log/spare device (`zpool remove`) |
 | POST   | `/api/pools/{pool}/replace` | Replace a pool device (starts resilver) |
 | POST   | `/api/pools/{pool}/offline` | Take a pool device offline |
 | POST   | `/api/pools/{pool}/online`  | Bring a pool device online |
@@ -369,6 +374,30 @@ Scans with `zpool import` (no pool name) and returns pools available for import.
 ### POST /api/pools/{pool}/export
 
 Export the pool via `zpool export`. Fails when the pool is busy (open files, active shares, running jobs) — the error is surfaced in the op-log. Returns Ansible task steps.
+
+### POST /api/pools/{pool}/vdevs
+
+Add a data vdev via `zpool add`. **Irreversible on most pool layouts** — the UI gates this behind confirm-by-typing.
+
+```json
+{ "vdev_type": "mirror", "devices": ["/dev/sdd", "/dev/sde"] }
+```
+
+`vdev_type`: `single`, `mirror`, `raidz1`, `raidz2`, `raidz3` (minimum device counts enforced). Returns Ansible task steps.
+
+### POST /api/pools/{pool}/cache · /log · /spare
+
+Add auxiliary devices: L2ARC cache, SLOG log, or hot spare.
+
+```json
+{ "devices": ["/dev/nvme0n1"] }
+```
+
+For `/log`, an optional `"mirror": true` mirrors the log devices (requires ≥ 2). Returns Ansible task steps.
+
+### DELETE /api/pools/{pool}/devices/{device}
+
+Remove a cache, log, or spare device via `zpool remove`. zpool itself rejects removals that aren't legal for the given vdev. Returns Ansible task steps.
 
 ---
 

@@ -1093,6 +1093,57 @@
     </div>
   </dialog>
 
+  <!-- EXPAND POOL DIALOG -->
+  <dialog id="expandPoolDialog" style="min-width:480px;max-width:640px">
+    <h3>Expand Pool &mdash; <span id="expandPoolName" class="mono"></span></h3>
+    <div class="dialog-body">
+      <div class="form-row">
+        <label for="expandPoolKind">Add</label>
+        <select id="expandPoolKind">
+          <option value="data" selected>Data vdev</option>
+          <option value="cache">Cache device (L2ARC)</option>
+          <option value="log">Log device (SLOG)</option>
+          <option value="spare">Hot spare</option>
+        </select>
+      </div>
+      <div class="form-row" id="expandPoolVdevTypeRow">
+        <label for="expandPoolVdevType">Topology</label>
+        <select id="expandPoolVdevType">
+          <option value="single">single disk (no redundancy)</option>
+          <option value="mirror" selected>mirror</option>
+          <option value="raidz1">raidz1</option>
+          <option value="raidz2">raidz2</option>
+          <option value="raidz3">raidz3</option>
+        </select>
+      </div>
+      <div class="form-row" id="expandPoolLogMirrorRow" style="display:none">
+        <label class="checkbox-label">
+          <input type="checkbox" id="expandPoolLogMirror">
+          Mirror the log devices
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Devices</label>
+        <div id="expandPoolDevices" class="device-picker">
+          <div class="loading">Loading devices&hellip;</div>
+        </div>
+      </div>
+      <div class="delete-warning" id="expandPoolDataWarning">
+        ⚠ Adding a data vdev is <strong>irreversible</strong> on most pool
+        layouts. A vdev that doesn't match the pool's existing redundancy
+        (e.g. a single disk added to a mirror pool) weakens the whole pool.
+      </div>
+      <label class="confirm-label" id="expandPoolConfirmRow">
+        Type the pool name to confirm:
+        <input type="text" id="expandPoolConfirmInput" autocomplete="off">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="expandPoolCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="button" id="expandPoolConfirmBtn" class="btn-danger" disabled>Add Devices</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- REPLACE DEVICE DIALOG -->
   <dialog id="replaceDeviceDialog">
     <h3>Replace Device &mdash; <span id="replaceDevicePool"></span></h3>
