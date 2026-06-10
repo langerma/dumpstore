@@ -77,15 +77,12 @@
 | wsdd configuration management      | Medium   | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares |
 | FreeBSD port (sysutils/dumpstore)  | Medium   | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
 | UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
-| Log viewer                         | Medium   | [#59](https://github.com/langerma/dumpstore/issues/59) | Tail dumpstore logs, system journal, and ZFS events from the UI |
 | lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
 | Frontend event delegation          | Low      | [#120](https://github.com/langerma/dumpstore/issues/120) | Unify the two event-wiring styles; delegated listeners per tab; groundwork for #63 |
 | Scope boundary docs                | Low      | [#121](https://github.com/langerma/dumpstore/issues/121) | Define manage-vs-integrate rule in CLAUDE.md/README; re-triage backlog against it |
-| Alerts                             | Low      | [#27](https://github.com/langerma/dumpstore/issues/27) | Thresholds for pool health, disk temp, capacity; email/webhook delivery |
-| Historical I/O graphs              | Low      | [#61](https://github.com/langerma/dumpstore/issues/61) | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range |
 | UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc`   |
 | ZFS native encryption              | Low      | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
-| OpenTelemetry                      | Low      | [#49](https://github.com/langerma/dumpstore/issues/49) | Traces, metrics, logs. **Deferred until collector infra available** |
+| OpenTelemetry                      | Low      | [#49](https://github.com/langerma/dumpstore/issues/49) | Traces, metrics, logs; ships `contrib/observability/` with a standard Grafana dashboard + alert rules. **Deferred until collector infra available** |
 
 ---
 
@@ -94,6 +91,9 @@
 | Feature           | Reason                                                               |
 |-------------------|----------------------------------------------------------------------|
 | Snapshot rollback | Not aligned with project goals; too destructive for a lightweight UI |
+| Historical I/O graphs ([#61](https://github.com/langerma/dumpstore/issues/61)) | Delegated to Grafana/Prometheus via [#49](https://github.com/langerma/dumpstore/issues/49); a standard dashboard ships in `contrib/observability/` instead of in-UI charting |
+| Alerts ([#27](https://github.com/langerma/dumpstore/issues/27)) | Delegated to Grafana/Alertmanager via [#49](https://github.com/langerma/dumpstore/issues/49); standard alert rules ship in `contrib/observability/` instead of a built-in alert engine |
+| Log viewer ([#59](https://github.com/langerma/dumpstore/issues/59)) | Delegated to Grafana/Loki via [#49](https://github.com/langerma/dumpstore/issues/49); structured logs are already journald-friendly — no in-UI log tailing |
 | File browser      | Scope creep; out of charter for a storage management tool            |
 | btrfs support     | Linux-only (breaks FreeBSD support); pool/RAID model too different from ZFS to share a UI cleanly; better served by a separate sibling project |
 | LVM + filesystem  | Not a filesystem — requires managing three layers (PV/VG/LV + mkfs + fstab); no checksumming = silent data corruption; wrong tool for NAS data integrity |

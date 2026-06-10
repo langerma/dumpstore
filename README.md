@@ -456,6 +456,7 @@ dev                    ← built outside git (no tags)
 ```
 
 The version is exposed in:
+
 - `./dumpstore -version` — prints and exits
 - `GET /api/sysinfo` → `app_version` field
 - `GET /metrics` → `dumpstore_build_info{version="..."}` label
@@ -499,6 +500,7 @@ The service will be available at `http://localhost:8080`.
 The unit file is installed to `/etc/systemd/system/dumpstore.service`.
 
 To change the listen address:
+
 ```bash
 # Edit ExecStart in the unit file, then:
 sudo systemctl daemon-reload && sudo systemctl restart dumpstore
@@ -509,11 +511,13 @@ sudo systemctl daemon-reload && sudo systemctl restart dumpstore
 The rc script is installed to `/usr/local/etc/rc.d/dumpstore`. The installer runs `sysrc dumpstore_enable=YES` automatically.
 
 To customise address or install path, add to `/etc/rc.conf`:
+
 ```
 dumpstore_enable="YES"
 dumpstore_addr=":9090"
 dumpstore_dir="/usr/local/lib/dumpstore"
 ```
+
 Then `service dumpstore restart`.
 
 ## Run without installing
@@ -847,6 +851,7 @@ Returns the ACL type and entries for the dataset's mountpoint.
 `acl_type` is one of `"posix"`, `"nfsv4"`, or `"off"`. Entries are empty when `acl_type` is `"off"` or the dataset has no mountpoint.
 
 For NFSv4 datasets each entry has the form:
+
 ```json
 { "tag": "A", "flags": "fd", "qualifier": "OWNER@", "perms": "rwaDxtTnNcCoy" }
 ```
