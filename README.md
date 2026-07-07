@@ -571,7 +571,17 @@ make vm-freebsd-stop
 make vm-freebsd-destroy
 ```
 
-Both VMs run arm64 via QEMU. Each gets a dedicated 10 GiB extra disk for ZFS (`tank` pool created at first boot). Deployment packs the source tree on the host, copies it into the VM, and runs `make install` natively — no cross-compilation. Port forwards are fixed: Linux on `:8080`, FreeBSD on `:8081`, so both can be up simultaneously. Default credentials: **admin / admin**.
+Both VMs run via QEMU (the Linux VM follows the host architecture; FreeBSD is arm64). Each gets a dedicated 10 GiB extra disk for ZFS (`tank` pool created at first boot) plus three 1 GiB scratch disks used by the integration tests. Deployment packs the source tree on the host, copies it into the VM, and runs `make install` natively — no cross-compilation. Port forwards are fixed: Linux on `:8080`, FreeBSD on `:8081`, so both can be up simultaneously. Default credentials: **admin / admin**.
+
+### Integration tests (real ZFS, via the VM)
+
+With the Linux VM up and deployed, run the end-to-end suite from the host:
+
+```bash
+make test-integration
+```
+
+It drives the deployed API over HTTP — auth, dataset/snapshot lifecycle, `zfs diff`, user quotas, send/recv jobs, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on the scratch disks. CI runs the same suite nightly and on PRs labeled `run-integration` (`.github/workflows/integration-tests.yml`). See [tests/integration/README.md](tests/integration/README.md) for configuration and for running it against the FreeBSD VM.
 
 ## Uninstall
 

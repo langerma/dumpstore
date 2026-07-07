@@ -13,10 +13,18 @@ cpus: 2
 memory: 2GiB
 disk: 20GiB
 
-# Extra disk for a second ZFS pool (zroot already exists from base install)
+# Extra disks: one for a second ZFS pool (zroot already exists from base
+# install), three scratch disks for the integration test suite's pool
+# lifecycle tests. They appear as /dev/vtbd1 through /dev/vtbd4.
 additionalDisks:
   - name: dumpstore-freebsd-data
     format: false   # raw, unformatted — ZFS will own it
+  - name: dumpstore-freebsd-test1
+    format: false
+  - name: dumpstore-freebsd-test2
+    format: false
+  - name: dumpstore-freebsd-test3
+    format: false
 
 images:
   - location: "https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/aarch64/Latest/FreeBSD-15.0-RELEASE-arm64-aarch64-BASIC-CLOUDINIT-zfs.qcow2.xz"
@@ -51,7 +59,7 @@ provision:
 
       echo "==> Writing default dev config (admin/admin)..."
       install -d -m 0700 /usr/local/etc/dumpstore
-      python3.11 -c 'import json,os; cfg={"username":"admin","password_hash":"$2a$10$7Kfic7R28U4V1ePxnvrA.OkJwiahwkmbRrnEDEKW6RbvC/G86Q8nC","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
+      python3.11 -c 'import json,os; cfg={"username":"admin","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$ZHVtcHN0b3JlLWRldi12bQ$+quqbq+vJQm6WpP8GUB9+CeE6fPwSXXOl+XuSi1R4aM","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
 
       echo "==> Creating second ZFS pool on /dev/vtbd1..."
       # Wait for the extra disk to appear

@@ -7,20 +7,30 @@
 
 vmType: qemu
 os: Linux
-arch: aarch64
+# arch defaults to the host: aarch64 on Apple silicon, x86_64 on CI runners.
 
 cpus: 2
 memory: 2GiB
 disk: 20GiB
 
-# Extra disk for ZFS pool (separate from the OS disk)
+# Extra disks: one for the main ZFS pool, three scratch disks that the
+# integration test suite (tests/integration) uses for pool lifecycle tests
+# (create/replace/spare/export). They appear as /dev/vdc, /dev/vdd, /dev/vde.
 additionalDisks:
   - name: dumpstore-linux-data
     format: false   # raw, unformatted — ZFS will own it
+  - name: dumpstore-linux-test1
+    format: false
+  - name: dumpstore-linux-test2
+    format: false
+  - name: dumpstore-linux-test3
+    format: false
 
 images:
   - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
     arch: aarch64
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+    arch: x86_64
 
 # Forward dumpstore UI port to host
 portForwards:
@@ -51,7 +61,7 @@ provision:
 
       echo "==> Writing default dev config (admin/admin)..."
       install -d -m 0700 /etc/dumpstore
-      python3 -c 'import json,os; cfg={"username":"admin","password_hash":"$2a$10$7Kfic7R28U4V1ePxnvrA.OkJwiahwkmbRrnEDEKW6RbvC/G86Q8nC","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/etc/dumpstore/dumpstore.conf",0o600)'
+      python3 -c 'import json,os; cfg={"username":"admin","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$ZHVtcHN0b3JlLWRldi12bQ$+quqbq+vJQm6WpP8GUB9+CeE6fPwSXXOl+XuSi1R4aM","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/etc/dumpstore/dumpstore.conf",0o600)'
 
       echo "==> Creating ZFS pool on /dev/vdb..."
       for i in $(seq 1 10); do

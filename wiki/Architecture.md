@@ -195,3 +195,9 @@ All playbooks target `localhost` with `gather_facts: false`. Each playbook:
 - Input to Ansible extra-vars is validated for shell-special characters (`@;|&$\``) before the playbook call
 - `static/` is served by `http.FileServer` — do not put secrets there
 - The service runs as root (required for ZFS); do not expose it on a public interface without authentication in front of it
+
+## Testing
+
+- **Unit tests** — `go test ./...`; parser- and validator-level, no external dependencies.
+- **Integration tests** — `tests/integration` (build tag `integration`) drives a **deployed instance** in the Lima dev VM over HTTP and asserts on real ZFS state: auth, dataset/snapshot lifecycle, `zfs diff`, user quotas, send/recv jobs, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on three dedicated scratch disks. Run with `make vm-linux-start && make vm-linux-deploy && make test-integration`.
+- **CI** — `ci.yml` runs build/vet/unit tests on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.
