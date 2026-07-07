@@ -22,6 +22,14 @@ import (
 	"dumpstore/internal/ansible"
 )
 
+// allowedBinaries is the closed set of binaries the ops layer may execute.
+// Handlers build steps from hardcoded argv literals; this check makes
+// binary substitution structurally impossible even if a future call site
+// accidentally plumbs user input into Argv[0]. Argument values are
+// validated by the handlers (name/size/device regexes), and argv execution
+// without a shell rules out shell metacharacter injection.
+var allowedBinaries = map[string]bool{"zfs": true, "zpool": true}
+
 // Step is one command in an operation: Argv is executed without a shell
 // and reported in the op-log under Name.
 type Step struct {
@@ -80,6 +88,12 @@ func (r *Runner) Run(steps []Step, onStep func(ansible.TaskStep)) (*Result, erro
 }
 
 func (r *Runner) runStep(st Step) (ansible.TaskStep, error) {
+	if len(st.Argv) == 0 || !allowedBinaries[st.Argv[0]] {
+		ts := ansible.TaskStep{Name: st.Name, Status: "failed",
+			Msg: "refusing to execute: binary not in the ops allowlist"}
+		return ts, fmt.Errorf("%s: %s", st.Name, ts.Msg)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
 	defer cancel()
 
