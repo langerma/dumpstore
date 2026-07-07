@@ -294,9 +294,15 @@ async function openEditDatasetDialog(name, type) {
   document.getElementById('editDatasetTitle').textContent = `Edit: ${name}`;
 
   // Show/hide filesystem-only sections (zfs rewrite works through the
-  // mounted filesystem, so volumes can't be rewritten).
+  // mounted filesystem, so volumes can't be rewritten). The rewrite section
+  // is also gated on the detected ZFS capability — `zfs rewrite` needs
+  // OpenZFS >= 2.3 (#119); unsupported hosts get an explanatory note.
+  const rewriteSupported = state.schema?.capabilities?.rewrite !== false;
   document.getElementById('edit-ds-fs-section').style.display = type === 'filesystem' ? '' : 'none';
-  document.getElementById('edit-ds-rewrite-section').style.display = type === 'filesystem' ? '' : 'none';
+  document.getElementById('edit-ds-rewrite-section').style.display =
+    type === 'filesystem' && rewriteSupported ? '' : 'none';
+  document.getElementById('edit-ds-rewrite-unsupported').style.display =
+    type === 'filesystem' && !rewriteSupported ? '' : 'none';
 
   // Reset form before fetching.
   for (const f of [...editSelectFields(), ...editTextFields()]) {

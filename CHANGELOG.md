@@ -6,6 +6,8 @@ All notable changes to this project will be documented here.
 
 ### Added
 
+- **ZFS capability detection and UI gating** — dumpstore now probes what the installed OpenZFS release actually supports (`internal/zfs.Caps()`: `zfs rewrite` subcommand recognition, draid in the `zpool upgrade -v` feature list — probing rather than version comparison, since distros backport) and exposes the result as a `capabilities` object in `GET /api/schema`. The UI gates accordingly: the "Rewrite existing blocks" section in Edit Dataset is replaced by an explanatory note on hosts without `zfs rewrite` (needs OpenZFS ≥ 2.3), draid topology options in Create Pool are disabled with a tooltip when the draid feature is absent, and the Sysinfo tab gained a ZFS section showing the version plus capability badges. No behavior change on hosts that support everything. Closes #119.
+
 - **Scope boundary: manage vs integrate** — the project's scope rule is now written down (CLAUDE.md "Scope boundary" section, README philosophy paragraph, wiki Architecture page): dumpstore *manages* ZFS (pools, datasets, snapshots, replication, encryption) and sharing (SMB/NFS/iSCSI/wsdd) plus the local users they need; it only *integrates* with identity (lldap), observability (Prometheus/OTEL), power (NUT), and notifications — read, display, link out, minimal in-tree surface. The FEATURES.md Planned table carries a per-row Scope verdict, and the open integrate-domain issues (#62 lldap, #52 NUT, #49 OTEL) were annotated and scope-trimmed accordingly. Closes #121.
 
 - **Release build smoke test on every PR** — the release recipe now lives in a single `make release VERSION=…` target (all four linux/freebsd × amd64/arm64 cross-builds with release ldflags, packaged into `dist/`), used verbatim by `release.yml` on tags and by a new `release-smoke` job in `ci.yml` on every PR, which also asserts the native binary reports the injected version via `--version`. A broken release pipeline is now caught at PR time instead of at tag time (the v0.1.14 tag build broke on a Go-version drift nothing ever exercised). Closes #118.
@@ -14,6 +16,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **`make install` on Linux now restarts a running service** — the install target used `systemctl enable --now`, which is a no-op when the unit is already active, so redeploys (including `make vm-linux-deploy`) silently kept the old binary running. Now `systemctl enable` + `systemctl restart`, matching what the FreeBSD path already did.
 - **Dev VM admin login never worked after provisioning** — `dev/lima-{linux,freebsd}.yaml` wrote a bcrypt `password_hash` into `dumpstore.conf`, but the server rejects bcrypt hashes since the argon2id migration, so `admin`/`admin` on a freshly provisioned VM always failed. The provision scripts now write the correct argon2id PHC hash.
 
 ## [v0.1.14] — 2026-06-10

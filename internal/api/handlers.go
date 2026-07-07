@@ -520,5 +520,6 @@ func (h *Handler) getSchema(w http.ResponseWriter, r *http.Request) {
 		"os":                 runtime.GOOS,
 		"dataset_properties": schema.ForOS(runtime.GOOS),
 		"user_shells":        system.ListShells(),
+		"capabilities":       zfs.Caps(),
 	})
 }
