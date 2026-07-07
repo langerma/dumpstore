@@ -74,14 +74,23 @@ func TestMain(m *testing.M) {
 	}
 	client.Jar = jar
 
-	// Fail fast with instructions if no server is listening.
-	resp, err := client.Get(baseURL + "/login")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot reach dumpstore at %s: %v\n", baseURL, err)
-		fmt.Fprintln(os.Stderr, "start the dev VM first:  make vm-linux-start && make vm-linux-deploy")
-		os.Exit(1)
+	// Wait for the server to listen: deploys restart the service right
+	// before the suite runs, and systemd reports the unit active before
+	// the listener is bound, so the first probe can race the startup.
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		resp, err := client.Get(baseURL + "/login")
+		if err == nil {
+			resp.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(os.Stderr, "cannot reach dumpstore at %s: %v\n", baseURL, err)
+			fmt.Fprintln(os.Stderr, "start the dev VM first:  make vm-linux-start && make vm-linux-deploy")
+			os.Exit(1)
+		}
+		time.Sleep(time.Second)
 	}
-	resp.Body.Close()
 
 	os.Exit(m.Run())
 }
