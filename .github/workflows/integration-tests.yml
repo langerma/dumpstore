@@ -51,7 +51,9 @@ jobs:
         env:
           LIMA_VERSION: "1.0.7"
         run: |
-          sudo apt-get update -qq
+          # Tolerate index failures from unrelated third-party repos on the
+          # runner image; qemu comes from the default Ubuntu archive.
+          sudo apt-get update -qq || true
           sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils
           curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
             | sudo tar Cxz /usr/local
