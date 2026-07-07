@@ -200,4 +200,4 @@ All playbooks target `localhost` with `gather_facts: false`. Each playbook:
 
 - **Unit tests** — `go test ./...`; parser- and validator-level, no external dependencies.
 - **Integration tests** — `tests/integration` (build tag `integration`) drives a **deployed instance** in the Lima dev VM over HTTP and asserts on real ZFS state: auth, dataset/snapshot lifecycle, `zfs diff`, user quotas, send/recv jobs, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on three dedicated scratch disks. Run with `make vm-linux-start && make vm-linux-deploy && make test-integration`.
-- **CI** — `ci.yml` runs build/vet/unit tests on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.
+- **CI** — `ci.yml` runs build/vet/unit tests plus a `release-smoke` job (the full `make release` cross-build matrix with a `--version` check) on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.

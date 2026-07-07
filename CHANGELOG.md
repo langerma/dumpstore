@@ -6,6 +6,8 @@ All notable changes to this project will be documented here.
 
 ### Added
 
+- **Release build smoke test on every PR** — the release recipe now lives in a single `make release VERSION=…` target (all four linux/freebsd × amd64/arm64 cross-builds with release ldflags, packaged into `dist/`), used verbatim by `release.yml` on tags and by a new `release-smoke` job in `ci.yml` on every PR, which also asserts the native binary reports the injected version via `--version`. A broken release pipeline is now caught at PR time instead of at tag time (the v0.1.14 tag build broke on a Go-version drift nothing ever exercised). Closes #118.
+
 - **VM-based integration test suite** — `tests/integration` (build tag `integration`, stdlib only) drives a deployed dumpstore instance over HTTP and asserts on real ZFS state: session auth, dataset lifecycle (create / property PATCH / rename / destroy), snapshots with `zfs diff` and clone, per-user quotas, a `zfs send | recv` pipeline followed through the jobs API, and a full pool lifecycle — mirror create, duplicate-name refusal, device offline/online, `zpool replace` with resilver, hot-spare add/remove, export, importable discovery, import — on three dedicated 1 GiB scratch disks the Lima VMs now provision (never on the `tank` data pool). Run locally with `make test-integration`; CI (`.github/workflows/integration-tests.yml`) boots the same Lima VM on a KVM-enabled runner nightly, on manual dispatch, and on PRs labeled `run-integration`. Closes #117.
 
 ### Fixed
