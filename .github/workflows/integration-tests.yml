@@ -54,7 +54,8 @@ jobs:
           # Tolerate index failures from unrelated third-party repos on the
           # runner image; qemu comes from the default Ubuntu archive.
           sudo apt-get update -qq || true
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils
+          # ovmf: UEFI firmware Lima needs to boot x86_64 guests
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf
           curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
             | sudo tar Cxz /usr/local
           limactl --version
@@ -71,5 +72,7 @@ jobs:
       - name: Collect VM logs on failure
         if: failure()
         run: |
+          tail -n 100 ~/.lima/dumpstore-linux/ha.stderr.log 2>/dev/null || true
+          tail -n 50 ~/.lima/dumpstore-linux/serial*.log 2>/dev/null || true
           limactl shell --tty=false dumpstore-linux -- sudo journalctl -u dumpstore --no-pager -n 200 || true
           limactl shell --tty=false dumpstore-linux -- sudo zpool status || true
