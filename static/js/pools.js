@@ -41,7 +41,24 @@ export function renderSysInfo() {
         <div class="si-item"><div class="si-label">Goroutines</div><div class="si-value">${s.goroutines}</div></div>
         <div class="si-item"><div class="si-label">GC cycles</div><div class="si-value">${s.num_gc}</div></div>
       </div>
+      ${zfsInfoHtml()}
     </div>`;
+}
+
+// zfsInfoHtml renders the ZFS version and detected capabilities (#119)
+// inside the sysinfo card. Empty until /api/version and /api/schema load.
+function zfsInfoHtml() {
+  const caps = state.schema?.capabilities;
+  if (!state.version && !caps) return '';
+  const capBadge = ok => `<span class="type-badge ${ok ? 'net-up' : 'net-down'}">${ok ? 'supported' : 'unsupported'}</span>`;
+  const capItems = caps ? `
+        <div class="si-item"><div class="si-label">zfs rewrite (≥ 2.3)</div><div class="si-value">${capBadge(caps.rewrite)}</div></div>
+        <div class="si-item"><div class="si-label">draid (≥ 2.1)</div><div class="si-value">${capBadge(caps.draid)}</div></div>` : '';
+  return `
+      <div class="sysinfo-section-label" style="margin-top:0.75rem">ZFS</div>
+      <div class="sysinfo-grid">
+        <div class="si-item"><div class="si-label">Version</div><div class="si-value">${esc(state.version || '—')}</div></div>${capItems}
+      </div>`;
 }
 
 // ── Render: Software ──────────────────────────────────────────────────────────

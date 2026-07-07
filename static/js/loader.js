@@ -24,6 +24,16 @@ export function buildFormSelects() {
     }
   }
 
+  // Gate draid topology options on the detected ZFS capability (#119):
+  // draid needs OpenZFS >= 2.1, older hosts get disabled options.
+  const caps = state.schema?.capabilities;
+  if (caps) {
+    document.querySelectorAll('#createPoolType option[value^="draid"]').forEach(o => {
+      o.disabled = !caps.draid;
+      o.title = caps.draid ? '' : 'requires OpenZFS ≥ 2.1 (not supported by the installed version)';
+    });
+  }
+
   const shells = state.schema?.user_shells || [];
   if (shells.length) {
     const opts = shells.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');

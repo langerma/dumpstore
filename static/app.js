@@ -11,7 +11,7 @@ import { renderAutoSnapStatus } from './js/autosnap.js';
 import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
-subscribe(['sysinfo'],                                          renderSysInfo);
+subscribe(['sysinfo', 'version', 'schema'],                     renderSysInfo);
 subscribe(['sysinfo'],                                          renderSoftware);
 subscribe(['network'],                                          renderNetwork);
 subscribe(['pools', 'poolStatuses', 'scrubSchedules',

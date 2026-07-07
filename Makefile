@@ -112,7 +112,8 @@ install: check-prereqs build
 	    Linux) \
 	        install -m 0644 contrib/dumpstore.service /etc/systemd/system/dumpstore.service; \
 	        systemctl daemon-reload; \
-	        systemctl enable --now dumpstore; \
+	        systemctl enable dumpstore; \
+	        systemctl restart dumpstore; \
 	        echo "==> Done. dumpstore is running on http://localhost:8080"; \
 	        echo "    Logs: journalctl -u dumpstore -f"; \
 	        ;; \
