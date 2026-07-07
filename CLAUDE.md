@@ -223,7 +223,6 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `playbooks/group_create.yml` | Creates local Unix group; vars: `groupname`, optional `gid` |
 | `playbooks/group_modify.yml` | Modifies local Unix group; vars: `groupname`, `gid`, optional `new_groupname`, `new_gid` |
 | `playbooks/group_delete.yml` | Deletes local Unix group; vars: `groupname`, `gid` |
-| `playbooks/smb_setup.yml` | One-time Samba setup (usershares dir, smb.conf patch); no vars |
 | `playbooks/smb_usershare_set.yml` | Creates/updates a Samba usershare via `net usershare`; vars: `sharename`, `mountpoint` |
 | `playbooks/smb_usershare_unset.yml` | Removes a Samba usershare; vars: `sharename` |
 | `playbooks/smb_user_add.yml` | Registers user in Samba tdbsam; vars: `username`, `smb_password` |
