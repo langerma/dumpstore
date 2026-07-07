@@ -19,6 +19,8 @@ Where dumpstore does manage a service — Samba, NFS, iSCSI — it takes full, e
 
 dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, fine-grained permissions, and ZFS send/receive. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
 
+That philosophy has a hard edge: dumpstore **manages** ZFS and sharing (SMB/NFS/iSCSI/wsdd, plus the local users and permissions they need) and only **integrates** with everything else. Identity servers, monitoring stacks, UPS daemons, notification systems — where a mature tool already owns a domain, dumpstore reads, displays, and links out instead of rebuilding it. A feature either makes dumpstore better at running ZFS and shares, or it belongs in another tool.
+
 If you run a Helios64, an old server, or any ZFS box where you care about what is actually installed on it, this might be the tool for you.
 
 ## Features

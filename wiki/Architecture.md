@@ -104,6 +104,8 @@ When dumpstore manages a service it takes **full ownership** of that service's c
 
 The rule is binary: **own it completely, or don't touch it at all.**
 
+This is one half of the project's **scope boundary** (#121). The other half: domains dumpstore does *not* manage, it only **integrates** with — identity (lldap: auth bind + read-only display), observability (Prometheus/OTEL: export only, no embedded dashboards or alerting), power (NUT: status + thin shutdown hook), notifications (syslog/webhook out). The test for every feature: does it make dumpstore better at running ZFS + shares, or does it rebuild a tool that already exists?
+
 | Service | Owned? | Config file | Restart mechanism |
 |---------|--------|-------------|-------------------|
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |

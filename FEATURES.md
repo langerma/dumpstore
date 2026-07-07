@@ -40,6 +40,7 @@
 | FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
 | VM integration test suite  | v0.1.15 | End-to-end tests (`tests/integration`, `make test-integration`) drive the deployed API in the Lima VM against real ZFS: auth, dataset/snapshot lifecycle, diff, quotas, send/recv jobs, full pool lifecycle on dedicated scratch disks. CI runs it nightly and on PRs labeled `run-integration`. Closes #117 |
 | Release build smoke test   | v0.1.15 | Release recipe unified into `make release`; `release-smoke` CI job cross-builds all four targets on every PR and asserts `--version` reports the injected ldflag. Closes #118 |
+| Scope boundary (manage vs integrate) | v0.1.15 | Documented in CLAUDE.md + README: dumpstore *manages* ZFS + sharing, *integrates* with identity/observability/power/notifications. Planned table carries a per-row Scope verdict; #62/#52/#49 trimmed accordingly. Closes #121 |
 | SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
 | Dev VM environment         | v0.1.11 | `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy`; Ubuntu 24.04 + FreeBSD 15 with ZFS + Ansible; default admin/admin; closes #83 |
 | Dataset rename             | v0.1.11 | Rename a dataset or volume in place; same-parent constraint; closes #21 |
@@ -69,20 +70,21 @@
 
 ## Planned
 
-| Feature                            | Priority | Issue | Notes                                                                                                                    |
-|------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| Go ops layer (shrink Ansible)      | Medium   | [#115](https://github.com/langerma/dumpstore/issues/115) | Single-command mutations move from playbooks to an in-process executor; Ansible keeps config files + OS resources |
-| Privilege separation               | Medium   | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
-| ZFS capability gating              | Medium   | [#119](https://github.com/langerma/dumpstore/issues/119) | Probe OpenZFS features at startup; hide/disable rewrite (needs 2.3+), draid, etc. instead of failing at runtime |
-| wsdd configuration management      | Medium   | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares |
-| FreeBSD port (sysutils/dumpstore)  | Medium   | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
-| UI overhaul (datasets + snapshots) | Medium   | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
-| lldap integration                  | Medium   | [#62](https://github.com/langerma/dumpstore/issues/62) | LDAP auth via lldap; Samba passthrough; user/group sync display |
-| Frontend event delegation          | Low      | [#120](https://github.com/langerma/dumpstore/issues/120) | Unify the two event-wiring styles; delegated listeners per tab; groundwork for #63 |
-| Scope boundary docs                | Low      | [#121](https://github.com/langerma/dumpstore/issues/121) | Define manage-vs-integrate rule in CLAUDE.md/README; re-triage backlog against it |
-| UPS / NUT integration              | Low      | [#52](https://github.com/langerma/dumpstore/issues/52) | UPS status display; graceful shutdown on low battery via `upsc`   |
-| ZFS native encryption              | Low      | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
-| OpenTelemetry                      | Low      | [#49](https://github.com/langerma/dumpstore/issues/49) | Traces, metrics, logs; ships `contrib/observability/` with a standard Grafana dashboard + alert rules. **Deferred until collector infra available** |
+Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CLAUDE.md#scope-boundary--manage-vs-integrate) (#121): *manage* = full config + lifecycle ownership, *integrate* = read/display/link out with minimal in-tree surface, *internal* = infrastructure/refactoring with no external domain.
+
+| Feature                            | Priority | Scope | Issue | Notes                                                                                                                    |
+|------------------------------------|----------|-------|-------|--------------------------------------------------------------------------------------------------------------------------|
+| Go ops layer (shrink Ansible)      | Medium   | internal | [#115](https://github.com/langerma/dumpstore/issues/115) | Single-command mutations move from playbooks to an in-process executor; Ansible keeps config files + OS resources |
+| Privilege separation               | Medium   | internal | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
+| ZFS capability gating              | Medium   | manage | [#119](https://github.com/langerma/dumpstore/issues/119) | Probe OpenZFS features at startup; hide/disable rewrite (needs 2.3+), draid, etc. instead of failing at runtime |
+| wsdd configuration management      | Medium   | manage | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares — discovery helper for managed SMB |
+| FreeBSD port (sysutils/dumpstore)  | Medium   | internal | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
+| UI overhaul (datasets + snapshots) | Medium   | internal | [#63](https://github.com/langerma/dumpstore/issues/63) | Purpose-driven redesign: dataset detail panel, pool/dataset hierarchy, snapshots grouped by dataset with filter/search |
+| lldap integration                  | Medium   | integrate | [#62](https://github.com/langerma/dumpstore/issues/62) | Auth bind + read-only directory display; user/group management stays in lldap's UI (scope trimmed per #121) |
+| Frontend event delegation          | Low      | internal | [#120](https://github.com/langerma/dumpstore/issues/120) | Unify the two event-wiring styles; delegated listeners per tab; groundwork for #63 |
+| UPS / NUT integration              | Low      | integrate | [#52](https://github.com/langerma/dumpstore/issues/52) | Status display via `upsc` + thin low-battery shutdown hook; no NUT configuration management (scope trimmed per #121) |
+| ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
+| OpenTelemetry                      | Low      | integrate | [#49](https://github.com/langerma/dumpstore/issues/49) | Export traces/metrics/logs only; dashboards/alert rules live in `contrib/observability/` examples, never in-tree. **Deferred until collector infra available** |
 
 ---
 

@@ -9,6 +9,27 @@
 
 ---
 
+## Scope boundary — manage vs integrate
+
+dumpstore is a thin, auditable layer over the OS, not a NAS distribution. Every feature request gets sorted into one of two buckets **before** design starts:
+
+**Manage** (full ownership, config + lifecycle, in scope):
+
+- ZFS: pools, datasets, snapshots, replication, encryption
+- Sharing: SMB, NFS, iSCSI, and their discovery helpers (wsdd)
+- The local users/groups/permissions those shares need
+
+**Integrate** (read, display, link out — minimal in-tree surface):
+
+- Identity (lldap): auth bind + read-only directory display; user/group management stays in lldap's own UI
+- Observability (Prometheus/Grafana/OTEL): export metrics/traces/logs; never embed dashboards, log viewers, or alerting pipelines
+- Power (NUT): status display + a thin shutdown hook; no UPS configuration management
+- Notifications: emit to syslog/webhook; no in-tree notification subsystem
+
+The test: *does the feature make dumpstore better at running ZFS + shares, or does it rebuild a tool that already exists?* If a mature tool owns the domain, dumpstore integrates with it and links out. Feature requests that only make sense in the "manage" bucket for an "integrate" domain are declined with a pointer to this section (see issue #121).
+
+---
+
 ## Workflow & Process
 
 ### Plan before acting
