@@ -30,3 +30,13 @@ Never leave these out of sync. If a feature moves from planned → done, strike 
 2. The callback function is defined somewhere in `app.js`.
 
 A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/app.js` before finishing is enough to catch this class of bug.
+
+## 4. A commit message claiming to implement an issue proves nothing — read the diff
+
+**Mistake:** A local commit titled "feat(ci): implement VM-based integration test suite (#117)" turned out to contain only scaffolding: every test was `t.Skip("not yet implemented")`, the workflow targeted a runner without nested virtualization, and the commit had never been pushed to origin. Trusting the message would have meant closing #117 with zero actual coverage.
+
+**Rule:** Before closing an issue (or reporting it done) based on a commit:
+
+1. Read the actual diff (`git show <sha>`) — do the changes exercise what the issue asks for, or just create files shaped like it?
+2. Confirm the commit is on `origin/main` (`git branch -r --contains <sha>`), not just local.
+3. For CI workflows: confirm the workflow is registered on GitHub and has at least one green run.
