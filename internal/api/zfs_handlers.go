@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"dumpstore/internal/ops"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/smart"
 	"dumpstore/internal/zfs"
@@ -287,19 +288,15 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recursive := "false"
+	argv := []string{"zfs", "snapshot"}
 	if req.Recursive {
-		recursive = "true"
+		argv = append(argv, "-r")
 	}
-
-	out, err := h.runOp("zfs_snapshot_create.yml", map[string]string{
-		"dataset":   req.Dataset,
-		"snapname":  req.SnapName,
-		"recursive": recursive,
-	})
+	argv = append(argv, req.Dataset+"@"+req.SnapName)
+	out, err := h.runLocal(ops.Step{Name: "Create snapshot " + req.Dataset + "@" + req.SnapName, Argv: argv})
 	auditLog(r.Context(), r, "snapshot.create", req.Dataset+"@"+req.SnapName, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 
@@ -449,13 +446,13 @@ func (h *Handler) cloneSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("zfs_snapshot_clone.yml", map[string]string{
-		"snapshot": req.Snapshot,
-		"target":   req.Target,
+	out, err := h.runLocal(ops.Step{
+		Name: "Clone " + req.Snapshot + " to " + req.Target,
+		Argv: []string{"zfs", "clone", req.Snapshot, req.Target},
 	})
 	auditLog(r.Context(), r, "snapshot.clone", req.Snapshot+" -> "+req.Target, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 
@@ -467,7 +464,8 @@ func (h *Handler) cloneSnapshot(w http.ResponseWriter, r *http.Request) {
 
 // sendSnapshot handles POST /api/snapshots/send
 // Body: {"snapshot":"tank/data@snap1", "target":"backup/data",
-//        "incremental_from":"tank/data@prev", "raw":false, "remote":"user@host"}
+//
+//	"incremental_from":"tank/data@prev", "raw":false, "remote":"user@host"}
 //
 // Dispatches the transfer as a background job and returns 202 with the job
 // metadata. Progress and result are tracked in the jobs panel; clients should
@@ -643,15 +641,13 @@ func (h *Handler) setUserQuota(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
-	out, err := h.runOp("zfs_quota_set.yml", map[string]string{
-		"dataset":   name,
-		"kind":      req.Kind,
-		"principal": req.Principal,
-		"quota":     req.Quota,
+	out, err := h.runLocal(ops.Step{
+		Name: "Set " + req.Kind + "quota@" + req.Principal + " on " + name,
+		Argv: []string{"zfs", "set", req.Kind + "quota@" + req.Principal + "=" + req.Quota, name},
 	})
 	auditLog(r.Context(), r, "dataset.quota_set", name+" "+req.Kind+"quota@"+req.Principal+"="+req.Quota, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "tasks": out.Steps()})
@@ -807,18 +803,15 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recursive := "false"
+	argv := []string{"zfs", "destroy"}
 	if r.URL.Query().Get("recursive") == "true" {
-		recursive = "true"
+		argv = append(argv, "-r")
 	}
-
-	out, err := h.runOp("zfs_snapshot_destroy.yml", map[string]string{
-		"snapshot":  snapshot,
-		"recursive": recursive,
-	})
+	argv = append(argv, snapshot)
+	out, err := h.runLocal(ops.Step{Name: "Destroy snapshot " + snapshot, Argv: argv})
 	auditLog(r.Context(), r, "snapshot.destroy", snapshot, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 
@@ -852,12 +845,6 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	snapsJSON, err := json.Marshal(body.Snapshots)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("encoding snapshots: %w", err), nil)
-		return
-	}
-
 	// Pre-release any dumpstore-repl holds we placed during replication runs.
 	// Without this, `zfs destroy` fails with "dataset is busy" on snapshots
 	// the user is trying to delete from the UI.
@@ -865,12 +852,20 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 		h.repl.ReleaseHoldsFor(body.Snapshots)
 	}
 
-	out, err := h.runOp("zfs_snapshot_destroy_batch.yml", map[string]string{
-		"snapshots_json": string(snapsJSON),
-	})
+	// One step per snapshot; keep destroying past individual failures and
+	// report the aggregate, matching the old batch playbook semantics.
+	steps := make([]ops.Step, 0, len(body.Snapshots))
+	for _, snap := range body.Snapshots {
+		steps = append(steps, ops.Step{
+			Name:            "Destroy snapshot " + snap,
+			Argv:            []string{"zfs", "destroy", snap},
+			ContinueOnError: true,
+		})
+	}
+	out, err := h.runLocal(steps...)
 	auditLog(r.Context(), r, "snapshot.batch_destroy", strings.Join(body.Snapshots, ","), err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishSnapshots()
@@ -1017,10 +1012,10 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_scrub_start.yml", map[string]string{"pool": pool})
+	out, err := h.runLocal(ops.Step{Name: "Start scrub on " + pool, Argv: []string{"zpool", "scrub", pool}})
 	auditLog(r.Context(), r, "scrub.start", pool, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -1039,10 +1034,10 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
+	out, err := h.runLocal(ops.Step{Name: "Cancel scrub on " + pool, Argv: []string{"zpool", "scrub", "-s", pool}})
 	auditLog(r.Context(), r, "scrub.cancel", pool, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()

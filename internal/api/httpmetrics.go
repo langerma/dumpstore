@@ -22,7 +22,7 @@ type httpSample struct {
 
 type httpMetrics struct {
 	mu       sync.Mutex
-	requests map[string]int64     // "METHOD|path|status" → count
+	requests map[string]int64       // "METHOD|path|status" → count
 	latency  map[string]*httpSample // "METHOD|path" → sample
 }
 

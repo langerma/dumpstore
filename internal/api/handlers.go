@@ -14,10 +14,11 @@ import (
 	"time"
 
 	"dumpstore/internal/ansible"
-	"dumpstore/internal/autosnap"
 	"dumpstore/internal/auth"
+	"dumpstore/internal/autosnap"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
+	"dumpstore/internal/ops"
 	"dumpstore/internal/replication"
 	"dumpstore/internal/schema"
 	"dumpstore/internal/system"
@@ -189,13 +190,14 @@ type apiError struct {
 // Handler holds dependencies for the HTTP API.
 type Handler struct {
 	runner     *ansible.Runner
+	ops        *ops.Runner
 	version    string
 	broker     *broker.Broker
 	jobs       *jobs.Manager
 	repl       *replication.Runner
 	autosnap   *autosnap.Runner
-	userMu     sync.Mutex // serialises user/group write ops to avoid /etc/group lock contention
-	smbMu      sync.Mutex // serialises smb.conf read-modify-write cycles
+	userMu     sync.Mutex   // serialises user/group write ops to avoid /etc/group lock contention
+	smbMu      sync.Mutex   // serialises smb.conf read-modify-write cycles
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
@@ -206,6 +208,7 @@ type Handler struct {
 func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, repl *replication.Runner, autosnap *autosnap.Runner, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
 	return &Handler{
 		runner:     runner,
+		ops:        ops.NewRunner(),
 		version:    version,
 		broker:     b,
 		jobs:       jm,
@@ -247,6 +250,15 @@ func auditLog(ctx context.Context, r *http.Request, action, target string, err e
 // SSE topic as it completes, so the frontend can show live progress.
 func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {
 	return h.runner.RunStreaming(playbook, vars, func(step ansible.TaskStep) {
+		h.broker.PublishNoCache("ansible.progress", step)
+	})
+}
+
+// runLocal executes argv steps through the in-process ops layer (#115),
+// publishing each step to the same ansible.progress SSE topic so the
+// frontend's live op-log works identically to playbook-backed writes.
+func (h *Handler) runLocal(steps ...ops.Step) (*ops.Result, error) {
+	return h.ops.Run(steps, func(step ansible.TaskStep) {
 		h.broker.PublishNoCache("ansible.progress", step)
 	})
 }
@@ -502,6 +514,15 @@ func writeRunOpError(ctx context.Context, w http.ResponseWriter, err error, out 
 	var steps []ansible.TaskStep
 	if out != nil {
 		steps = out.Steps()
+	}
+	writeError(ctx, w, http.StatusInternalServerError, err, steps)
+}
+
+// writeOpsError is writeRunOpError for the in-process ops layer.
+func writeOpsError(ctx context.Context, w http.ResponseWriter, err error, res *ops.Result) {
+	var steps []ansible.TaskStep
+	if res != nil {
+		steps = res.Steps()
 	}
 	writeError(ctx, w, http.StatusInternalServerError, err, steps)
 }

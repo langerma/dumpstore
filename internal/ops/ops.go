@@ -1,0 +1,109 @@
+// Package ops executes single-command write operations in-process.
+//
+// It replaces Ansible for mutations that are just "assert inputs, run one
+// argv command" (zpool scrub/replace/add/…, zfs snapshot/destroy/set) —
+// see issue #115. Input validation lives in the API handlers; commands run
+// argv-style with no shell. Step results use the exact ansible.TaskStep
+// shape so the frontend op-log dialog and the ansible.progress SSE topic
+// work unchanged.
+//
+// Ansible remains the write path for config-file ownership (smb.conf),
+// service state, and OS resources (users/groups); long-running data-plane
+// transfers stay on internal/jobs.
+package ops
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"strings"
+	"time"
+
+	"dumpstore/internal/ansible"
+)
+
+// Step is one command in an operation: Argv is executed without a shell
+// and reported in the op-log under Name.
+type Step struct {
+	Name string
+	Argv []string
+	// ContinueOnError lets the run proceed past a failure of this step
+	// (used by batch operations); Run still returns an aggregate error.
+	ContinueOnError bool
+}
+
+// Result holds the executed steps in the same shape as a playbook run.
+type Result struct {
+	steps []ansible.TaskStep
+}
+
+// Steps returns the ordered step results.
+func (r *Result) Steps() []ansible.TaskStep { return r.steps }
+
+// Runner executes Steps sequentially with a per-step timeout.
+type Runner struct {
+	Timeout time.Duration
+	metrics *opsMetrics
+}
+
+// NewRunner returns a Runner with the default 5-minute per-step timeout.
+func NewRunner() *Runner {
+	return &Runner{Timeout: 5 * time.Minute, metrics: newOpsMetrics()}
+}
+
+// Run executes the steps in order. Each completed step is passed to onStep
+// (if non-nil) as it finishes. Execution stops at the first failing step
+// unless that step has ContinueOnError set; the returned Result always
+// contains every step that ran, so callers can hand it to the op-log even
+// on error.
+func (r *Runner) Run(steps []Step, onStep func(ansible.TaskStep)) (*Result, error) {
+	res := &Result{}
+	var failed []string
+	for _, st := range steps {
+		ts, err := r.runStep(st)
+		res.steps = append(res.steps, ts)
+		if onStep != nil {
+			onStep(ts)
+		}
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s (%s)", st.Name, ts.Msg))
+			if !st.ContinueOnError {
+				break
+			}
+		}
+	}
+	if len(failed) > 0 {
+		return res, fmt.Errorf("%d of %d step(s) failed: %s",
+			len(failed), len(res.steps), strings.Join(failed, "; "))
+	}
+	return res, nil
+}
+
+func (r *Runner) runStep(st Step) (ansible.TaskStep, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+	defer cancel()
+
+	start := time.Now()
+	out, err := exec.CommandContext(ctx, st.Argv[0], st.Argv[1:]...).CombinedOutput()
+	r.metrics.record(opLabel(st.Argv), time.Since(start), err != nil)
+
+	msg := strings.TrimSpace(string(out))
+	ts := ansible.TaskStep{Name: st.Name, Status: "changed", Msg: msg}
+	if err != nil {
+		ts.Status = "failed"
+		if ts.Msg == "" {
+			ts.Msg = err.Error()
+		}
+		return ts, fmt.Errorf("%s: %s", strings.Join(st.Argv, " "), ts.Msg)
+	}
+	return ts, nil
+}
+
+// opLabel derives the metric label from an argv: the command plus its
+// subcommand ("zpool scrub", "zfs destroy"), keeping label cardinality low.
+func opLabel(argv []string) string {
+	if len(argv) >= 2 {
+		return argv[0] + " " + argv[1]
+	}
+	return strings.Join(argv, " ")
+}

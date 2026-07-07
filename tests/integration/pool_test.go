@@ -137,4 +137,12 @@ func TestPoolLifecycle(t *testing.T) {
 	if p, ok := poolByName(t, itestPool); !ok || p.Health != "ONLINE" {
 		t.Fatalf("pool after import: present=%v health=%q, want ONLINE", ok, p.Health)
 	}
+
+	// Scrub: on a tiny pool it may finish almost instantly, so assert the
+	// scan status mentions a scrub at all (running or completed).
+	apiOK(t, "POST", "/api/scrub/"+itestPool, nil)
+	waitFor(t, "scrub to appear in scan status", 30*time.Second, func() bool {
+		d, ok := poolStatus(t, itestPool)
+		return ok && strings.Contains(d.Scan, "scrub")
+	})
 }

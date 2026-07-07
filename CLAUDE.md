@@ -120,21 +120,25 @@ Do not add partial-ownership patterns (block-patching, lineinfile into a shared 
 **Read ops → `internal/zfs` package (direct exec)**
 `zpool`/`zfs` CLI commands are called directly via `exec.Command` for low latency. No Ansible for reads.
 
+**Single-command writes → `internal/ops` (direct exec)**
+Mutations that are just "assert inputs, run one argv command" — `zpool scrub/replace/offline/online/add/remove/create/import/export`, `zfs snapshot/destroy/clone`, `zfs set userquota@` — run in-process via `internal/ops`. Argv-based, no shell, no Python startup. Input validation lives in the Go handlers (single source; the old playbook asserts were duplicates). Step results use the `ansible.TaskStep` shape and publish to the same `ansible.progress` SSE topic, so the frontend op-log is identical for both write paths.
+
 **Configuration writes → Ansible playbooks**
-Idempotent mutations of config files, service state, and OS-managed resources (smb.conf, /etc/exports, useradd, ZFS properties) go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=ndjson` (custom callback plugin at `playbooks/callback_plugins/ndjson.py`). The runner in `internal/ansible/runner.go` parses the ndjson output to extract task results.
+Idempotent mutations of config files, service state, and OS-managed resources (smb.conf, useradd, dataset property playbooks, ACLs) go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=ndjson` (custom callback plugin at `playbooks/callback_plugins/ndjson.py`). The runner in `internal/ansible/runner.go` parses the ndjson output to extract task results.
 
 **Data-plane writes → `internal/jobs` manager (direct exec)**
 Long-running streaming operations like `zfs send | zfs recv` use `exec.Command` via `internal/jobs.Manager`, not Ansible. They can run for hours, far past any reasonable HTTP timeout, and need fire-and-forget dispatch with separate cancellation and durable status tracking. Ansible's request/response model and idempotency aren't a fit. The manager has two entry points: `Run(type, argv)` for single-process jobs, and `RunPipeline(type, left, right)` for two-process pipelines wired with an `os.Pipe` (no shell — keeps the runtime free of any `bash`/`dash`/`pipefail` portability concerns). Children are spawned in their own process group; cancel signals the whole group. The manager captures bounded stdout/stderr tails, persists job records under `internal/platform.StateDir(goos) + "/jobs"`, marks any job that was running at shutdown as `interrupted`, and publishes `jobs.update` SSE events on every state change.
 
-Do not change this split without a good reason — the Ansible side avoids Python startup overhead on every API call; the jobs side keeps long transfers from blocking HTTP.
+Do not change this split without a good reason — the ops side keeps single-shot commands free of Python startup overhead and validator duplication; the Ansible side stays only where config-file rendering/service orchestration genuinely helps; the jobs side keeps long transfers from blocking HTTP. Ansible remains a hard runtime dependency only for the config/OS-resource features (SMB, users/groups, TLS, ACLs, dataset property playbooks, scrub schedules, service control).
 
 ### Adding a new operation
 
 1. **Read**: add a function to `internal/zfs/zfs.go` and a handler in `internal/api/handlers.go`.
-2. **Configuration write**: add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(...)`.
-3. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
-4. Register the route in `handlers.go:RegisterRoutes`.
-5. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
+2. **Single-command write**: validate inputs in the handler, build the argv, run it via `h.runLocal(ops.Step{Name: ..., Argv: ...})`; on error use `writeOpsError`.
+3. **Configuration write** (owned config file / OS resource): add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(...)`.
+4. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
+5. Register the route in `handlers.go:RegisterRoutes`.
+6. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
 
 ---
 
@@ -183,6 +187,7 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
 | `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
+| `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
 | `internal/logging/handler.go` | `NewJournalHandler` — slog handler with systemd journal priority prefixes |
 | `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation |
@@ -207,19 +212,6 @@ Do not change this split without a good reason — the Ansible side avoids Pytho
 | `playbooks/zfs_dataset_create.yml` | Creates filesystem or volume; vars: `name`, `type`, `volsize`, `compression`, `quota`, `mountpoint` |
 | `playbooks/zfs_dataset_destroy.yml` | Destroys dataset/volume; vars: `name`, optional `recursive` |
 | `playbooks/zfs_dataset_set.yml` | Updates dataset properties; vars: `name`, optional `compression`, `quota`, `mountpoint`, `sharenfs`, `sharesmb` |
-| `playbooks/zfs_snapshot_create.yml` | Creates snapshot; vars: `dataset`, `snapname`, `recursive` |
-| `playbooks/zfs_snapshot_destroy.yml` | Destroys snapshot; vars: `snapshot`, `recursive` |
-| `playbooks/zfs_scrub_start.yml` | Starts pool scrub; vars: `pool` |
-| `playbooks/zfs_scrub_cancel.yml` | Cancels running pool scrub; vars: `pool` |
-| `playbooks/zfs_disk_replace.yml` | Replaces a pool device (`zpool replace`); vars: `pool`, `old_device`, `new_device` |
-| `playbooks/zfs_device_offline.yml` | Takes a device offline (`zpool offline`); vars: `pool`, `device` |
-| `playbooks/zfs_device_online.yml` | Brings a device online (`zpool online`); vars: `pool`, `device` |
-| `playbooks/zfs_quota_set.yml` | Sets/removes per-user or per-group quota; vars: `dataset`, `kind`, `principal`, `quota` |
-| `playbooks/zfs_pool_create.yml` | Creates a pool; vars: `name`, `vdev_type`, `devices` (space-separated), optional `ashift`, `compression` |
-| `playbooks/zfs_pool_import.yml` | Imports a pool; vars: `pool`, optional `force` |
-| `playbooks/zfs_pool_export.yml` | Exports a pool; vars: `pool` |
-| `playbooks/zfs_pool_add.yml` | Adds devices to a pool (`zpool add`); vars: `pool`, `kind` (data\|cache\|log\|spare), `devices`, optional `vdev_type` |
-| `playbooks/zfs_pool_remove_device.yml` | Removes a cache/log/spare device (`zpool remove`); vars: `pool`, `device` |
 | `playbooks/acl_set_posix.yml` | Adds/updates a POSIX ACL entry; vars: `dataset`, `entry`, `recursive` |
 | `playbooks/acl_remove_posix.yml` | Removes a POSIX ACL entry; vars: `mountpoint`, `entry`, `recursive` |
 | `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |
