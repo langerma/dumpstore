@@ -38,6 +38,7 @@
 | TLS / HTTPS                | v0.1.10 | `--tls` flag; self-signed cert generation (openssl via Ansible); path loader for existing certs; ACME issuance/renewal via `lego`; HTTP→HTTPS redirect; cert status card with expiry countdown |
 | Samba full ownership       | v0.1.10 | dumpstore owns smb.conf entirely — rendered from Go template on every write; directories auto-created; init gate blocks sub-features until Samba is bootstrapped; FreeBSD smb4.conf created on first init; resolves #75 #77 #78 #79 #81 |
 | FreeBSD-compliant paths    | v0.1.10 | `/usr/local/etc/dumpstore/` on FreeBSD, `/etc/dumpstore/` on Linux — `internal/platform.ConfigDir(goos)` as single source of truth; usershares, TLS certs, rc.d script, Makefile, install.sh all updated |
+| VM integration test suite  | v0.1.15 | End-to-end tests (`tests/integration`, `make test-integration`) drive the deployed API in the Lima VM against real ZFS: auth, dataset/snapshot lifecycle, diff, quotas, send/recv jobs, full pool lifecycle on dedicated scratch disks. CI runs it nightly and on PRs labeled `run-integration`. Closes #117 |
 | SMB init status badge      | v0.1.10 | Users & Groups tab shows green "Initialised" badge with last-applied timestamp, or red "Not initialised"; `GET /api/smb/status` now includes `conf_mtime` |
 | Dev VM environment         | v0.1.11 | `make vm-linux-start/deploy` and `make vm-freebsd-start/deploy`; Ubuntu 24.04 + FreeBSD 15 with ZFS + Ansible; default admin/admin; closes #83 |
 | Dataset rename             | v0.1.11 | Rename a dataset or volume in place; same-parent constraint; closes #21 |
@@ -69,7 +70,6 @@
 
 | Feature                            | Priority | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| VM integration tests in CI         | High     | [#117](https://github.com/langerma/dumpstore/issues/117) | Nightly CI runs the integration suite against real pools (file-backed vdevs on Linux); FreeBSD pre-release checklist |
 | Go ops layer (shrink Ansible)      | Medium   | [#115](https://github.com/langerma/dumpstore/issues/115) | Single-command mutations move from playbooks to an in-process executor; Ansible keeps config files + OS resources |
 | Privilege separation               | Medium   | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
 | Release build smoke test           | Medium   | [#118](https://github.com/langerma/dumpstore/issues/118) | CI cross-builds the release matrix on every PR so release.yml can't drift (v0.1.14 tag build broke on a pinned Go version) |

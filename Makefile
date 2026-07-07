@@ -1,6 +1,7 @@
 BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
+        test-integration \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -122,6 +123,10 @@ vm-linux-start:
 	else \
 	  echo "==> Creating ZFS data disk..."; \
 	  limactl disk create dumpstore-linux-data --size 10GiB 2>/dev/null || true; \
+	  echo "==> Creating integration-test scratch disks..."; \
+	  for n in 1 2 3; do \
+	    limactl disk create dumpstore-linux-test$$n --size 1GiB 2>/dev/null || true; \
+	  done; \
 	  echo "==> Creating and provisioning VM $(VM_LINUX) (first run, takes a few minutes)..."; \
 	  limactl create --name=$(VM_LINUX) dev/lima-linux.yaml; \
 	  limactl start $(VM_LINUX); \
@@ -154,6 +159,15 @@ vm-linux-deploy:
 vm-linux-destroy:
 	limactl delete --force $(VM_LINUX) || true
 	limactl disk delete dumpstore-linux-data 2>/dev/null || true
+	@for n in 1 2 3; do \
+	  limactl disk delete dumpstore-linux-test$$n 2>/dev/null || true; \
+	done
+
+# Integration tests — drive the deployed dumpstore API in the Lima VM.
+# Prerequisites: make vm-linux-start && make vm-linux-deploy
+# See tests/integration/README.md for env overrides (FreeBSD VM, disks, …).
+test-integration:
+	go test -tags integration -count=1 -timeout 30m -v ./tests/integration/...
 
 vm-freebsd-start:
 	@command -v limactl >/dev/null 2>&1 || { \
@@ -168,6 +182,10 @@ vm-freebsd-start:
 	else \
 	  echo "==> Creating ZFS data disk..."; \
 	  limactl disk create dumpstore-freebsd-data --size 10GiB 2>/dev/null || true; \
+	  echo "==> Creating integration-test scratch disks..."; \
+	  for n in 1 2 3; do \
+	    limactl disk create dumpstore-freebsd-test$$n --size 1GiB 2>/dev/null || true; \
+	  done; \
 	  echo "==> Creating and provisioning VM $(VM_FREEBSD) (first run, takes a few minutes)..."; \
 	  limactl create --name=$(VM_FREEBSD) dev/lima-freebsd.yaml; \
 	  limactl start $(VM_FREEBSD); \
@@ -205,6 +223,9 @@ vm-freebsd-deploy:
 vm-freebsd-destroy:
 	limactl delete --force $(VM_FREEBSD) || true
 	limactl disk delete dumpstore-freebsd-data 2>/dev/null || true
+	@for n in 1 2 3; do \
+	  limactl disk delete dumpstore-freebsd-test$$n 2>/dev/null || true; \
+	done
 
 uninstall:
 	@set -e; \

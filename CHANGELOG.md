@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [Unreleased]
+
+### Added
+
+- **VM-based integration test suite** — `tests/integration` (build tag `integration`, stdlib only) drives a deployed dumpstore instance over HTTP and asserts on real ZFS state: session auth, dataset lifecycle (create / property PATCH / rename / destroy), snapshots with `zfs diff` and clone, per-user quotas, a `zfs send | recv` pipeline followed through the jobs API, and a full pool lifecycle — mirror create, duplicate-name refusal, device offline/online, `zpool replace` with resilver, hot-spare add/remove, export, importable discovery, import — on three dedicated 1 GiB scratch disks the Lima VMs now provision (never on the `tank` data pool). Run locally with `make test-integration`; CI (`.github/workflows/integration-tests.yml`) boots the same Lima VM on a KVM-enabled runner nightly, on manual dispatch, and on PRs labeled `run-integration`. Closes #117.
+
+### Fixed
+
+- **Dev VM admin login never worked after provisioning** — `dev/lima-{linux,freebsd}.yaml` wrote a bcrypt `password_hash` into `dumpstore.conf`, but the server rejects bcrypt hashes since the argon2id migration, so `admin`/`admin` on a freshly provisioned VM always failed. The provision scripts now write the correct argon2id PHC hash.
+
 ## [v0.1.14] — 2026-06-10
 
 ### Added

@@ -1,0 +1,78 @@
+# VM-based integration tests (#117).
+#
+# Boots the same Lima VM developers use (dev/lima-linux.yaml), deploys
+# dumpstore into it with `make install`, and runs tests/integration against
+# the live API — real zpool/zfs/Ansible, no mocks.
+#
+# Triggers:
+#   - nightly (cron)
+#   - manually (workflow_dispatch)
+#   - on PRs carrying the `run-integration` label
+#
+# FreeBSD is not covered here: GitHub's macOS arm64 runners do not support
+# nested virtualization, so the FreeBSD VM remains a local target
+# (make vm-freebsd-start; see tests/integration/README.md).
+name: Integration Tests
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-vm:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install QEMU and Lima
+        env:
+          LIMA_VERSION: "1.0.7"
+        run: |
+          # Tolerate index failures from unrelated third-party repos on the
+          # runner image; qemu comes from the default Ubuntu archive.
+          sudo apt-get update -qq || true
+          # ovmf: UEFI firmware Lima needs to boot x86_64 guests
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf
+          curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
+            | sudo tar Cxz /usr/local
+          limactl --version
+
+      - name: Start Linux VM
+        run: make vm-linux-start
+
+      - name: Deploy dumpstore into VM
+        run: make vm-linux-deploy
+
+      - name: Run integration tests
+        run: make test-integration
+
+      - name: Collect VM logs on failure
+        if: failure()
+        run: |
+          tail -n 100 ~/.lima/dumpstore-linux/ha.stderr.log 2>/dev/null || true
+          tail -n 50 ~/.lima/dumpstore-linux/serial*.log 2>/dev/null || true
+          limactl shell --tty=false dumpstore-linux -- sudo journalctl -u dumpstore --no-pager -n 200 || true
+          limactl shell --tty=false dumpstore-linux -- sudo zpool status || true
