@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Single-command writes moved from Ansible to an in-process Go ops layer** (`internal/ops`) — scrub start/cancel, device replace/offline/online, pool create/import/export/add/remove-device, per-user/group quotas, and snapshot create/destroy/batch-destroy/clone now execute their one `zpool`/`zfs` command directly (argv, no shell), eliminating the ~1 s Python startup per write and the duplicated Go-regex/Jinja-assert validation for these ops. The API contract is unchanged: identical `{tasks: [...]}` step shape, same `ansible.progress` SSE topic, same op-log dialog. 15 command-wrapper playbooks deleted; Ansible remains required for config-file and OS-resource writes only (SMB, users/groups, TLS, ACLs, dataset property playbooks, scrub schedules, service control). New Prometheus metrics `dumpstore_op_runs_total` / `dumpstore_op_duration_seconds`. Closes #115.
+
 ### Added
 
 - **ZFS capability detection and UI gating** — dumpstore now probes what the installed OpenZFS release actually supports (`internal/zfs.Caps()`: `zfs rewrite` subcommand recognition, draid in the `zpool upgrade -v` feature list — probing rather than version comparison, since distros backport) and exposes the result as a `capabilities` object in `GET /api/schema`. The UI gates accordingly: the "Rewrite existing blocks" section in Edit Dataset is replaced by an explanatory note on hosts without `zfs rewrite` (needs OpenZFS ≥ 2.3), draid topology options in Create Pool are disabled with a tooltip when the draid feature is absent, and the Sysinfo tab gained a ZFS section showing the version plus capability badges. No behavior change on hosts that support everything. Closes #119.

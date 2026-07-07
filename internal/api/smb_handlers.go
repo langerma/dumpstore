@@ -45,10 +45,10 @@ func (h *Handler) applyConfig(r *http.Request, cfg *smb.SMBConfig) (*ansible.Pla
 	servicesJSON, _ := json.Marshal(smb.ServiceNames(goos))
 
 	return h.runOp("smb_apply.yml", map[string]string{
-		"src":             tmp.Name(),
-		"smb_conf":        smb.ConfPath(goos),
-		"dirs":            string(dirsJSON),
-		"samba_services":  string(servicesJSON),
+		"src":            tmp.Name(),
+		"smb_conf":       smb.ConfPath(goos),
+		"dirs":           string(dirsJSON),
+		"samba_services": string(servicesJSON),
 	})
 }
 

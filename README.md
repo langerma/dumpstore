@@ -210,15 +210,16 @@ playbooks/smb_apply.yml (example)
 
 Sub-features (shares, home dirs, Time Machine targets) are gated behind an **init gate** — they are disabled until the service has been bootstrapped with `POST /api/smb/init` (or equivalent). This prevents partial config states.
 
-### Why the read/write split?
+### The four execution lanes
 
-| Concern         | Reads                              | Writes                               |
-|-----------------|------------------------------------|--------------------------------------|
-| **Mechanism**   | `exec.Command(zpool/zfs/smartctl)` | `exec.Command(ansible-playbook)`.    |
-| **Latency**     | Fast — no Python startup           | ~1-2 s — acceptable for mutations    |
-| **Output**      | Parsed from tab-separated stdout   | Parsed from ndjson callback output   |
-| **Audit trail** | None needed                        | Task names + changed/failed per step |
-| **Idempotency** | N/A                                | Enforced by playbook assert tasks    |
+| Lane | Mechanism | Used for |
+|------|-----------|----------|
+| **Reads** | `exec.Command(zpool/zfs/smartctl)` | Everything `GET` — fast, no Python startup |
+| **Single-command writes** | `internal/ops` — in-process argv exec, no shell | `zpool scrub/replace/add/…`, `zfs snapshot/destroy/clone`, quotas — validated in Go, ~ms latency |
+| **Config-file / OS-resource writes** | `exec.Command(ansible-playbook)` | smb.conf rendering, users/groups, TLS, ACLs, dataset property playbooks — where idempotent orchestration earns its keep |
+| **Long-running data-plane** | `internal/jobs` — background process groups | `zfs send \| recv`, `zfs rewrite` — hours-long, 202 + job polling |
+
+Both write lanes report the same `tasks: [...]` step shape and stream live progress over the `ansible.progress` SSE topic, so the op-log dialog in the UI is identical regardless of lane. Ansible (and its Python dependency) is required only for the config-file / OS-resource features.
 
 ### Request flow for a write operation
 
@@ -226,23 +227,21 @@ Sub-features (shares, home dirs, Time Machine targets) are gated behind an **ini
 Browser
   │  POST /api/snapshots  {"dataset":"tank/data","snapname":"bkp"}
   ▼
-handlers.go: createSnapshot()
-  │  validate input (no @;|&$` chars)
-  │  build extraVars map
+zfs_handlers.go: createSnapshot()
+  │  validate input (names, labels — Go is the single validation point)
+  │  build argv: ["zfs", "snapshot", "tank/data@bkp"]
   ▼
-runner.go: Run("zfs_snapshot_create.yml", vars)
-  │  marshal vars → --extra-vars '{"dataset":"tank/data",...}'
-  │  set ANSIBLE_STDOUT_CALLBACK=ndjson
-  ▼
-ansible-playbook (subprocess)
-  │  assert: dataset defined, no bad chars
-  │  command: zfs snapshot tank/data@bkp
-  ▼
-runner.go: parse JSON stdout → PlaybookOutput → []TaskStep
+internal/ops: Run(steps)          ← in-process, no shell, no Python
+  │  exec zfs snapshot tank/data@bkp
+  │  step result → ansible.TaskStep{name, status, msg}
+  │  each step → ansible.progress SSE topic (live op-log)
   ▼
 handlers.go: return 201 {"snapshot":"tank/data@bkp","tasks":[...]}
   ▼
 Browser: showOpLog() renders task steps in modal
+
+Config-file writes (e.g. SMB shares) take the same shape but execute via
+ansible-playbook with the ndjson callback instead of internal/ops.
 ```
 
 ### Route map

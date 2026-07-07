@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"dumpstore/internal/blockdev"
+	"dumpstore/internal/ops"
 	"dumpstore/internal/zfs"
 )
 
@@ -57,14 +58,13 @@ func (h *Handler) replaceDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("replacement device must differ from the old device"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_disk_replace.yml", map[string]string{
-		"pool":       pool,
-		"old_device": req.OldDevice,
-		"new_device": req.NewDevice,
+	out, err := h.runLocal(ops.Step{
+		Name: "Replace " + req.OldDevice + " with " + req.NewDevice + " in " + pool,
+		Argv: []string{"zpool", "replace", pool, req.OldDevice, req.NewDevice},
 	})
 	auditLog(r.Context(), r, "pool.replace_device", pool+" "+req.OldDevice+" -> "+req.NewDevice, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -73,16 +73,16 @@ func (h *Handler) replaceDevice(w http.ResponseWriter, r *http.Request) {
 
 // offlineDevice handles POST /api/pools/{pool}/offline — body { "device": "..." }.
 func (h *Handler) offlineDevice(w http.ResponseWriter, r *http.Request) {
-	h.setDeviceState(w, r, "zfs_device_offline.yml", "pool.device_offline")
+	h.setDeviceState(w, r, "offline", "pool.device_offline")
 }
 
 // onlineDevice handles POST /api/pools/{pool}/online — body { "device": "..." }.
 func (h *Handler) onlineDevice(w http.ResponseWriter, r *http.Request) {
-	h.setDeviceState(w, r, "zfs_device_online.yml", "pool.device_online")
+	h.setDeviceState(w, r, "online", "pool.device_online")
 }
 
 // setDeviceState is the shared implementation of offlineDevice/onlineDevice.
-func (h *Handler) setDeviceState(w http.ResponseWriter, r *http.Request, playbook, action string) {
+func (h *Handler) setDeviceState(w http.ResponseWriter, r *http.Request, subcmd, action string) {
 	pool := r.PathValue("pool")
 	if !validPoolName(pool) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
@@ -99,10 +99,13 @@ func (h *Handler) setDeviceState(w http.ResponseWriter, r *http.Request, playboo
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
 		return
 	}
-	out, err := h.runOp(playbook, map[string]string{"pool": pool, "device": req.Device})
+	out, err := h.runLocal(ops.Step{
+		Name: "Take " + req.Device + " " + subcmd + " in " + pool,
+		Argv: []string{"zpool", subcmd, pool, req.Device},
+	})
 	auditLog(r.Context(), r, action, pool+" "+req.Device, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dumpstore/internal/ops"
 	"dumpstore/internal/zfs"
 )
 
@@ -83,16 +84,24 @@ func (h *Handler) createPool(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out, err := h.runOp("zfs_pool_create.yml", map[string]string{
-		"name":        req.Name,
-		"vdev_type":   req.VdevType,
-		"devices":     strings.Join(req.Devices, " "),
-		"ashift":      req.Ashift,
-		"compression": req.Compression,
-	})
+	// "single" (striped, no redundancy) passes devices without a vdev
+	// keyword; every other accepted type is a valid zpool keyword as-is.
+	argv := []string{"zpool", "create"}
+	if req.Ashift != "" {
+		argv = append(argv, "-o", "ashift="+req.Ashift)
+	}
+	if req.Compression != "" {
+		argv = append(argv, "-O", "compression="+req.Compression)
+	}
+	argv = append(argv, req.Name)
+	if req.VdevType != "single" {
+		argv = append(argv, req.VdevType)
+	}
+	argv = append(argv, req.Devices...)
+	out, err := h.runLocal(ops.Step{Name: "Create pool " + req.Name, Argv: argv})
 	auditLog(r.Context(), r, "pool.create", req.Name+" "+req.VdevType+" ["+strings.Join(req.Devices, " ")+"]", err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -172,7 +181,7 @@ func (h *Handler) addAuxDevices(w http.ResponseWriter, r *http.Request, kind str
 	h.addPoolDevices(w, r, pool, kind, "", req.Devices)
 }
 
-// addPoolDevices validates and dispatches a `zpool add` via zfs_pool_add.yml.
+// addPoolDevices validates and dispatches a `zpool add`.
 func (h *Handler) addPoolDevices(w http.ResponseWriter, r *http.Request, pool, kind, vdevType string, devices []string) {
 	if !validPoolName(pool) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
@@ -188,15 +197,27 @@ func (h *Handler) addPoolDevices(w http.ResponseWriter, r *http.Request, pool, k
 			return
 		}
 	}
-	out, err := h.runOp("zfs_pool_add.yml", map[string]string{
-		"pool":      pool,
-		"kind":      kind,
-		"vdev_type": vdevType,
-		"devices":   strings.Join(devices, " "),
-	})
+	// Data vdevs take an optional topology keyword; cache/log/spare use the
+	// zpool class keyword, with log additionally allowing a mirror keyword.
+	argv := []string{"zpool", "add", pool}
+	switch kind {
+	case "data":
+		if vdevType != "" && vdevType != "single" {
+			argv = append(argv, vdevType)
+		}
+	case "log":
+		argv = append(argv, "log")
+		if vdevType == "mirror" {
+			argv = append(argv, "mirror")
+		}
+	default: // cache, spare
+		argv = append(argv, kind)
+	}
+	argv = append(argv, devices...)
+	out, err := h.runLocal(ops.Step{Name: "Add " + kind + " devices to " + pool, Argv: argv})
 	auditLog(r.Context(), r, "pool.add_"+kind, pool+" ["+strings.Join(devices, " ")+"]", err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -217,10 +238,13 @@ func (h *Handler) removePoolDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_pool_remove_device.yml", map[string]string{"pool": pool, "device": device})
+	out, err := h.runLocal(ops.Step{
+		Name: "Remove " + device + " from " + pool,
+		Argv: []string{"zpool", "remove", pool, device},
+	})
 	auditLog(r.Context(), r, "pool.remove_device", pool+" "+device, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -252,13 +276,15 @@ func (h *Handler) importPool(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_pool_import.yml", map[string]string{
-		"pool":  req.Pool,
-		"force": strconv.FormatBool(req.Force),
-	})
+	argv := []string{"zpool", "import"}
+	if req.Force {
+		argv = append(argv, "-f")
+	}
+	argv = append(argv, req.Pool)
+	out, err := h.runLocal(ops.Step{Name: "Import pool " + req.Pool, Argv: argv})
 	auditLog(r.Context(), r, "pool.import", req.Pool, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
@@ -274,10 +300,10 @@ func (h *Handler) exportPool(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runOp("zfs_pool_export.yml", map[string]string{"pool": pool})
+	out, err := h.runLocal(ops.Step{Name: "Export pool " + pool, Argv: []string{"zpool", "export", pool}})
 	auditLog(r.Context(), r, "pool.export", pool, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
+		writeOpsError(r.Context(), w, err, out)
 		return
 	}
 	h.publishPools()
