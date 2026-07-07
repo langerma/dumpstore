@@ -1,7 +1,7 @@
 BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
-        test-integration \
+        test-integration release \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -9,6 +9,35 @@ all: build
 
 build:
 	go build -buildvcs=false -ldflags="-s -w -X main.version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o $(BINARY) .
+
+# Cross-build and package every release target into dist/.
+# Single source of truth for the release recipe — used by release.yml on
+# tags and by the CI release-smoke job on every PR (#118) so the two
+# cannot drift.
+# Usage: make release VERSION=v1.2.3
+RELEASE_TARGETS := linux/amd64 linux/arm64 freebsd/amd64 freebsd/arm64
+
+release:
+	@test -n "$(VERSION)" || { echo "error: VERSION is required (make release VERSION=v1.2.3)" >&2; exit 1; }
+	@rm -rf dist && mkdir -p dist
+	@set -e; \
+	for target in $(RELEASE_TARGETS); do \
+	  OS=$${target%/*}; ARCH=$${target#*/}; \
+	  NAME="dumpstore-$(VERSION)-$$OS-$$ARCH"; \
+	  echo "==> Building $$NAME"; \
+	  GOOS=$$OS GOARCH=$$ARCH go build -buildvcs=false \
+	    -ldflags="-s -w -X main.version=$(VERSION)" -o $(BINARY) .; \
+	  mkdir -p dist/$$NAME; \
+	  cp $(BINARY) dist/$$NAME/; \
+	  cp -r playbooks static README.md install.sh dist/$$NAME/; \
+	  case "$$OS" in \
+	    linux)   cp contrib/dumpstore.service dist/$$NAME/ ;; \
+	    freebsd) cp contrib/dumpstore.rc      dist/$$NAME/ ;; \
+	  esac; \
+	  tar -czf dist/$$NAME.tar.gz -C dist $$NAME; \
+	  rm -rf dist/$$NAME $(BINARY); \
+	done
+	@ls -l dist/
 
 # Run locally on macOS (or any machine without ZFS/Ansible).
 # Fake CLI stubs in dev/bin/ intercept zfs, zpool, and ansible-playbook.

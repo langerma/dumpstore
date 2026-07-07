@@ -18,36 +18,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The build recipe lives in the Makefile (make release) and is smoke-
+      # tested on every PR by the release-smoke job in ci.yml (#118).
       - name: Build and package
-        run: |
-          VERSION=${GITHUB_REF_NAME}
-          mkdir -p dist
-
-          build() {
-            local OS=$1 ARCH=$2
-            local NAME="dumpstore-${VERSION}-${OS}-${ARCH}"
-
-            GOOS=$OS GOARCH=$ARCH go build \
-              -ldflags="-s -w -X main.version=${VERSION}" \
-              -o dumpstore .
-
-            mkdir -p dist/${NAME}
-            cp dumpstore dist/${NAME}/
-            cp -r playbooks static README.md install.sh dist/${NAME}/
-
-            case "$OS" in
-              linux)   cp contrib/dumpstore.service dist/${NAME}/ ;;
-              freebsd) cp contrib/dumpstore.rc      dist/${NAME}/ ;;
-            esac
-
-            tar -czf dist/${NAME}.tar.gz -C dist ${NAME}
-            rm -rf dist/${NAME} dumpstore
-          }
-
-          build linux   amd64
-          build linux   arm64
-          build freebsd amd64
-          build freebsd arm64
+        run: make release VERSION=${GITHUB_REF_NAME}
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3

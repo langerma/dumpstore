@@ -19,3 +19,23 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
+
+  # Exercises the exact release recipe (make release, all four GOOS/GOARCH
+  # targets) so a broken release pipeline is caught on the PR, not at tag
+  # time — the v0.1.14 tag build broke on drift nothing ever tested (#118).
+  release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build the full release matrix
+        run: make release VERSION=v0.0.0-smoke
+      - name: Verify the version ldflag in the native binary
+        run: |
+          tar -xzf dist/dumpstore-v0.0.0-smoke-linux-amd64.tar.gz
+          OUT=$(./dumpstore-v0.0.0-smoke-linux-amd64/dumpstore --version)
+          echo "version reported: $OUT"
+          test "$OUT" = "v0.0.0-smoke"
