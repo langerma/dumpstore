@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, fmtBytes, fmtDate, showOpLog, showOpLogRunning, toast, reZFSName, reSnapLabel } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtDate, showOpLog, showOpLogRunning, toast, reZFSName, reSnapLabel } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -32,7 +32,7 @@ export function renderSnapshots() {
   const rows = items.map(s => {
     const checked = state.selectedSnaps.has(s.name) ? 'checked' : '';
     return `<tr>
-      <td style="width:1.5rem"><input type="checkbox" class="snap-check" data-snap="${esc(s.name)}" ${checked}></td>
+      <td style="width:1.5rem"><input type="checkbox" class="snap-check" data-action="check" data-snap="${esc(s.name)}" ${checked}></td>
       <td class="mono">${esc(s.dataset)}</td>
       <td class="mono">${esc(s.snap_label)}</td>
       <td>${fmtBytes(s.used)}</td>
@@ -41,10 +41,10 @@ export function renderSnapshots() {
       <td class="muted">${s.clones && s.clones !== '-' ? esc(s.clones) : '—'}</td>
       <td>
         <div class="row-actions">
-          <button class="btn-diff btn-small" data-snap="${esc(s.name)}">Diff</button>
-          <button class="btn-clone btn-small" data-snap="${esc(s.name)}">Clone</button>
-          <button class="btn-send btn-small" data-snap="${esc(s.name)}">Send</button>
-          <button class="btn-del" data-snap="${esc(s.name)}">Delete</button>
+          <button class="btn-diff btn-small" data-action="diff" data-snap="${esc(s.name)}">Diff</button>
+          <button class="btn-clone btn-small" data-action="clone" data-snap="${esc(s.name)}">Clone</button>
+          <button class="btn-send btn-small" data-action="send" data-snap="${esc(s.name)}">Send</button>
+          <button class="btn-del" data-action="del" data-snap="${esc(s.name)}">Delete</button>
         </div>
       </td>
     </tr>`;
@@ -53,7 +53,7 @@ export function renderSnapshots() {
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th style="width:1.5rem"><input type="checkbox" id="snapCheckAll" ${allChecked ? 'checked' : ''}></th>
+          <th style="width:1.5rem"><input type="checkbox" id="snapCheckAll" data-action="check-all" ${allChecked ? 'checked' : ''}></th>
           <th>Dataset</th><th>Snapshot</th><th>Used</th>
           <th>Refer</th><th>Created</th><th>Clones</th><th></th>
         </tr></thead>
@@ -61,43 +61,34 @@ export function renderSnapshots() {
       </table>
     </div>`;
 
-  wrap.querySelectorAll('.btn-diff').forEach(btn => {
-    btn.addEventListener('click', () => openDiffSnapDialog(btn.dataset.snap));
-  });
-
-  wrap.querySelectorAll('.btn-clone').forEach(btn => {
-    btn.addEventListener('click', () => openCloneSnapDialog(btn.dataset.snap));
-  });
-
-  wrap.querySelectorAll('.btn-send').forEach(btn => {
-    btn.addEventListener('click', () => openSendSnapDialog(btn.dataset.snap));
-  });
-
-  wrap.querySelectorAll('.btn-del').forEach(btn => {
-    btn.addEventListener('click', () => deleteSnapshot(btn.dataset.snap));
-  });
-
-  wrap.querySelectorAll('.snap-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      if (cb.checked) state.selectedSnaps.add(cb.dataset.snap);
-      else state.selectedSnaps.delete(cb.dataset.snap);
-      _updateMultiDeleteBtn();
-      // sync select-all state
-      const all = [...wrap.querySelectorAll('.snap-check')];
-      document.getElementById('snapCheckAll').checked = all.length > 0 && all.every(c => c.checked);
-    });
-  });
-
-  document.getElementById('snapCheckAll').addEventListener('change', e => {
-    items.forEach(s => {
-      if (e.target.checked) state.selectedSnaps.add(s.name);
-      else state.selectedSnaps.delete(s.name);
-    });
-    renderSnapshots();
-  });
-
   _updateMultiDeleteBtn();
 }
+
+// One delegated listener per event type on the stable wrapper; survives renders.
+const snapshotsWrap = document.getElementById('snapshots-table-wrap');
+delegate(snapshotsWrap, {
+  diff:  ({ snap }) => openDiffSnapDialog(snap),
+  clone: ({ snap }) => openCloneSnapDialog(snap),
+  send:  ({ snap }) => openSendSnapDialog(snap),
+  del:   ({ snap }) => deleteSnapshot(snap),
+});
+delegate(snapshotsWrap, {
+  check: ({ snap }, el) => {
+    if (el.checked) state.selectedSnaps.add(snap);
+    else state.selectedSnaps.delete(snap);
+    _updateMultiDeleteBtn();
+    // sync select-all state
+    const all = [...snapshotsWrap.querySelectorAll('.snap-check')];
+    document.getElementById('snapCheckAll').checked = all.length > 0 && all.every(c => c.checked);
+  },
+  'check-all': (d, el) => {
+    snapshotsWrap.querySelectorAll('.snap-check').forEach(cb => {
+      if (el.checked) state.selectedSnaps.add(cb.dataset.snap);
+      else state.selectedSnaps.delete(cb.dataset.snap);
+    });
+    renderSnapshots();
+  },
+}, 'change');
 
 const deleteSnapDialog = document.getElementById('deleteSnapDialog');
 document.getElementById('deleteSnapCancelBtn').addEventListener('click', () => deleteSnapDialog.close());

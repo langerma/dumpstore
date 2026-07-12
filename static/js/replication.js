@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, toast } from './utils.js';
+import { api, delegate, esc, toast } from './utils.js';
 
 const STATUS_BADGES = {
   success:     'badge-green',
@@ -45,10 +45,10 @@ export function renderReplications() {
       <td class="muted">${lastWhen}</td>
       <td>
         <div class="row-actions">
-          <button class="btn-rename btn-small btn-repl-run" data-id="${esc(t.id)}">Run now</button>
-          <button class="btn-rename btn-small btn-repl-history" data-id="${esc(t.id)}">History</button>
-          <button class="btn-rename btn-small btn-repl-edit" data-id="${esc(t.id)}">Edit</button>
-          <button class="btn-del btn-repl-delete" data-id="${esc(t.id)}">Delete</button>
+          <button class="btn-rename btn-small btn-repl-run" data-action="run" data-id="${esc(t.id)}">Run now</button>
+          <button class="btn-rename btn-small btn-repl-history" data-action="history" data-id="${esc(t.id)}">History</button>
+          <button class="btn-rename btn-small btn-repl-edit" data-action="edit" data-id="${esc(t.id)}">Edit</button>
+          <button class="btn-del btn-repl-delete" data-action="del" data-id="${esc(t.id)}">Delete</button>
         </div>
       </td>
     </tr>`;
@@ -63,16 +63,15 @@ export function renderReplications() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-
-  wrap.querySelectorAll('.btn-repl-run').forEach(b =>
-    b.addEventListener('click', () => runReplication(b.dataset.id)));
-  wrap.querySelectorAll('.btn-repl-history').forEach(b =>
-    b.addEventListener('click', () => openHistoryDialog(b.dataset.id)));
-  wrap.querySelectorAll('.btn-repl-edit').forEach(b =>
-    b.addEventListener('click', () => openReplDialog(b.dataset.id)));
-  wrap.querySelectorAll('.btn-repl-delete').forEach(b =>
-    b.addEventListener('click', () => openDeleteDialog(b.dataset.id)));
 }
+
+// One delegated listener on the stable wrapper; survives renders.
+delegate(document.getElementById('replication-wrap'), {
+  run:     ({ id }) => runReplication(id),
+  history: ({ id }) => openHistoryDialog(id),
+  edit:    ({ id }) => openReplDialog(id),
+  del:     ({ id }) => openDeleteDialog(id),
+});
 
 // ── Create / edit dialog ─────────────────────────────────────────────────────
 const replDialog = document.getElementById('replDialog');

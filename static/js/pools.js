@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, showOpLog, showOpLogRunning, toast } from './utils.js';
 import { loadAll } from './loader.js';
 
 // ── Render: System info ────────────────────────────────────────────────────────
@@ -153,12 +153,12 @@ export function renderPools() {
     const scrubActions = `
       <div class="pool-scrub-actions">
         ${scrubState === 'in_progress' || scrubState === 'paused'
-          ? `<button class="btn-secondary btn-sm" onclick="cancelScrub('${esc(p.name)}')">Cancel Scrub</button>`
-          : `<button class="btn-secondary btn-sm" onclick="startScrub('${esc(p.name)}')">Start Scrub</button>`
+          ? `<button class="btn-secondary btn-sm" data-action="cancel-scrub" data-pool="${esc(p.name)}">Cancel Scrub</button>`
+          : `<button class="btn-secondary btn-sm" data-action="start-scrub" data-pool="${esc(p.name)}">Start Scrub</button>`
         }
-        <button class="btn-secondary btn-sm" onclick="openScrubScheduleDialog('${esc(p.name)}')">Schedule&hellip;</button>
-        <button class="btn-secondary btn-sm" onclick="openExpandPoolDialog('${esc(p.name)}')">Expand&hellip;</button>
-        <button class="btn-secondary btn-sm" onclick="exportPool('${esc(p.name)}')">Export</button>
+        <button class="btn-secondary btn-sm" data-action="scrub-schedule" data-pool="${esc(p.name)}">Schedule&hellip;</button>
+        <button class="btn-secondary btn-sm" data-action="expand" data-pool="${esc(p.name)}">Expand&hellip;</button>
+        <button class="btn-secondary btn-sm" data-action="export" data-pool="${esc(p.name)}">Export</button>
         ${schedBadge}
       </div>`;
 
@@ -203,15 +203,15 @@ export function renderPools() {
         if (isLeaf && ['logs', 'cache', 'spares'].includes(vdevSectionName)) {
           actions = `
           <span class="vdev-actions">
-            <button class="btn-vdev" onclick="removePoolDevice('${esc(p.name)}','${esc(v.name)}')">Remove</button>
+            <button class="btn-vdev" data-action="remove-device" data-pool="${esc(p.name)}" data-device="${esc(v.name)}">Remove</button>
           </span>`;
         } else if (isLeaf && vdevSectionName === 'data') {
           actions = `
           <span class="vdev-actions">
-            <button class="btn-vdev" onclick="openReplaceDeviceDialog('${esc(p.name)}','${esc(v.name)}')">Replace</button>
+            <button class="btn-vdev" data-action="replace" data-pool="${esc(p.name)}" data-device="${esc(v.name)}">Replace</button>
             ${v.state === 'OFFLINE'
-              ? `<button class="btn-vdev" onclick="onlineDevice('${esc(p.name)}','${esc(v.name)}')">Online</button>`
-              : `<button class="btn-vdev" onclick="offlineDevice('${esc(p.name)}','${esc(v.name)}')">Offline</button>`}
+              ? `<button class="btn-vdev" data-action="online" data-pool="${esc(p.name)}" data-device="${esc(v.name)}">Online</button>`
+              : `<button class="btn-vdev" data-action="offline" data-pool="${esc(p.name)}" data-device="${esc(v.name)}">Offline</button>`}
           </span>`;
         }
         return `
@@ -265,6 +265,19 @@ export function renderPools() {
       </div>`;
   }).join('');
 }
+
+// One delegated listener on the stable grid; survives every render.
+delegate(document.getElementById('pools-grid'), {
+  'start-scrub':    ({ pool }) => startScrub(pool),
+  'cancel-scrub':   ({ pool }) => cancelScrub(pool),
+  'scrub-schedule': ({ pool }) => openScrubScheduleDialog(pool),
+  'expand':         ({ pool }) => openExpandPoolDialog(pool),
+  'export':         ({ pool }) => exportPool(pool),
+  'replace':        ({ pool, device }) => openReplaceDeviceDialog(pool, device),
+  'offline':        ({ pool, device }) => offlineDevice(pool, device),
+  'online':         ({ pool, device }) => onlineDevice(pool, device),
+  'remove-device':  ({ pool, device }) => removePoolDevice(pool, device),
+});
 
 // ── Resilver helpers ──────────────────────────────────────────────────────────
 // Parses the raw scan string from `zpool status`. Returns
@@ -898,15 +911,3 @@ function renderDriveCard(d) {
       <div class="smart-errors"${errStyle}>${errLine}</div>
     </div>`;
 }
-
-// ── window assignments for inline onclick handlers and cross-module calls ─────
-window.startScrub = startScrub;
-window.cancelScrub = cancelScrub;
-window.openReplaceDeviceDialog = openReplaceDeviceDialog;
-window.offlineDevice = offlineDevice;
-window.onlineDevice = onlineDevice;
-window.exportPool = exportPool;
-window.openExpandPoolDialog = openExpandPoolDialog;
-window.removePoolDevice = removePoolDevice;
-window.openScrubScheduleDialog = openScrubScheduleDialog;
-window.openAutoSnapDialog = openAutoSnapDialog;

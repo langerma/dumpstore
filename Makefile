@@ -79,7 +79,7 @@ install-ansible:
 	  echo "==> Installing Ansible..."; \
 	  OS=$$(uname -s); \
 	  case "$$OS" in \
-	    FreeBSD) pkg install -y py311-ansible ;; \
+	    FreeBSD) pkg install -y sysutils/ansible ;; \
 	    Linux)   apt-get install -y -qq ansible ;; \
 	    *) echo "error: 'ansible-playbook' not found — please install Ansible" >&2; exit 1 ;; \
 	  esac; \

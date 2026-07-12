@@ -156,6 +156,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 - Vanilla JS, no framework, no build step.
 - All data lives in the `state` object.
 - Render functions are pure: they read from `state` and write innerHTML.
+- **Event wiring uses delegation.** Render functions emit `data-action` plus payload `data-*` attributes; each stable container gets one `delegate(container, handlers, type?)` call (helper in `utils.js`), bound **once at module init** — never inside a render function. Handlers receive `(dataset, element, event)` and destructure the payload: `edit: ({ ds, type }) => …`. Do not re-bind listeners after `innerHTML` renders, do not use inline `onclick=`, do not export handlers via `window.*`. Singleton elements (dialog buttons, filters) keep plain `addEventListener`.
 - Always escape user-controlled strings through `esc()` before inserting into HTML.
 - The `api()` helper throws on non-2xx responses with the server's `error` field.
 - **Always show the Ansible op-log dialog** (`showOpLog`) after every write operation, success or failure. Never use `toast()` alone for Ansible-backed actions.

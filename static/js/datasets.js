@@ -1,5 +1,6 @@
 import { state, storeSet } from './store.js';
 import { api, delegate, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
+import { openAutoSnapDialog } from './pools.js';
 
 // ── Render: Datasets ──────────────────────────────────────────────────────────
 let datasetFilter = '';
@@ -106,7 +107,7 @@ delegate(document.getElementById('datasets-table-wrap'), {
   nfs:      ({ ds }) => openNFSDialog(ds),
   smb:      ({ ds }) => openSMBDialog(ds),
   iscsi:    ({ ds }) => openISCSIDialog(ds),
-  autosnap: ({ ds }) => window.openAutoSnapDialog(ds),
+  autosnap: ({ ds }) => openAutoSnapDialog(ds),
   usage:    ({ ds }) => openUserSpaceDialog(ds),
 });
 
@@ -409,25 +410,24 @@ async function loadUserSpace() {
             <td>${row.quota > 0 ? fmtBytes(row.quota) : '—'}</td>
             <td>${pct}</td>
             <td><div class="row-actions">
-              <button class="btn-rename btn-small usp-edit" data-name="${esc(row.name)}">Quota…</button>
-              ${row.quota > 0 ? `<button class="btn-del usp-remove" data-name="${esc(row.name)}">Remove</button>` : ''}
+              <button class="btn-rename btn-small usp-edit" data-action="edit-quota" data-name="${esc(row.name)}">Quota…</button>
+              ${row.quota > 0 ? `<button class="btn-del usp-remove" data-action="remove-quota" data-name="${esc(row.name)}">Remove</button>` : ''}
             </div></td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
-    wrap.querySelectorAll('.usp-edit').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.getElementById('userSpacePrincipal').value = btn.dataset.name;
-        document.getElementById('userSpaceQuota').focus();
-      });
-    });
-    wrap.querySelectorAll('.usp-remove').forEach(btn => {
-      btn.addEventListener('click', () => setUserQuota(btn.dataset.name, 'none'));
-    });
   } catch (e) {
     wrap.innerHTML = `<div class="loading">Failed to load: ${esc(e.message)}</div>`;
   }
 }
+
+delegate(document.getElementById('userSpaceTable'), {
+  'edit-quota': ({ name }) => {
+    document.getElementById('userSpacePrincipal').value = name;
+    document.getElementById('userSpaceQuota').focus();
+  },
+  'remove-quota': ({ name }) => setUserQuota(name, 'none'),
+});
 
 document.getElementById('userSpaceKind').addEventListener('change', loadUserSpace);
 
@@ -531,7 +531,7 @@ function renderPOSIXACLEntries(d) {
     const removal = (e.default ? 'default:' : '') + e.tag + (e.qualifier ? ':' + e.qualifier : '');
     const perms = e.perms || '---';
     const mandatory = !e.default && !e.qualifier && mandatoryTags.has(e.tag);
-    const delBtn = mandatory ? '' : `<button class="btn-del btn-small" data-entry="${esc(removal)}">✕</button>`;
+    const delBtn = mandatory ? '' : `<button class="btn-del btn-small" data-action="remove-entry" data-entry="${esc(removal)}">✕</button>`;
     return `<tr>
       <td>${e.default ? '<span class="type-badge type-volume">default</span> ' : ''}${esc(e.tag)}</td>
       <td>${esc(e.qualifier) || '<span class="muted">—</span>'}</td>
@@ -545,10 +545,6 @@ function renderPOSIXACLEntries(d) {
       <thead><tr><th>Tag</th><th>Qualifier</th><th>Perms</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-
-  document.getElementById('aclDialogEntries').querySelectorAll('.btn-del[data-entry]').forEach(btn => {
-    btn.addEventListener('click', () => removeACLEntry(btn.dataset.entry, false));
-  });
 }
 
 function renderNFSv4ACLEntries(d) {
@@ -565,7 +561,7 @@ function renderNFSv4ACLEntries(d) {
       <td class="muted">${esc(e.flags) || '—'}</td>
       <td>${esc(e.qualifier)}</td>
       <td><code class="acl-perms">${esc(e.perms)}</code></td>
-      <td><button class="btn-del btn-small" data-entry="${esc(ace)}">✕</button></td>
+      <td><button class="btn-del btn-small" data-action="remove-entry" data-entry="${esc(ace)}">✕</button></td>
     </tr>`;
   }).join('');
 
@@ -574,11 +570,11 @@ function renderNFSv4ACLEntries(d) {
       <thead><tr><th>Type</th><th>Flags</th><th>Principal</th><th>Perms</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-
-  document.getElementById('aclDialogEntries').querySelectorAll('.btn-del[data-entry]').forEach(btn => {
-    btn.addEventListener('click', () => removeACLEntry(btn.dataset.entry, false));
-  });
 }
+
+delegate(document.getElementById('aclDialogEntries'), {
+  'remove-entry': ({ entry }) => removeACLEntry(entry, false),
+});
 
 function renderPOSIXAddForm(_d) {
   const userList = state.users.map(u => `<option value="${esc(u.username)}">`).join('');

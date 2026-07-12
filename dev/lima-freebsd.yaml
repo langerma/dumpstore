@@ -49,7 +49,10 @@ provision:
       pkg update -q
 
       echo "==> Installing Ansible + Python..."
-      pkg install -y ansible python311
+      # Install by origin — picks the ports tree's current default Python
+      # flavor instead of pinning a pyXY- package name that rots on every
+      # FreeBSD default-Python bump.
+      pkg install -y sysutils/ansible python3
 
       echo "==> Installing optional tools..."
       pkg install -y smartmontools rsync
@@ -59,7 +62,7 @@ provision:
 
       echo "==> Writing default dev config (admin/admin)..."
       install -d -m 0700 /usr/local/etc/dumpstore
-      python3.11 -c 'import json,os; cfg={"username":"admin","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$ZHVtcHN0b3JlLWRldi12bQ$+quqbq+vJQm6WpP8GUB9+CeE6fPwSXXOl+XuSi1R4aM","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
+      python3 -c 'import json,os; cfg={"username":"admin","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$ZHVtcHN0b3JlLWRldi12bQ$+quqbq+vJQm6WpP8GUB9+CeE6fPwSXXOl+XuSi1R4aM","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/usr/local/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/usr/local/etc/dumpstore/dumpstore.conf",0o600)'
 
       echo "==> Creating second ZFS pool on /dev/vtbd1..."
       # Wait for the extra disk to appear
