@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, esc, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, delegate, esc, showOpLog, showOpLogRunning, toast } from './utils.js';
 
 // ── Protected account denylists (must match handlers.go) ─────────────────────
 const PROTECTED_USERS  = new Set(['nobody', 'nfsnobody']);
@@ -28,8 +28,8 @@ export function renderUsers() {
         <td class="muted">${esc(u.shell)}</td>
         <td class="muted">${esc(u.home)}</td>
         <td>
-          ${!isSystem ? `<button class="btn-edit" data-user="${esc(u.username)}">Edit</button>` : ''}
-          ${!isSystem ? `<button class="btn-del" data-user="${esc(u.username)}">Delete</button>` : ''}
+          ${!isSystem ? `<button class="btn-edit" data-action="edit" data-user="${esc(u.username)}">Edit</button>` : ''}
+          ${!isSystem ? `<button class="btn-del" data-action="del" data-user="${esc(u.username)}">Delete</button>` : ''}
         </td>
       </tr>`;
   }).join('');
@@ -42,13 +42,13 @@ export function renderUsers() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  wrap.querySelectorAll('.btn-edit[data-user]').forEach(btn => {
-    btn.addEventListener('click', () => openEditUserDialog(btn.dataset.user));
-  });
-  wrap.querySelectorAll('.btn-del[data-user]').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteUserDialog(btn.dataset.user));
-  });
 }
+
+// One delegated listener per stable wrapper; survives renders.
+delegate(document.getElementById('users-table-wrap'), {
+  edit: ({ user }) => openEditUserDialog(user),
+  del:  ({ user }) => openDeleteUserDialog(user),
+});
 
 // ── Render: Groups ────────────────────────────────────────────────────────────
 export function renderGroups() {
@@ -71,8 +71,8 @@ export function renderGroups() {
         <td>${g.gid}</td>
         <td class="muted">${(g.members || []).map(esc).join(', ') || '—'}</td>
         <td>
-          ${!isSystem ? `<button class="btn-edit" data-group="${esc(g.name)}">Edit</button>` : ''}
-          ${!isSystem ? `<button class="btn-del" data-group="${esc(g.name)}">Delete</button>` : ''}
+          ${!isSystem ? `<button class="btn-edit" data-action="edit" data-group="${esc(g.name)}">Edit</button>` : ''}
+          ${!isSystem ? `<button class="btn-del" data-action="del" data-group="${esc(g.name)}">Delete</button>` : ''}
         </td>
       </tr>`;
   }).join('');
@@ -85,13 +85,12 @@ export function renderGroups() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  wrap.querySelectorAll('.btn-edit[data-group]').forEach(btn => {
-    btn.addEventListener('click', () => openEditGroupDialog(btn.dataset.group));
-  });
-  wrap.querySelectorAll('.btn-del[data-group]').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteGroupDialog(btn.dataset.group));
-  });
 }
+
+delegate(document.getElementById('groups-table-wrap'), {
+  edit: ({ group }) => openEditGroupDialog(group),
+  del:  ({ group }) => openDeleteGroupDialog(group),
+});
 
 // ── System user/group toggles ─────────────────────────────────────────────────
 document.getElementById('toggleSystemUsersBtn').addEventListener('click', () => {
@@ -255,18 +254,19 @@ function renderEditUserSSHKeys() {
     const staged = _editUserRemovedKeys.has(key);
     return `<div class="sshkey-entry${staged ? ' staged-remove' : ''}" data-idx="${i}">
       <span class="sshkey-text" title="${esc(key)}">${esc(key)}</span>
-      <button type="button" class="btn-small btn-secondary sshkey-toggle-remove" data-idx="${i}">${staged ? 'Undo' : '×'}</button>
+      <button type="button" class="btn-small btn-secondary sshkey-toggle-remove" data-action="toggle-remove" data-idx="${i}">${staged ? 'Undo' : '×'}</button>
     </div>`;
   }).join('');
-  list.querySelectorAll('.sshkey-toggle-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = _editUserCurrentKeys[parseInt(btn.dataset.idx)];
-      if (_editUserRemovedKeys.has(key)) _editUserRemovedKeys.delete(key);
-      else _editUserRemovedKeys.add(key);
-      renderEditUserSSHKeys();
-    });
-  });
 }
+
+delegate(document.getElementById('edit-user-sshkeys-list'), {
+  'toggle-remove': ({ idx }) => {
+    const key = _editUserCurrentKeys[parseInt(idx)];
+    if (_editUserRemovedKeys.has(key)) _editUserRemovedKeys.delete(key);
+    else _editUserRemovedKeys.add(key);
+    renderEditUserSSHKeys();
+  },
+});
 
 async function openEditUserDialog(username) {
   const user = state.users.find(u => u.username === username);
@@ -561,7 +561,7 @@ export function renderTimeMachine() {
       <td class="mono">${esc(s.path)}</td>
       <td>${s.max_size ? esc(s.max_size) : '<span class="muted">no limit</span>'}</td>
       <td>${s.valid_users ? esc(s.valid_users) : '<span class="muted">all</span>'}</td>
-      <td><button class="btn-del btn-small tm-del-btn" data-name="${esc(s.name)}">Delete</button></td>
+      <td><button class="btn-del btn-small tm-del-btn" data-action="del" data-name="${esc(s.name)}">Delete</button></td>
     </tr>`).join('');
   wrap.innerHTML = `
     <div class="table-wrap">
@@ -570,10 +570,11 @@ export function renderTimeMachine() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  wrap.querySelectorAll('.tm-del-btn').forEach(btn => {
-    btn.addEventListener('click', () => deleteTimeMachineShare(btn.dataset.name));
-  });
 }
+
+delegate(document.getElementById('tm-shares-wrap'), {
+  del: ({ name }) => deleteTimeMachineShare(name),
+});
 
 async function deleteTimeMachineShare(name) {
   if (!confirm(`Delete Time Machine share "${name}"?`)) return;
@@ -671,8 +672,8 @@ export function renderSambaUsers() {
       ? '<span class="smb-status smb-yes">● registered</span>'
       : '<span class="smb-status smb-no">○ not registered</span>';
     const actionBtn = registered
-      ? `<button class="btn-del smb-remove-btn" data-user="${esc(u.username)}">Remove from SMB</button>`
-      : `<button class="btn-secondary smb-add-btn" data-user="${esc(u.username)}">Add to SMB</button>`;
+      ? `<button class="btn-del smb-remove-btn" data-action="remove" data-user="${esc(u.username)}">Remove from SMB</button>`
+      : `<button class="btn-secondary smb-add-btn" data-action="add" data-user="${esc(u.username)}">Add to SMB</button>`;
     return `
       <tr>
         <td class="mono">${esc(u.username)}</td>
@@ -690,13 +691,12 @@ export function renderSambaUsers() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  wrap.querySelectorAll('.smb-add-btn').forEach(btn => {
-    btn.addEventListener('click', () => openAddSmbUserDialog(btn.dataset.user));
-  });
-  wrap.querySelectorAll('.smb-remove-btn').forEach(btn => {
-    btn.addEventListener('click', () => removeSmbUser(btn.dataset.user));
-  });
 }
+
+delegate(document.getElementById('smb-users-wrap'), {
+  add:    ({ user }) => openAddSmbUserDialog(user),
+  remove: ({ user }) => removeSmbUser(user),
+});
 
 // ── Add SMB User dialog ───────────────────────────────────────────────────────
 const addSmbUserDialog = document.getElementById('addSmbUserDialog');

@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { esc, api, toast, showOpLogRunning, showOpLog } from './utils.js';
+import { esc, api, delegate, toast, showOpLogRunning, showOpLog } from './utils.js';
 
 export function renderServices() {
   const wrap = document.getElementById('services-wrap');
@@ -46,24 +46,29 @@ export function renderServices() {
           </tr>`).join('')}
       </tbody>
     </table>`;
-
-  wrap.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const svc = btn.dataset.svc;
-      const action = btn.dataset.action;
-
-      if (svc === 'nfs' && action === 'stop') {
-        if (!confirm('Stopping NFS will disconnect all mounted clients. Continue?')) return;
-      }
-
-      showOpLogRunning(`${action} ${svc}`);
-      try {
-        const res = await api('POST', `/api/services/${svc}/${action}`);
-        showOpLog(`${action} ${svc}`, res?.tasks);
-        toast(`${svc} ${action} OK`, 'ok');
-      } catch (err) {
-        showOpLog(`${action} ${svc}`, err.tasks, err.message);
-      }
-    });
-  });
 }
+
+async function serviceAction(svc, action) {
+  if (svc === 'nfs' && action === 'stop') {
+    if (!confirm('Stopping NFS will disconnect all mounted clients. Continue?')) return;
+  }
+
+  showOpLogRunning(`${action} ${svc}`);
+  try {
+    const res = await api('POST', `/api/services/${svc}/${action}`);
+    showOpLog(`${action} ${svc}`, res?.tasks);
+    toast(`${svc} ${action} OK`, 'ok');
+  } catch (err) {
+    showOpLog(`${action} ${svc}`, err.tasks, err.message);
+  }
+}
+
+// One delegated listener on the stable wrapper; survives renders.
+const _svcHandler = action => ({ svc }) => serviceAction(svc, action);
+delegate(document.getElementById('services-wrap'), {
+  start:   _svcHandler('start'),
+  stop:    _svcHandler('stop'),
+  restart: _svcHandler('restart'),
+  enable:  _svcHandler('enable'),
+  disable: _svcHandler('disable'),
+});

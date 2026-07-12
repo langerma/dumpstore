@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, fmtDate, toast } from './utils.js';
+import { api, delegate, esc, fmtDate, toast } from './utils.js';
 
 const STATUS_BADGES = {
   pending:     'badge-blue',
@@ -65,8 +65,8 @@ export function renderJobs() {
     const badge = STATUS_BADGES[j.status] || 'badge-blue';
     const isRunning = j.status === 'running' || j.status === 'pending';
     const actionBtn = isRunning
-      ? `<button class="btn-cancel-job btn-small" data-id="${esc(j.id)}">Cancel</button>`
-      : `<button class="btn-remove-job btn-small" data-id="${esc(j.id)}">Remove</button>`;
+      ? `<button class="btn-cancel-job btn-small" data-action="cancel" data-id="${esc(j.id)}">Cancel</button>`
+      : `<button class="btn-remove-job btn-small" data-action="remove" data-id="${esc(j.id)}">Remove</button>`;
     return `<tr>
       <td><span class="health-badge ${badge}">${esc(j.status)}</span></td>
       <td class="mono">${esc(j.type)}</td>
@@ -75,7 +75,7 @@ export function renderJobs() {
       <td>${fmtDuration(j.started_at, j.finished_at)}</td>
       <td>
         <div class="row-actions">
-          <button class="btn-job-detail btn-small" data-id="${esc(j.id)}">Details</button>
+          <button class="btn-job-detail btn-small" data-action="detail" data-id="${esc(j.id)}">Details</button>
           ${actionBtn}
         </div>
       </td>
@@ -91,17 +91,14 @@ export function renderJobs() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-
-  wrap.querySelectorAll('.btn-cancel-job').forEach(btn => {
-    btn.addEventListener('click', () => openCancelJobDialog(btn.dataset.id));
-  });
-  wrap.querySelectorAll('.btn-remove-job').forEach(btn => {
-    btn.addEventListener('click', () => removeJob(btn.dataset.id));
-  });
-  wrap.querySelectorAll('.btn-job-detail').forEach(btn => {
-    btn.addEventListener('click', () => openJobDetailDialog(btn.dataset.id));
-  });
 }
+
+// One delegated listener on the stable wrapper; survives renders.
+delegate(document.getElementById('jobs-wrap'), {
+  cancel: ({ id }) => openCancelJobDialog(id),
+  remove: ({ id }) => removeJob(id),
+  detail: ({ id }) => openJobDetailDialog(id),
+});
 
 async function removeJob(id) {
   try {
