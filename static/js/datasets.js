@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
+import { api, delegate, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
 
 // ── Render: Datasets ──────────────────────────────────────────────────────────
 let datasetFilter = '';
@@ -47,7 +47,7 @@ export function renderDatasets() {
       const collapsed = state.collapsedDatasets.has(d.name);
       const icon = collapsed ? '▶' : '▼';
       const title = collapsed ? `Expand (${childCount} hidden)` : 'Collapse';
-      toggle = `<button class="tree-toggle" data-name="${esc(d.name)}" title="${title}">${icon}</button>`;
+      toggle = `<button class="tree-toggle" data-action="collapse" data-ds="${esc(d.name)}" title="${title}">${icon}</button>`;
     }
 
     // Pool roots (depth 0) cannot be deleted here — use zpool destroy
@@ -64,16 +64,16 @@ export function renderDatasets() {
         <td class="muted">${d.mountpoint !== 'none' ? esc(d.mountpoint) : '—'}</td>
         <td>
           <div class="row-actions">
-            <button class="btn-edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
-            ${d.type !== 'volume' ? `<button class="btn-acl btn-small${state.aclStatus[d.name] ? ' active' : ''}" data-ds="${esc(d.name)}" title="${state.aclStatus[d.name] ? 'ACL entries configured' : 'No ACL'}">ACL</button>` : ''}
-            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
-            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
-            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
-            ${d.type === 'volume' ? (() => { const _it = state.iscsiTargets.find(t => t.zvol_name === d.name); return `<button class="btn-iscsi btn-small${_it ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_it ? 'iSCSI target: ' + esc(_it.iqn) : 'Not exposed as iSCSI target'}">iSCSI</button>`; })() : ''}
-            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-usage btn-small" data-ds="${esc(d.name)}" title="Per-user/group space and quotas">Usage</button>` : ''}
-            <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
-            ${canDelete ? `<button class="btn-rename btn-small" data-ds="${esc(d.name)}">Rename</button>` : ''}
-            ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
+            <button class="btn-edit" data-action="edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
+            ${d.type !== 'volume' ? `<button class="btn-acl btn-small${state.aclStatus[d.name] ? ' active' : ''}" data-action="acl" data-ds="${esc(d.name)}" title="${state.aclStatus[d.name] ? 'ACL entries configured' : 'No ACL'}">ACL</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-action="chown" data-ds="${esc(d.name)}">Chown</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-action="nfs" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-action="smb" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
+            ${d.type === 'volume' ? (() => { const _it = state.iscsiTargets.find(t => t.zvol_name === d.name); return `<button class="btn-iscsi btn-small${_it ? ' active' : ''}" data-action="iscsi" data-ds="${esc(d.name)}" title="${_it ? 'iSCSI target: ' + esc(_it.iqn) : 'Not exposed as iSCSI target'}">iSCSI</button>`; })() : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-usage btn-small" data-action="usage" data-ds="${esc(d.name)}" title="Per-user/group space and quotas">Usage</button>` : ''}
+            <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-action="autosnap" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
+            ${canDelete ? `<button class="btn-rename btn-small" data-action="rename" data-ds="${esc(d.name)}">Rename</button>` : ''}
+            ${canDelete ? `<button class="btn-del" data-action="del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
       </tr>`;
@@ -89,59 +89,26 @@ export function renderDatasets() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-
-  wrap.querySelectorAll('.tree-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const name = btn.dataset.name;
-      if (state.collapsedDatasets.has(name)) {
-        state.collapsedDatasets.delete(name);
-      } else {
-        state.collapsedDatasets.add(name);
-      }
-      renderDatasets();
-    });
-  });
-
-  wrap.querySelectorAll('.btn-edit[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openEditDatasetDialog(btn.dataset.ds, btn.dataset.type));
-  });
-
-  wrap.querySelectorAll('.btn-rename[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openRenameDatasetDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-del[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteDatasetDialog(btn.dataset.ds, btn.dataset.type));
-  });
-
-  wrap.querySelectorAll('.btn-acl[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openACLDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-chown[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openChownDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-nfs[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openNFSDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-smb[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openSMBDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-iscsi[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openISCSIDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-autosnap[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => window.openAutoSnapDialog(btn.dataset.ds));
-  });
-
-  wrap.querySelectorAll('.btn-usage[data-ds]').forEach(btn => {
-    btn.addEventListener('click', () => openUserSpaceDialog(btn.dataset.ds));
-  });
 }
+
+// One delegated listener on the stable wrapper; survives every innerHTML render.
+delegate(document.getElementById('datasets-table-wrap'), {
+  collapse: ({ ds }) => {
+    if (state.collapsedDatasets.has(ds)) state.collapsedDatasets.delete(ds);
+    else state.collapsedDatasets.add(ds);
+    renderDatasets();
+  },
+  edit:     ({ ds, type }) => openEditDatasetDialog(ds, type),
+  rename:   ({ ds }) => openRenameDatasetDialog(ds),
+  del:      ({ ds, type }) => openDeleteDatasetDialog(ds, type),
+  acl:      ({ ds }) => openACLDialog(ds),
+  chown:    ({ ds }) => openChownDialog(ds),
+  nfs:      ({ ds }) => openNFSDialog(ds),
+  smb:      ({ ds }) => openSMBDialog(ds),
+  iscsi:    ({ ds }) => openISCSIDialog(ds),
+  autosnap: ({ ds }) => window.openAutoSnapDialog(ds),
+  usage:    ({ ds }) => openUserSpaceDialog(ds),
+});
 
 function typeBadge(type) {
   return `<span class="type-badge type-${esc(type)}">${esc(type)}</span>`;

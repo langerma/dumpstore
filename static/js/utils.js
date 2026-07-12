@@ -135,6 +135,21 @@ export function toast(msg, type = 'ok') {
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
 }
 
+// ── Event delegation ──────────────────────────────────────────────────────────
+// One listener per stable container, bound once at module init. Render
+// functions replace the container's innerHTML freely; the listener survives.
+// Dispatches on the closest [data-action] ancestor of the event target, so
+// an inner button wins over an outer row that also carries data-action.
+// Handlers receive (dataset, element, event).
+export function delegate(container, handlers, type = 'click') {
+  container.addEventListener(type, e => {
+    const el = e.target.closest('[data-action]');
+    if (!el || !container.contains(el)) return;
+    const fn = handlers[el.dataset.action];
+    if (fn) fn(el.dataset, el, e);
+  });
+}
+
 // ── ZFS name validation regexes ───────────────────────────────────────────────
 export const reZFSName   = /^[a-zA-Z][a-zA-Z0-9_.:-]*(\/[a-zA-Z][a-zA-Z0-9_.:-]*)*$/;
 export const reSnapLabel = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/;
