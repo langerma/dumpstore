@@ -22,6 +22,7 @@ export const state = {
   iscsiTargets: [],   // [{iqn, zvol_name, ...}] from /api/iscsi-targets
   activeTab: 'pools',
   collapsedDatasets: new Set(),
+  selectedDataset: '',          // dataset shown in the detail drawer ('' = closed)
   aclDataset: '',
   aclData: null,
   aclStatus: {},

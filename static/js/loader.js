@@ -1,6 +1,6 @@
 import { state, storeSet, storeBatch } from './store.js';
 import { api, esc, toast, setRefreshing, appendOpLogStep, opLogDialog } from './utils.js';
-import { refreshACLStatus } from './datasets.js';
+import { refreshACLStatus } from './dataset-dialogs.js';
 import { mergeJob } from './jobs.js';
 
 // ── Schema helpers ────────────────────────────────────────────────────────────
@@ -18,10 +18,8 @@ export function buildFormSelects() {
       const el = document.getElementById('ds-' + prop.name);
       if (el) el.innerHTML = opts;
     }
-    if (prop.editable) {
-      const el = document.getElementById('edit-ds-' + prop.name);
-      if (el) el.innerHTML = opts;
-    }
+    // Editable props are rendered by the dataset drawer from the schema
+    // directly — no static selects to populate.
   }
 
   // Gate draid topology options on the detected ZFS capability (#119):

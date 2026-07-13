@@ -57,7 +57,8 @@
 | Pool lifecycle             | v0.1.14 | Create pools (single/mirror/raidz1-3/draid1-3) with unused-device picker, ashift/compression options, confirm-by-typing; import with force option; export per pool card; closes #23 |
 | Per-user quota tracking    | v0.1.14 | Usage dialog per filesystem — `zfs userspace`/`zfs groupspace` consumption table with inline `userquota@`/`groupquota@` set/remove; `GET /api/userspace/{name}`, `POST /api/userquota/{name}`; closes #25 |
 | Snapshot diff              | v0.1.14 | Diff button per snapshot row — `zfs diff` against a later snapshot or the live filesystem; color-coded change types, client-side filter, 10k entry cap; `GET /api/snapshots/diff`; closes #24 |
-| Dataset rewrite            | v0.1.14 | "Rewrite existing blocks" section in the Edit Dataset dialog — `zfs rewrite` with `-r`/`-S`/`-C` options; runs as a background job (Jobs tab); `POST /api/rewrite/{name}`; closes #50 |
+| Dataset rewrite            | v0.1.14 | "Rewrite data…" in the dataset detail drawer — `zfs rewrite` with `-r`/`-S`/`-C` options; runs as a background job (Jobs tab); `POST /api/rewrite/{name}`; closes #50 |
+| Datasets tab redesign      | Unreleased | Per-pool sections with health/capacity header rows, usage bars, status chips, hover-revealed quick actions, and a slide-in detail drawer with grouped actions and inline property editing; part 1 of #63 |
 | Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
 
 ---
