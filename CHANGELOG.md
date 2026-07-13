@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [v0.2.0] — 2026-07-13
+
 ### Changed
 
 - **All dialogs are now right-anchored slide-in panels** — every `<dialog>` slides in from the right edge full-height with the same animation and shadow as the dataset drawer, for one consistent interaction pattern; footer buttons pin to the panel bottom. The form-field styling (dark inputs/selects, full-width layout, focus accents) was scoped to `dialog` selectors and never reached the drawer, leaving its fields with browser-default colors and misaligned widths — the rules now cover `.drawer` too.
