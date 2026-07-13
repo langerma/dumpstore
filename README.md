@@ -33,10 +33,10 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Drive replacement & resilver monitoring** — replace a (faulted) device from the vdev tree with a picker of unused block devices (`zpool replace`); take devices offline / bring them online for maintenance; resilver progress bar with live percentage and a completion notification; faulted/degraded devices highlighted in the vdev tree
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
-- **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured
+- **Dataset browser** — datasets grouped into per-pool sections (pool health badge + capacity bar on the header row), depth-indented collapsible tree, per-row usage bar against quota, passive status chips (NFS/SMB/iSCSI/auto-snap/ACL), quick actions on hover
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
-- **Dataset editing** — update properties in place (set or inherit)
-- **Dataset rewrite** — apply updated properties (compression, checksum, copies) to already-stored data via `zfs rewrite` from the Edit Dataset dialog; recurse/skip-snapshot-shared/skip-clone-shared options; runs as a background job in the Jobs tab
+- **Dataset detail drawer** — click any row for a slide-in panel grouping everything by concern: inline property editing (inherited values shown, set or inherit, single Apply), sharing (NFS/SMB/iSCSI), permissions (ACL/chown), snapshots, and a separated danger zone (rename/delete)
+- **Dataset rewrite** — apply updated properties (compression, checksum, copies) to already-stored data via `zfs rewrite` from the dataset detail drawer; recurse/skip-snapshot-shared/skip-clone-shared options; runs as a background job in the Jobs tab
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Per-user/group space & quotas** — see who consumes space on a filesystem (`zfs userspace`/`zfs groupspace`) and set or remove `userquota@`/`groupquota@` limits inline
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog

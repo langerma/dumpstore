@@ -2,6 +2,7 @@ import { state, subscribe } from './js/store.js';
 import { loadAll, startSSE, buildFormSelects } from './js/loader.js';
 import { renderSysInfo, renderSoftware, renderNetwork, renderPools, renderIOStat, renderSMART } from './js/pools.js';
 import { renderDatasets } from './js/datasets.js';
+import { renderDatasetDrawer } from './js/dataset-drawer.js';
 import { renderSnapshots } from './js/snapshots.js';
 import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine, renderSMBInitStatus } from './js/users.js';
 import { renderServices } from './js/services.js';
@@ -18,8 +19,10 @@ subscribe(['pools', 'poolStatuses', 'scrubSchedules',
            'scrubScheduleMode', 'scrubThresholdDays'],          renderPools);
 subscribe(['iostat'],                                           renderIOStat);
 subscribe(['smart'],                                            renderSMART);
-subscribe(['datasets', 'aclStatus', 'smbShares',
-           'iscsiTargets', 'autoSnapshot'],                     renderDatasets);
+subscribe(['datasets', 'aclStatus', 'smbShares', 'iscsiTargets',
+           'autoSnapshot', 'pools', 'selectedDataset'],         renderDatasets);
+subscribe(['selectedDataset', 'datasets', 'aclStatus', 'smbShares',
+           'iscsiTargets', 'autoSnapshot', 'snapshots'],        renderDatasetDrawer);
 subscribe(['snapshots'],                                        renderSnapshots);
 subscribe(['users'],                                            renderUsers);
 subscribe(['groups'],                                           renderGroups);

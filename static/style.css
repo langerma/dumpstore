@@ -871,3 +871,76 @@ dialog label select:focus { border-color: var(--accent); }
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
 }
+
+/* ── Dataset detail drawer (#63) ────────────────────────────────────────────── */
+.drawer {
+  position: fixed; top: 0; right: 0; height: 100vh;
+  width: 480px; max-width: 95vw;
+  background: var(--surface); border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform 0.2s ease;
+  z-index: 150; display: flex; flex-direction: column;
+}
+.drawer.open { transform: translateX(0); box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45); }
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
+  z-index: 149; display: none;
+}
+.drawer-backdrop.open { display: block; }
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+  background: var(--surface2); flex-shrink: 0;
+}
+.drawer-title-text { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.drawer-fullname { font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-close {
+  background: none; border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text-muted); cursor: pointer; padding: 2px 8px; font-size: 0.9rem;
+}
+.drawer-close:hover { color: var(--text); background: var(--border); }
+.drawer-body { overflow-y: auto; padding: 1rem; flex: 1; }
+.drawer-body .form-section { margin-bottom: 0.75rem; }
+.drawer-summary-grid { margin-bottom: 0.75rem; }
+.drawer-usage-text { font-size: 0.8rem; margin: 0.25rem 0 0.75rem; }
+.drawer-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+.drawer-row-label { color: var(--text-muted); font-size: 0.85rem; width: 5.5rem; flex-shrink: 0; }
+.drawer-row-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.drawer-props-actions { margin-top: 0.5rem; padding-top: 0; }
+.drawer-prop-links { margin-top: 0.5rem; }
+.drawer-note { font-size: 0.8rem; margin: 0.4rem 0 0; }
+.form-section.danger { border-color: #5a2020; }
+.form-section.danger legend { color: var(--red); }
+
+/* Pool section header rows in the datasets table */
+.pool-header-row td { background: var(--surface2); font-weight: 700; }
+.pool-header-row .pool-name { margin-right: 0.4rem; }
+
+/* Row hover-reveal for quick actions — opt-in per table via .hover-actions.
+   opacity (not display) keeps buttons tabbable so :focus-within reveals them
+   for keyboard users; touch devices always show them. */
+.hover-actions .row-actions { opacity: 0; transition: opacity 0.12s; }
+.hover-actions tr:hover .row-actions,
+.hover-actions tr:focus-within .row-actions { opacity: 1; }
+@media (hover: none) {
+  .hover-actions .row-actions { opacity: 1; }
+}
+
+/* Passive status chips (datasets table Status column, drawer) */
+.status-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  margin-right: 3px;
+}
+
+/* Selected (drawer-open) row */
+tbody tr.selected td { background: var(--accent-dim); }
+
+/* Mini usage bar inside table cells */
+.usage-bar-wrap { width: 110px; height: 5px; margin: 0 0 3px; }
+.usage-text { font-size: 0.8rem; }
+
+/* Rows that open the drawer */
+.ds-row, .pool-header-row { cursor: pointer; }
+
+/* Inherited property values */
+.prop-inherited { color: var(--text-muted); font-style: italic; }

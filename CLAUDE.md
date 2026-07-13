@@ -234,8 +234,11 @@ Do not change this split without a good reason — the ops side keeps single-sho
 
 | File | Responsibility |
 |------|----------------|
-| `static/index.html` | Page shell, all dialogs (dataset, snapshot, user, group, ACL, SMB, etc.) |
-| `static/app.js` | State, fetch, render functions for all tabs; dialog wiring; SSE client |
+| `static/index.html` | Page shell, all dialogs (dataset, snapshot, user, group, ACL, SMB, etc.), dataset drawer containers |
+| `static/app.js` | Store subscriptions, tab switching, auth/config UI; entry point importing the per-tab modules under `static/js/` |
+| `static/js/datasets.js` | Datasets table render (pool sections, usage bars, status chips, hover actions) + new-dataset dialog |
+| `static/js/dataset-drawer.js` | Slide-in dataset detail drawer: summary, inline property editing, sharing/permissions/snapshots/danger sections (#63) |
+| `static/js/dataset-dialogs.js` | Dataset-scoped dialogs: delete, rename, rewrite, per-user quotas, ACL, chown, NFS, SMB, iSCSI |
 | `static/style.css` | Dark monospace theme, CSS variables in `:root` |
 | `contrib/dumpstore.service` | systemd unit; binary at `/usr/local/lib/dumpstore/dumpstore` |
 | `contrib/dumpstore.rc` | FreeBSD rc.d script |

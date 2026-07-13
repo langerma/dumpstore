@@ -42,6 +42,9 @@ provision:
     script: |
       #!/bin/sh
       set -eu
+      # Lima provision scripts get the base-system PATH only — packages land
+      # in /usr/local, so python3 & co. are invisible without this.
+      export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 
       echo "==> Installing pkg dependencies..."
       # Bootstrap pkg if not already present
