@@ -3,7 +3,7 @@
 #   name  - full dataset path (e.g. tank/data) — must NOT contain '@'
 # Optional (default "__skip__" = leave unchanged; "" = inherit/reset to default):
 #   compression  - lz4, zstd, gzip, on, off
-#   quota        - e.g. 50G, none
+#   quota        - e.g. 50G, none ("" sets none — quota is not inheritable)
 #   mountpoint   - e.g. /mnt/data, none, legacy
 #   recordsize   - e.g. 16K, 128K (filesystem only)
 #   atime        - on, off
@@ -63,7 +63,7 @@
         set_opts: >-
           {{
             (['compression=' + compression] if compression not in ['', '__skip__'] else []) +
-            (['quota='        + quota]       if quota        not in ['', '__skip__'] else []) +
+            (['quota=' + (quota if quota != '' else 'none')] if quota != '__skip__' else []) +
             (['mountpoint='   + mountpoint]  if mountpoint   not in ['', '__skip__'] else []) +
             (['recordsize='   + recordsize]  if recordsize   not in ['', '__skip__'] else []) +
             (['atime='        + atime]       if atime        not in ['', '__skip__'] else []) +
@@ -80,7 +80,6 @@
         inherit_list: >-
           {{
             (['compression'] if compression == '' else []) +
-            (['quota']       if quota        == '' else []) +
             (['mountpoint']  if mountpoint   == '' else []) +
             (['recordsize']  if recordsize   == '' else []) +
             (['atime']       if atime        == '' else []) +
