@@ -33,6 +33,7 @@ export const state = {
   scrubThresholdDays: 35,       // FreeBSD periodic threshold (global)
   autoSnapshot: {},             // dataset name → AutoSnapshotProps
   selectedSnaps: new Set(),     // full snapshot names checked for batch delete
+  collapsedSnapGroups: new Set(), // dataset names whose snapshot group is collapsed
   schema: null,                 // GET /api/schema response
   network: null,                // GET /api/network response
   services: [],                 // GET /api/services — [{name, display_name, unit_name, active, enabled, state}]
