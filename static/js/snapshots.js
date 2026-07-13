@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtDate, showOpLog, showOpLogRunning, toast, reZFSName, reSnapLabel } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, showOpLog, showOpLogRunning, toast, reZFSName, reSnapLabel } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -16,28 +16,20 @@ function _updateMultiDeleteBtn() {
   btn.textContent = `Delete selected (${n})`;
 }
 
-export function renderSnapshots() {
-  const wrap = document.getElementById('snapshots-table-wrap');
-  let items = state.snapshots;
-  if (snapFilter) {
-    items = items.filter(s => s.name.toLowerCase().includes(snapFilter));
-  }
-  if (!items.length) {
-    wrap.innerHTML = '<div class="loading">No snapshots found.</div>';
-    _updateMultiDeleteBtn();
-    return;
-  }
-  const allVisible = items.map(s => s.name);
-  const allChecked = allVisible.length > 0 && allVisible.every(n => state.selectedSnaps.has(n));
-  const rows = items.map(s => {
-    const checked = state.selectedSnaps.has(s.name) ? 'checked' : '';
-    return `<tr>
-      <td style="width:1.5rem"><input type="checkbox" class="snap-check" data-action="check" data-snap="${esc(s.name)}" ${checked}></td>
-      <td class="mono">${esc(s.dataset)}</td>
+// Snapshots matching the current text filter (matches dataset or label via name).
+function visibleSnapshots() {
+  if (!snapFilter) return state.snapshots;
+  return state.snapshots.filter(s => s.name.toLowerCase().includes(snapFilter));
+}
+
+function snapshotRow(s) {
+  const checked = state.selectedSnaps.has(s.name) ? 'checked' : '';
+  return `<tr>
+      <td class="snap-check-col"><input type="checkbox" class="snap-check" data-action="check" data-snap="${esc(s.name)}" ${checked}></td>
       <td class="mono">${esc(s.snap_label)}</td>
       <td>${fmtBytes(s.used)}</td>
       <td>${fmtBytes(s.refer)}</td>
-      <td class="muted">${fmtDate(s.creation)}</td>
+      <td class="muted" title="${esc(fmtDate(s.creation))}">${fmtAge(s.creation)}</td>
       <td class="muted">${s.clones && s.clones !== '-' ? esc(s.clones) : '—'}</td>
       <td>
         <div class="row-actions">
@@ -48,20 +40,77 @@ export function renderSnapshots() {
         </div>
       </td>
     </tr>`;
-  }).join('');
+}
+
+export function renderSnapshots() {
+  const wrap = document.getElementById('snapshots-table-wrap');
+  const filtering = snapFilter.length > 0;
+  const items = visibleSnapshots();
+  if (!items.length) {
+    wrap.innerHTML = '<div class="loading">No snapshots found.</div>';
+    _updateMultiDeleteBtn();
+    return;
+  }
+
+  // Group by dataset, preserving server order.
+  const groups = new Map();
+  for (const s of items) {
+    if (!groups.has(s.dataset)) groups.set(s.dataset, []);
+    groups.get(s.dataset).push(s);
+  }
+
+  const allChecked = items.every(s => state.selectedSnaps.has(s.name));
+
+  const sections = [...groups.entries()].map(([ds, snaps]) => {
+    // Filtering shows everything expanded, matching the datasets tab.
+    const collapsed = !filtering && state.collapsedSnapGroups.has(ds);
+    const icon = collapsed ? '▶' : '▼';
+    const title = collapsed ? `Expand (${snaps.length} hidden)` : 'Collapse';
+    const toggle = filtering
+      ? '<span class="tree-spacer"></span>'
+      : `<button class="tree-toggle" data-action="collapse-group" data-dataset="${esc(ds)}" title="${title}">${icon}</button>`;
+    const groupChecked = snaps.every(s => state.selectedSnaps.has(s.name)) ? 'checked' : '';
+    const totalUsed = snaps.reduce((sum, s) => sum + s.used, 0);
+    const newest = Math.max(...snaps.map(s => s.creation || 0));
+    return `
+      <tbody class="snap-group" data-dataset="${esc(ds)}">
+        <tr class="group-header-row" data-action="collapse-group" data-dataset="${esc(ds)}">
+          <td class="snap-check-col"><input type="checkbox" data-action="check-group" data-dataset="${esc(ds)}" title="Select all in ${esc(ds)}" ${groupChecked}></td>
+          <td colspan="5">${toggle}<span class="pool-name mono">${esc(ds)}</span>
+            <span class="status-chip badge-blue">${snaps.length} snap${snaps.length === 1 ? '' : 's'}</span>
+            <span class="muted snap-group-meta">${fmtBytes(totalUsed)} used · newest ${fmtAge(newest)}</span>
+          </td>
+          <td></td>
+        </tr>
+        ${collapsed ? '' : snaps.map(snapshotRow).join('')}
+      </tbody>`;
+  });
+
   wrap.innerHTML = `
     <div class="table-wrap">
-      <table>
+      <table class="hover-actions">
         <thead><tr>
-          <th style="width:1.5rem"><input type="checkbox" id="snapCheckAll" data-action="check-all" ${allChecked ? 'checked' : ''}></th>
-          <th>Dataset</th><th>Snapshot</th><th>Used</th>
-          <th>Refer</th><th>Created</th><th>Clones</th><th></th>
+          <th class="snap-check-col"><input type="checkbox" id="snapCheckAll" data-action="check-all" title="Select all visible" ${allChecked ? 'checked' : ''}></th>
+          <th>Snapshot</th><th>Used</th>
+          <th>Refer</th><th>Age</th><th>Clones</th><th></th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        ${sections.join('')}
       </table>
     </div>`;
 
   _updateMultiDeleteBtn();
+}
+
+// Expand a dataset's snapshot group and scroll to it — used by the dataset
+// drawer's "View →" button after switching to the Snapshots tab.
+export function revealSnapshotGroup(dataset) {
+  state.collapsedSnapGroups.delete(dataset);
+  const filter = document.getElementById('snap-filter');
+  filter.value = '';
+  snapFilter = '';
+  renderSnapshots();
+  document.querySelector(`#snapshots-table-wrap tbody[data-dataset="${CSS.escape(dataset)}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // One delegated listener per event type on the stable wrapper; survives renders.
@@ -71,21 +120,31 @@ delegate(snapshotsWrap, {
   clone: ({ snap }) => openCloneSnapDialog(snap),
   send:  ({ snap }) => openSendSnapDialog(snap),
   del:   ({ snap }) => deleteSnapshot(snap),
+  'collapse-group': ({ dataset }) => {
+    if (state.collapsedSnapGroups.has(dataset)) state.collapsedSnapGroups.delete(dataset);
+    else state.collapsedSnapGroups.add(dataset);
+    renderSnapshots();
+  },
 });
 delegate(snapshotsWrap, {
   check: ({ snap }, el) => {
     if (el.checked) state.selectedSnaps.add(snap);
     else state.selectedSnaps.delete(snap);
-    _updateMultiDeleteBtn();
-    // sync select-all state
-    const all = [...snapshotsWrap.querySelectorAll('.snap-check')];
-    document.getElementById('snapCheckAll').checked = all.length > 0 && all.every(c => c.checked);
+    renderSnapshots();
+  },
+  'check-group': ({ dataset }, el) => {
+    for (const s of visibleSnapshots()) {
+      if (s.dataset !== dataset) continue;
+      if (el.checked) state.selectedSnaps.add(s.name);
+      else state.selectedSnaps.delete(s.name);
+    }
+    renderSnapshots();
   },
   'check-all': (d, el) => {
-    snapshotsWrap.querySelectorAll('.snap-check').forEach(cb => {
-      if (el.checked) state.selectedSnaps.add(cb.dataset.snap);
-      else state.selectedSnaps.delete(cb.dataset.snap);
-    });
+    for (const s of visibleSnapshots()) {
+      if (el.checked) state.selectedSnaps.add(s.name);
+      else state.selectedSnaps.delete(s.name);
+    }
     renderSnapshots();
   },
 }, 'change');

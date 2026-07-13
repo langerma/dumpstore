@@ -39,7 +39,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset rewrite** — apply updated properties (compression, checksum, copies) to already-stored data via `zfs rewrite` from the dataset detail drawer; recurse/skip-snapshot-shared/skip-clone-shared options; runs as a background job in the Jobs tab
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Per-user/group space & quotas** — see who consumes space on a filesystem (`zfs userspace`/`zfs groupspace`) and set or remove `userquota@`/`groupquota@` limits inline
-- **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
+- **Snapshot management** — snapshots grouped into collapsible per-dataset sections (count, total size, newest age on the header); rows show relative age; create (recursive) and delete with styled confirm dialogs; per-group and global bulk select feeding a batch-delete toolbar
 - **Dataset rename** — rename a dataset or volume in place (same-parent constraint)
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Snapshot diff** — see what changed between a snapshot and a later snapshot or the live filesystem (`zfs diff`); color-coded change types with a path filter

@@ -6,6 +6,7 @@ import {
   openNFSDialog, openSMBDialog, openISCSIDialog,
 } from './dataset-dialogs.js';
 import { openAutoSnapDialog } from './pools.js';
+import { revealSnapshotGroup } from './snapshots.js';
 
 // ── Dataset detail drawer ─────────────────────────────────────────────────────
 // Slide-in panel opened by clicking a dataset row. Read-only sections
@@ -331,9 +332,7 @@ delegate(drawer, {
     const name = state.selectedDataset;
     closeDatasetDrawer();
     document.querySelector('.tab-btn[data-tab="snapshots"]')?.click();
-    const filter = document.getElementById('snap-filter');
-    filter.value = name;
-    filter.dispatchEvent(new Event('input'));
+    revealSnapshotGroup(name);
   },
 });
 

@@ -16,7 +16,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
-- **Snapshot management** — list, create (recursive), and delete snapshots
+- **Snapshot management** — grouped by dataset into collapsible sections with count/size/age summaries; relative ages, per-group bulk select, batch delete; create (recursive) and delete
 - **Dataset rename** — rename a dataset or volume in place
 - **Snapshot clone** — create a new writable dataset from an existing snapshot
 - **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab; optional incremental and `--raw`

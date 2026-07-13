@@ -38,6 +38,20 @@ export function fmtDate(epoch) {
   return new Date(epoch * 1000).toLocaleString();
 }
 
+// Relative age from a unix-seconds timestamp: "3d ago", "2h ago", "5m ago".
+export function fmtAge(epoch) {
+  if (!epoch) return '—';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - epoch));
+  if (secs < 60) return 'just now';
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 365) return `${d}d ago`;
+  return `${Math.floor(d / 365)}y ago`;
+}
+
 export function fmtPct(p) {
   return p.toFixed(1) + '%';
 }

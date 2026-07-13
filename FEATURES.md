@@ -12,7 +12,7 @@
 | Dataset creation         | v0.0.1 | Filesystems and volumes with all ZFS properties                                                                                |
 | Dataset editing          | v0.0.1 | Update properties in place (set or inherit)                                                                                    |
 | Dataset deletion         | v0.0.1 | Recursive option; confirm-by-typing dialog                                                                                     |
-| Snapshot management      | v0.0.1 | List, create (recursive), delete single or multiple (batch delete with checkboxes)                                             |
+| Snapshot management      | v0.0.1 | Grouped by dataset into collapsible sections (count/size/age header); create (recursive), delete single or batch via per-group/global select |
 | Prometheus metrics       | v0.0.8 | HTTP request counters/latency, Ansible playbook counters/duration, Go runtime stats                                            |
 | Install script           | v0.0.8 | `install.sh` — build, install, register service on Linux and FreeBSD                                                           |
 | Live updates (SSE)       | v0.0.2 | Server-Sent Events for pools, datasets, snapshots, I/O; falls back to REST polling                                             |
@@ -59,6 +59,7 @@
 | Snapshot diff              | v0.1.14 | Diff button per snapshot row — `zfs diff` against a later snapshot or the live filesystem; color-coded change types, client-side filter, 10k entry cap; `GET /api/snapshots/diff`; closes #24 |
 | Dataset rewrite            | v0.1.14 | "Rewrite data…" in the dataset detail drawer — `zfs rewrite` with `-r`/`-S`/`-C` options; runs as a background job (Jobs tab); `POST /api/rewrite/{name}`; closes #50 |
 | Datasets tab redesign      | Unreleased | Per-pool sections with health/capacity header rows, usage bars, status chips, hover-revealed quick actions, and a slide-in detail drawer with grouped actions and inline property editing; part 1 of #63 |
+| Snapshots tab redesign     | Unreleased | Collapsible per-dataset groups with count/size/age headers, relative ages, per-group bulk select, hover-revealed actions; part 2 of #63, closes #63 |
 | Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
 
 ---
