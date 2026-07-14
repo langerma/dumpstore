@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,7 +12,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/api"
@@ -20,6 +24,7 @@ import (
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
 	"dumpstore/internal/logging"
+	otelx "dumpstore/internal/otel"
 	"dumpstore/internal/platform"
 	"dumpstore/internal/replication"
 	"dumpstore/internal/schema"
@@ -39,6 +44,7 @@ func main() {
 		showVersion = flag.Bool("version", false, "Print version and exit")
 		configPath  = flag.String("config", platform.ConfigDir(runtime.GOOS)+"/dumpstore.conf", "Config file path")
 		setPassword = flag.Bool("set-password", false, "Set admin password and exit")
+		logStdout   = flag.Bool("log-stdout", true, "Write logs to stdout (journald/logfile); disable when shipping logs via OTLP only")
 		tlsFlag     = flag.Bool("tls", false, "Enable HTTPS (requires tls_cert_path and tls_key_path in config)")
 		tlsPort     = flag.String("tls-port", "443", "HTTPS listen port")
 		httpPort    = flag.String("http-port", "80", "HTTP listen port for redirect to HTTPS (used when --tls is set)")
@@ -62,11 +68,30 @@ func main() {
 	if *debug {
 		level = slog.LevelDebug
 	}
-	// When running under systemd with StandardOutput=journal, prepend syslog-style
-	// priority prefixes (<N>) so the journal stores the correct PRIORITY field.
-	// systemd sets JOURNAL_STREAM when stdout is connected to the journal.
-	// Without the prefix, every line lands at PRIORITY=6 (info) regardless of level.
-	slog.SetDefault(slog.New(logging.NewJournalHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+	// Single-producer logging: slog feeds the OTEL log pipeline, whose journald
+	// exporter reproduces the classic format (syslog <N> priority prefixes under
+	// systemd, see internal/logging). When OTEL_EXPORTER_OTLP_* is set, the same
+	// records are additionally exported over OTLP, and trace/metric providers
+	// are installed (no-op otherwise). -log-stdout=false drops the local branch
+	// for OTLP-only setups.
+	var logOut io.Writer = os.Stdout
+	if !*logStdout {
+		if !otelx.Enabled() {
+			// Explicit choice is respected, but a server with no log sink at
+			// all is almost certainly a misconfiguration — say so while we
+			// still can.
+			fmt.Fprintln(os.Stderr, "warning: -log-stdout=false with no OTLP endpoint configured — all logs will be discarded")
+		}
+		logOut = nil
+	}
+	otelProviders, err := otelx.Init(context.Background(), version, logOut)
+	if err != nil {
+		slog.SetDefault(slog.New(logging.NewJournalHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+		slog.Error("otel init failed — continuing with journald-only logging", "err", err)
+	} else {
+		slog.SetDefault(slog.New(logging.NewAppHandler(otelProviders.Logs, level)))
+		defer otelProviders.Shutdown(context.Background()) //nolint:errcheck
+	}
 
 	if *baseDir == "" {
 		exe, err := os.Executable()
@@ -150,6 +175,7 @@ func main() {
 	defer sched.Stop()
 
 	apiHandler := api.NewHandler(runner, version, b, jobMgr, replRunner, autosnapRunner, cfg, store, *configPath)
+	apiHandler.SetOtelInfo(otelx.Status())
 
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, cfg, store, rl)
@@ -160,6 +186,18 @@ func main() {
 
 	authMW := auth.NewMiddleware(cfg, store)
 	handler := logging.RequestLogger(authMW.Wrap(mux))
+	if otelx.Enabled() {
+		// Outermost so RequestLogger's context carries the span. Static assets
+		// and the hours-long SSE stream are not worth a span each.
+		handler = otelhttp.NewHandler(handler, "dumpstore",
+			otelhttp.WithFilter(func(r *http.Request) bool {
+				if r.URL.Path == "/api/events" {
+					return false
+				}
+				return strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/")
+			}),
+		)
+	}
 
 	if *tlsFlag && cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
 		httpsAddr := ":" + *tlsPort

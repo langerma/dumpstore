@@ -11,9 +11,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer resolves through the global provider — a no-op unless the OTEL SDK
+// is installed at startup.
+var tracer = otel.Tracer("dumpstore")
 
 // TaskResult holds the raw result fields from a single Ansible task (used by RunAndGetStdout).
 type TaskResult struct {
@@ -83,19 +93,39 @@ func (r *Runner) EmitMetrics(w io.Writer) {
 	r.metrics.emitTo(w)
 }
 
-// Run executes a playbook and returns the parsed output.
-func (r *Runner) Run(playbook string, extraVars map[string]string) (*PlaybookOutput, error) {
-	return r.runCore(playbook, extraVars, nil)
+// Run executes a playbook and returns the parsed output. ctx is used for
+// trace-span parenting only — cancellation is deliberately not propagated
+// (a client disconnect must not kill a mutating playbook mid-apply).
+func (r *Runner) Run(ctx context.Context, playbook string, extraVars map[string]string) (*PlaybookOutput, error) {
+	return r.runCore(ctx, playbook, extraVars, nil)
 }
 
 // RunStreaming executes a playbook, calling onStep for each task as it completes.
-func (r *Runner) RunStreaming(playbook string, extraVars map[string]string, onStep func(TaskStep)) (*PlaybookOutput, error) {
-	return r.runCore(playbook, extraVars, onStep)
+func (r *Runner) RunStreaming(ctx context.Context, playbook string, extraVars map[string]string, onStep func(TaskStep)) (*PlaybookOutput, error) {
+	return r.runCore(ctx, playbook, extraVars, onStep)
 }
 
-func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep func(TaskStep)) (*PlaybookOutput, error) {
+func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[string]string, onStep func(TaskStep)) (out *PlaybookOutput, err error) {
 	playbookPath := filepath.Join(r.PlaybookDir, playbook)
 	playbookLabel := strings.TrimSuffix(playbook, ".yml")
+
+	varKeys := make([]string, 0, len(extraVars))
+	for k := range extraVars {
+		varKeys = append(varKeys, k)
+	}
+	sort.Strings(varKeys)
+	// Keys only — extra-var values may carry passwords.
+	ctx, span := tracer.Start(ctx, "ansible.playbook", trace.WithAttributes(
+		attribute.String("ansible.playbook", playbookLabel),
+		attribute.StringSlice("ansible.extra_var_keys", varKeys),
+	))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	args := []string{"-i", r.InventoryPath, playbookPath}
 	if len(extraVars) > 0 {
@@ -106,7 +136,7 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 		args = append(args, "--extra-vars", string(ev))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.Timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
@@ -156,7 +186,7 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 		return nil, fmt.Errorf("ansible-playbook %s: timed out after %s", playbook, r.Timeout)
 	}
 
-	out := &PlaybookOutput{steps: steps}
+	out = &PlaybookOutput{steps: steps}
 
 	// Scan for task-level failures — authoritative failure signal.
 	for _, s := range steps {
@@ -184,8 +214,8 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 
 // RunAndGetStdout runs a playbook and returns the stdout of the named task.
 // It looks up the task by name in the NDJSON step output.
-func (r *Runner) RunAndGetStdout(playbook, taskName string, extraVars map[string]string) (string, error) {
-	out, err := r.Run(playbook, extraVars)
+func (r *Runner) RunAndGetStdout(ctx context.Context, playbook, taskName string, extraVars map[string]string) (string, error) {
+	out, err := r.Run(ctx, playbook, extraVars)
 	if err != nil {
 		return "", err
 	}

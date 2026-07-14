@@ -64,6 +64,7 @@
 | Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
 | Software card tiers        | Unreleased | Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones — new "Needed for" column names the feature each optional tool unlocks; a missing required tool shows a red "missing" badge instead of grey N/A. Closes #135 |
 | ZFS presence checks        | Unreleased | Startup dependency check now verifies `zfs`/`zpool` in PATH (fail fast instead of every tab erroring); on FreeBSD a System-panel warning appears when the ZFS kernel module is not loaded (`kldstat -q -m zfs`). Closes #136 |
+| OpenTelemetry export       | Unreleased | Env-gated OTLP export (no-op by default): per-request trace spans with Ansible/ops child spans and background job/replication/autosnap root spans; single-producer log pipeline (journald format preserved byte-for-byte, OTLP branch adds `trace_id` correlation); Go runtime + HTTP metrics via OTLP alongside the unchanged Prometheus `/metrics`. Phases 1+2 of #49 |
 
 ---
 

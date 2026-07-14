@@ -189,6 +189,14 @@ All playbooks target `localhost` with `gather_facts: false`. Each playbook:
 2. Has an `assert` task that validates all inputs before any mutation
 3. Has stable task names (the runner looks them up by name for `RunAndGetStdout`)
 
+## Observability
+
+Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the push path, gated entirely by the standard `OTEL_EXPORTER_OTLP_*` env vars — unset means every OTEL call site is a no-op.
+
+- **Traces** — `otelhttp` wraps the middleware chain (outermost, so `RequestLogger` sees the span); the span is renamed to `METHOD /route/pattern` after mux dispatch and tagged with `req_id`. The Ansible runner and the ops layer open child spans from the request context; they use `context.WithoutCancel` so a client disconnect can never kill a mutating command. Jobs get root spans linked (not parented) to the dispatching request since they outlive it; scheduled replication runs and autosnap fires get root spans of their own. ZFS read calls are deliberately untraced.
+- **Logs (single-producer pipeline)** — slog's default handler is an `otelslog` bridge into one `sdk/log.LoggerProvider`. Its synchronous journald exporter (`internal/logging.JournalExporter`) reproduces the pre-OTEL output byte-for-byte (golden-tested), including syslog `<N>` priority prefixes, and appends `trace_id`/`span_id` when present; the OTLP branch is a batch processor on the *same* provider, so both sinks emit the same record by construction. Never tee logs at the slog level. `-log-stdout=false` drops the journald branch for OTLP-only setups (startup warning when that would leave no sink at all).
+- **Metrics** — Go runtime metrics and otelhttp's `http.server.*` pushed via OTLP; the Prometheus registry is untouched (phase 3 of #49, migrating it to the OTEL meter, is deliberately deferred).
+
 ## Security
 
 - Input to Ansible extra-vars is validated for shell-special characters (`@;|&$\``) before the playbook call

@@ -55,7 +55,7 @@ func (h *Handler) mutateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp(servicePlaybook(), map[string]string{
+	out, err := h.runOp(r.Context(), servicePlaybook(), map[string]string{
 		"service_name": unitName,
 		"action":       action,
 	})

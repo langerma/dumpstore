@@ -16,7 +16,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer resolves through the global provider — a no-op unless the OTEL SDK
+// is installed at startup.
+var tracer = otel.Tracer("dumpstore")
 
 const (
 	defaultTailSize   = 64 * 1024 // 64 KiB stdout + stderr each
@@ -39,6 +48,26 @@ type entry struct {
 	mu     sync.Mutex
 	job    Job
 	cancel func() error
+	span   trace.Span // job-lifetime span, ended by finish(); nil-safe no-op when OTEL is off
+}
+
+// startJobSpan opens a root span covering the whole job lifetime. Jobs outlive
+// the dispatching HTTP request, so the request's span (if any) is attached as
+// a link rather than a parent.
+func startJobSpan(ctx context.Context, jobType, id string, args []string) trace.Span {
+	opts := []trace.SpanStartOption{
+		trace.WithNewRoot(),
+		trace.WithAttributes(
+			attribute.String("job.type", jobType),
+			attribute.String("job.id", id),
+			attribute.StringSlice("job.argv", args),
+		),
+	}
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: sc}))
+	}
+	_, span := tracer.Start(ctx, "job."+jobType, opts...)
+	return span
 }
 
 func (e *entry) snapshot() Job {
@@ -121,7 +150,7 @@ func (m *Manager) loadFromDisk() error {
 // returns immediately with the created Job (status=running). The actual
 // process is supervised by a background goroutine that updates the job
 // record on completion. argv[0] must be an executable.
-func (m *Manager) Run(jobType string, argv []string) (Job, error) {
+func (m *Manager) Run(callerCtx context.Context, jobType string, argv []string) (Job, error) {
 	if len(argv) == 0 {
 		return Job{}, errors.New("argv required")
 	}
@@ -147,6 +176,7 @@ func (m *Manager) Run(jobType string, argv []string) (Job, error) {
 			Status:    StatusRunning,
 			StartedAt: time.Now().UTC(),
 		},
+		span: startJobSpan(callerCtx, jobType, id, argv),
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -211,7 +241,7 @@ func (m *Manager) Run(jobType string, argv []string) (Job, error) {
 // usually causes a derived failure on `zfs recv`.
 //
 // Args is recorded as left + ["|"] + right purely for display.
-func (m *Manager) RunPipeline(jobType string, left, right []string) (Job, error) {
+func (m *Manager) RunPipeline(callerCtx context.Context, jobType string, left, right []string) (Job, error) {
 	if len(left) == 0 || len(right) == 0 {
 		return Job{}, errors.New("both left and right argv required")
 	}
@@ -295,6 +325,8 @@ func (m *Manager) RunPipeline(jobType string, left, right []string) (Job, error)
 			Status:    StatusRunning,
 			StartedAt: time.Now().UTC(),
 		},
+		span: startJobSpan(callerCtx, jobType, id,
+			append(append([]string{}, left...), append([]string{"|"}, right...)...)),
 		cancel: func() error {
 			pgid, err := syscall.Getpgid(leaderPid)
 			if err != nil {
@@ -384,6 +416,23 @@ func (m *Manager) collect(e *entry, r io.Reader, stdout bool) {
 }
 
 func (m *Manager) finish(e *entry, runErr error) {
+	defer func() {
+		if e.span == nil {
+			return
+		}
+		final := e.snapshot()
+		e.span.SetAttributes(
+			attribute.String("job.status", string(final.Status)),
+			attribute.Int("job.exit_code", final.ExitCode),
+		)
+		if final.Status != StatusSuccess {
+			e.span.SetStatus(codes.Error, string(final.Status))
+			if runErr != nil {
+				e.span.RecordError(runErr)
+			}
+		}
+		e.span.End()
+	}()
 	e.mu.Lock()
 	e.job.FinishedAt = time.Now().UTC()
 	switch {

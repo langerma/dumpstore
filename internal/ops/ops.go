@@ -19,8 +19,17 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"dumpstore/internal/ansible"
 )
+
+// tracer resolves through the global provider — a no-op unless the OTEL SDK
+// is installed at startup.
+var tracer = otel.Tracer("dumpstore")
 
 // allowedBinaries is the closed set of binaries the ops layer may execute.
 // Handlers build steps from hardcoded argv literals; this check makes
@@ -64,11 +73,11 @@ func NewRunner() *Runner {
 // unless that step has ContinueOnError set; the returned Result always
 // contains every step that ran, so callers can hand it to the op-log even
 // on error.
-func (r *Runner) Run(steps []Step, onStep func(ansible.TaskStep)) (*Result, error) {
+func (r *Runner) Run(ctx context.Context, steps []Step, onStep func(ansible.TaskStep)) (*Result, error) {
 	res := &Result{}
 	var failed []string
 	for _, st := range steps {
-		ts, err := r.runStep(st)
+		ts, err := r.runStep(ctx, st)
 		res.steps = append(res.steps, ts)
 		if onStep != nil {
 			onStep(ts)
@@ -87,14 +96,23 @@ func (r *Runner) Run(steps []Step, onStep func(ansible.TaskStep)) (*Result, erro
 	return res, nil
 }
 
-func (r *Runner) runStep(st Step) (ansible.TaskStep, error) {
+func (r *Runner) runStep(ctx context.Context, st Step) (ansible.TaskStep, error) {
 	if len(st.Argv) == 0 || !allowedBinaries[st.Argv[0]] {
 		ts := ansible.TaskStep{Name: st.Name, Status: "failed",
 			Msg: "refusing to execute: binary not in the ops allowlist"}
 		return ts, fmt.Errorf("%s: %s", st.Name, ts.Msg)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+	// Argv never carries secrets (validated names/sizes/devices only).
+	ctx, span := tracer.Start(ctx, "ops."+opLabel(st.Argv), trace.WithAttributes(
+		attribute.String("ops.step", st.Name),
+		attribute.StringSlice("ops.argv", st.Argv),
+	))
+	defer span.End()
+
+	// ctx parents the span; cancellation is not propagated — an interrupted
+	// client must not kill a mutating zfs/zpool command mid-flight.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.Timeout)
 	defer cancel()
 
 	start := time.Now()
@@ -108,7 +126,10 @@ func (r *Runner) runStep(st Step) (ansible.TaskStep, error) {
 		if ts.Msg == "" {
 			ts.Msg = err.Error()
 		}
-		return ts, fmt.Errorf("%s: %s", strings.Join(st.Argv, " "), ts.Msg)
+		stepErr := fmt.Errorf("%s: %s", strings.Join(st.Argv, " "), ts.Msg)
+		span.RecordError(stepErr)
+		span.SetStatus(codes.Error, ts.Msg)
+		return ts, stepErr
 	}
 	return ts, nil
 }

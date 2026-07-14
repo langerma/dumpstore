@@ -13,6 +13,11 @@
 #   dumpstore_dir (path):      Base directory. Default: /usr/local/lib/dumpstore
 #   dumpstore_config (path):   Config file. Default: /usr/local/etc/dumpstore/dumpstore.conf
 #   dumpstore_logfile (path):  Log file. Default: /var/log/dumpstore.log
+#
+# OpenTelemetry export (optional): set the standard OTLP env vars for the
+# service, e.g. in rc.conf:
+#   dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.example:4318"
+# All OTEL machinery is a no-op while these are unset.
 
 . /etc/rc.subr
 

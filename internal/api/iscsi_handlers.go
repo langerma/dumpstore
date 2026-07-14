@@ -109,7 +109,7 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		playbook = "iscsi_target_create_freebsd.yml"
 	}
 
-	out, err := h.runOp(playbook, map[string]string{
+	out, err := h.runOp(r.Context(), playbook, map[string]string{
 		"zvol":          req.Zvol,
 		"iqn":           req.IQN,
 		"portal_ip":     req.PortalIP,
@@ -152,7 +152,7 @@ func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
 		playbook = "iscsi_target_delete_freebsd.yml"
 	}
 
-	out, err := h.runOp(playbook, map[string]string{"iqn": iqn, "zvol": zvol})
+	out, err := h.runOp(r.Context(), playbook, map[string]string{"iqn": iqn, "zvol": zvol})
 	auditLog(r.Context(), r, "iscsi.delete", zvol, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)

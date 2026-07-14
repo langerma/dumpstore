@@ -129,7 +129,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("zfs_dataset_set.yml", vars)
+	out, err := h.runOp(r.Context(), "zfs_dataset_set.yml", vars)
 	auditLog(r.Context(), r, "dataset.modify", name, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -221,7 +221,7 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		"copies":       req.Copies,
 		"xattr":        req.Xattr,
 	}
-	out, err := h.runOp("zfs_dataset_create.yml", vars)
+	out, err := h.runOp(r.Context(), "zfs_dataset_create.yml", vars)
 	auditLog(r.Context(), r, "dataset.create", req.Name, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -293,7 +293,7 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		argv = append(argv, "-r")
 	}
 	argv = append(argv, req.Dataset+"@"+req.SnapName)
-	out, err := h.runLocal(ops.Step{Name: "Create snapshot " + req.Dataset + "@" + req.SnapName, Argv: argv})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Create snapshot " + req.Dataset + "@" + req.SnapName, Argv: argv})
 	auditLog(r.Context(), r, "snapshot.create", req.Dataset+"@"+req.SnapName, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -348,7 +348,7 @@ func (h *Handler) renameDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("zfs_dataset_rename.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "zfs_dataset_rename.yml", map[string]string{
 		"name":     req.Name,
 		"new_name": req.NewName,
 	})
@@ -396,7 +396,7 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runOp("zfs_dataset_destroy.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "zfs_dataset_destroy.yml", map[string]string{
 		"name":      name,
 		"recursive": recursive,
 	})
@@ -446,7 +446,7 @@ func (h *Handler) cloneSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runLocal(ops.Step{
+	out, err := h.runLocal(r.Context(), ops.Step{
 		Name: "Clone " + req.Snapshot + " to " + req.Target,
 		Argv: []string{"zfs", "clone", req.Snapshot, req.Target},
 	})
@@ -548,7 +548,7 @@ func (h *Handler) sendSnapshot(w http.ResponseWriter, r *http.Request) {
 		recv = []string{"zfs", "recv", req.Target}
 	}
 
-	job, err := h.jobs.RunPipeline("snapshot.send", send, recv)
+	job, err := h.jobs.RunPipeline(r.Context(), "snapshot.send", send, recv)
 	auditLog(r.Context(), r, "snapshot.send", req.Snapshot+" -> "+dest, err)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to start job: %w", err), nil)
@@ -641,7 +641,7 @@ func (h *Handler) setUserQuota(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{
+	out, err := h.runLocal(r.Context(), ops.Step{
 		Name: "Set " + req.Kind + "quota@" + req.Principal + " on " + name,
 		Argv: []string{"zfs", "set", req.Kind + "quota@" + req.Principal + "=" + req.Quota, name},
 	})
@@ -766,7 +766,7 @@ func (h *Handler) rewriteDataset(w http.ResponseWriter, r *http.Request) {
 	}
 	argv = append(argv, ds.Mountpoint)
 
-	job, err := h.jobs.Run("dataset.rewrite", argv)
+	job, err := h.jobs.Run(r.Context(), "dataset.rewrite", argv)
 	auditLog(r.Context(), r, "dataset.rewrite", name, err)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("failed to start job: %w", err), nil)
@@ -808,7 +808,7 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		argv = append(argv, "-r")
 	}
 	argv = append(argv, snapshot)
-	out, err := h.runLocal(ops.Step{Name: "Destroy snapshot " + snapshot, Argv: argv})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Destroy snapshot " + snapshot, Argv: argv})
 	auditLog(r.Context(), r, "snapshot.destroy", snapshot, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -862,7 +862,7 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 			ContinueOnError: true,
 		})
 	}
-	out, err := h.runLocal(steps...)
+	out, err := h.runLocal(r.Context(), steps...)
 	auditLog(r.Context(), r, "snapshot.batch_destroy", strings.Join(body.Snapshots, ","), err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -961,7 +961,7 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		recursive = "true"
 	}
 
-	out, err := h.runOp("dataset_chown.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "dataset_chown.yml", map[string]string{
 		"mountpoint": mp,
 		"owner":      req.Owner,
 		"group":      req.Group,
@@ -1012,7 +1012,7 @@ func (h *Handler) startScrub(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{Name: "Start scrub on " + pool, Argv: []string{"zpool", "scrub", pool}})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Start scrub on " + pool, Argv: []string{"zpool", "scrub", pool}})
 	auditLog(r.Context(), r, "scrub.start", pool, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -1034,7 +1034,7 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{Name: "Cancel scrub on " + pool, Argv: []string{"zpool", "scrub", "-s", pool}})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Cancel scrub on " + pool, Argv: []string{"zpool", "scrub", "-s", pool}})
 	auditLog(r.Context(), r, "scrub.cancel", pool, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -1076,7 +1076,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		if req.ThresholdDays <= 0 {
 			req.ThresholdDays = 35
 		}
-		out, err := h.runOp("zfs_scrub_periodic_enable.yml", map[string]string{
+		out, err := h.runOp(r.Context(), "zfs_scrub_periodic_enable.yml", map[string]string{
 			"pool":           pool,
 			"threshold_days": strconv.Itoa(req.ThresholdDays),
 		})
@@ -1090,7 +1090,7 @@ func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Linux: add to ZFS_SCRUB_POOLS — no schedule params required.
-	out, err := h.runOp("zfs_scrub_zfsutils_enable.yml", map[string]string{"pool": pool})
+	out, err := h.runOp(r.Context(), "zfs_scrub_zfsutils_enable.yml", map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub_schedule.set", pool, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -1114,7 +1114,7 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		playbook = "zfs_scrub_periodic_disable.yml"
 	}
 
-	out, err := h.runOp(playbook, map[string]string{"pool": pool})
+	out, err := h.runOp(r.Context(), playbook, map[string]string{"pool": pool})
 	auditLog(r.Context(), r, "scrub_schedule.delete", pool, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -1222,7 +1222,7 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 		vars[ap.varName] = val
 	}
 
-	out, err := h.runOp("zfs_autosnap_set.yml", vars)
+	out, err := h.runOp(r.Context(), "zfs_autosnap_set.yml", vars)
 	auditLog(r.Context(), r, "auto_snapshot.set", name, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)

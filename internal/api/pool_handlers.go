@@ -98,7 +98,7 @@ func (h *Handler) createPool(w http.ResponseWriter, r *http.Request) {
 		argv = append(argv, req.VdevType)
 	}
 	argv = append(argv, req.Devices...)
-	out, err := h.runLocal(ops.Step{Name: "Create pool " + req.Name, Argv: argv})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Create pool " + req.Name, Argv: argv})
 	auditLog(r.Context(), r, "pool.create", req.Name+" "+req.VdevType+" ["+strings.Join(req.Devices, " ")+"]", err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -214,7 +214,7 @@ func (h *Handler) addPoolDevices(w http.ResponseWriter, r *http.Request, pool, k
 		argv = append(argv, kind)
 	}
 	argv = append(argv, devices...)
-	out, err := h.runLocal(ops.Step{Name: "Add " + kind + " devices to " + pool, Argv: argv})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Add " + kind + " devices to " + pool, Argv: argv})
 	auditLog(r.Context(), r, "pool.add_"+kind, pool+" ["+strings.Join(devices, " ")+"]", err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -238,7 +238,7 @@ func (h *Handler) removePoolDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{
+	out, err := h.runLocal(r.Context(), ops.Step{
 		Name: "Remove " + device + " from " + pool,
 		Argv: []string{"zpool", "remove", pool, device},
 	})
@@ -281,7 +281,7 @@ func (h *Handler) importPool(w http.ResponseWriter, r *http.Request) {
 		argv = append(argv, "-f")
 	}
 	argv = append(argv, req.Pool)
-	out, err := h.runLocal(ops.Step{Name: "Import pool " + req.Pool, Argv: argv})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Import pool " + req.Pool, Argv: argv})
 	auditLog(r.Context(), r, "pool.import", req.Pool, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)
@@ -300,7 +300,7 @@ func (h *Handler) exportPool(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{Name: "Export pool " + pool, Argv: []string{"zpool", "export", pool}})
+	out, err := h.runLocal(r.Context(), ops.Step{Name: "Export pool " + pool, Argv: []string{"zpool", "export", pool}})
 	auditLog(r.Context(), r, "pool.export", pool, err)
 	if err != nil {
 		writeOpsError(r.Context(), w, err, out)

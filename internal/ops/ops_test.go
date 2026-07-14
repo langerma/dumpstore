@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestRunSuccess(t *testing.T) {
 	r := NewRunner()
 	allowForTest(t, "echo")
 	var seen []string
-	res, err := r.Run([]Step{
+	res, err := r.Run(context.Background(), []Step{
 		{Name: "say hi", Argv: []string{"echo", "hi"}},
 		{Name: "say bye", Argv: []string{"echo", "bye"}},
 	}, func(ts ansible.TaskStep) { seen = append(seen, ts.Name) })
@@ -47,7 +48,7 @@ func TestRunSuccess(t *testing.T) {
 func TestRunStopsOnFailure(t *testing.T) {
 	r := NewRunner()
 	allowForTest(t, "echo", "false")
-	res, err := r.Run([]Step{
+	res, err := r.Run(context.Background(), []Step{
 		{Name: "fail", Argv: []string{"false"}},
 		{Name: "never runs", Argv: []string{"echo", "unreachable"}},
 	}, nil)
@@ -66,7 +67,7 @@ func TestRunStopsOnFailure(t *testing.T) {
 func TestRunContinueOnError(t *testing.T) {
 	r := NewRunner()
 	allowForTest(t, "echo", "false")
-	res, err := r.Run([]Step{
+	res, err := r.Run(context.Background(), []Step{
 		{Name: "fail one", Argv: []string{"false"}, ContinueOnError: true},
 		{Name: "still runs", Argv: []string{"echo", "ok"}, ContinueOnError: true},
 	}, nil)
@@ -87,7 +88,7 @@ func TestRunContinueOnError(t *testing.T) {
 func TestRunMissingBinary(t *testing.T) {
 	r := NewRunner()
 	allowForTest(t, "definitely-not-a-real-binary-xyz")
-	res, err := r.Run([]Step{
+	res, err := r.Run(context.Background(), []Step{
 		{Name: "no such tool", Argv: []string{"definitely-not-a-real-binary-xyz"}},
 	}, nil)
 	if err == nil {
@@ -100,7 +101,7 @@ func TestRunMissingBinary(t *testing.T) {
 
 func TestRunRejectsUnlistedBinary(t *testing.T) {
 	r := NewRunner()
-	res, err := r.Run([]Step{
+	res, err := r.Run(context.Background(), []Step{
 		{Name: "not allowed", Argv: []string{"rm", "-rf", "/tmp/x"}},
 	}, nil)
 	if err == nil {

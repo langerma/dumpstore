@@ -94,7 +94,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		"create_group": createGroup,
 		"smb_user":     smbUser,
 	}
-	out, err := h.runOp("user_create.yml", vars)
+	out, err := h.runOp(r.Context(), "user_create.yml", vars)
 	auditLog(r.Context(), r, "user.create", req.Username, err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -152,7 +152,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("user_delete.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "user_delete.yml", map[string]string{
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
 	})
@@ -247,7 +247,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("user_modify.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "user_modify.yml", map[string]string{
 		"username":      name,
 		"uid":           fmt.Sprintf("%d", target.UID),
 		"shell":         req.Shell,
@@ -340,7 +340,7 @@ func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("user_ssh_key_add.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "user_ssh_key_add.yml", map[string]string{
 		"username": name,
 		"home":     target.Home,
 		"key":      req.Key,
@@ -395,7 +395,7 @@ func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("user_ssh_key_remove.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "user_ssh_key_remove.yml", map[string]string{
 		"home": target.Home,
 		"key":  req.Key,
 	})
@@ -429,7 +429,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("group_create.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "group_create.yml", map[string]string{
 		"groupname": req.Groupname,
 		"gid":       req.GID,
 	})
@@ -484,7 +484,7 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("group_delete.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "group_delete.yml", map[string]string{
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
 	})
@@ -582,7 +582,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("group_modify.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "group_modify.yml", map[string]string{
 		"groupname":      name,
 		"gid":            fmt.Sprintf("%d", target.GID),
 		"new_name":       req.NewName,

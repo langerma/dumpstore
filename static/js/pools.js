@@ -42,7 +42,25 @@ export function renderSysInfo() {
         <div class="si-item"><div class="si-label">GC cycles</div><div class="si-value">${s.num_gc}</div></div>
       </div>
       ${zfsInfoHtml()}
+      ${otelInfoHtml(s.otel)}
     </div>`;
+}
+
+// otelInfoHtml renders the OpenTelemetry export status inside the sysinfo
+// card. Configuration is env-driven (OTEL_EXPORTER_OTLP_*), so this is
+// read-only status display — see the Observability section of the README.
+function otelInfoHtml(otel) {
+  const enabled = !!otel?.enabled;
+  const badge = `<span class="type-badge ${enabled ? 'net-up' : 'sw-na'}">${enabled ? 'enabled' : 'disabled'}</span>`;
+  const items = enabled ? `
+        <div class="si-item"><div class="si-label">Endpoint</div><div class="si-value">${esc(otel.endpoint || '—')}</div></div>
+        <div class="si-item"><div class="si-label">Protocol</div><div class="si-value">${esc(otel.protocol || '—')}</div></div>
+        <div class="si-item"><div class="si-label">Service name</div><div class="si-value">${esc(otel.service_name || '—')}</div></div>` : '';
+  return `
+      <div class="sysinfo-section-label" style="margin-top:0.75rem">OpenTelemetry</div>
+      <div class="sysinfo-grid">
+        <div class="si-item"><div class="si-label">Export (OTLP)</div><div class="si-value">${badge}</div></div>${items}
+      </div>`;
 }
 
 // zfsInfoHtml renders the ZFS version and detected capabilities (#119)

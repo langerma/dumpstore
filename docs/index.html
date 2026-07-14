@@ -448,8 +448,8 @@
       <span class="pill">Linux</span>
       <span class="pill">FreeBSD</span>
       <span class="pill">ZFS / OpenZFS</span>
-      <span class="pill">no external Go deps</span>
-      <span class="pill pill-green">stdlib only</span>
+      <span class="pill">minimal Go deps</span>
+      <span class="pill pill-green">stdlib + OTEL SDK</span>
     </div>
   </div>
 
@@ -683,6 +683,13 @@
           <span class="health-badge badge-purple">/metrics</span>
         </div>
         <p>Go runtime, HTTP request counters &amp; latency histograms, and Ansible playbook run metrics out of the box.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">OpenTelemetry export</span>
+          <span class="health-badge badge-purple">OTLP</span>
+        </div>
+        <p>Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and dumpstore pushes traces (per-request spans, Ansible/ops child spans, background job/replication/autosnap spans), logs with <code>trace_id</code> correlation, and Go runtime metrics to any OTLP collector. No-op without the env var.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
