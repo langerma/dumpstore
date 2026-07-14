@@ -202,6 +202,7 @@ type Handler struct {
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
 	configPath string
+	otelInfo   any // effective OTEL status for sysinfo; injected via SetOtelInfo
 }
 
 // NewHandler creates a Handler with the given dependencies.
@@ -247,9 +248,10 @@ func auditLog(ctx context.Context, r *http.Request, action, target string, err e
 }
 
 // runOp executes a playbook and publishes each task step to the ansible.progress
-// SSE topic as it completes, so the frontend can show live progress.
-func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {
-	return h.runner.RunStreaming(playbook, vars, func(step ansible.TaskStep) {
+// SSE topic as it completes, so the frontend can show live progress. ctx is
+// used for trace-span parenting only; the runner drops its cancellation.
+func (h *Handler) runOp(ctx context.Context, playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {
+	return h.runner.RunStreaming(ctx, playbook, vars, func(step ansible.TaskStep) {
 		h.broker.PublishNoCache("ansible.progress", step)
 	})
 }
@@ -257,8 +259,8 @@ func (h *Handler) runOp(playbook string, vars map[string]string) (*ansible.Playb
 // runLocal executes argv steps through the in-process ops layer (#115),
 // publishing each step to the same ansible.progress SSE topic so the
 // frontend's live op-log works identically to playbook-backed writes.
-func (h *Handler) runLocal(steps ...ops.Step) (*ops.Result, error) {
-	return h.ops.Run(steps, func(step ansible.TaskStep) {
+func (h *Handler) runLocal(ctx context.Context, steps ...ops.Step) (*ops.Result, error) {
+	return h.ops.Run(ctx, steps, func(step ansible.TaskStep) {
 		h.broker.PublishNoCache("ansible.progress", step)
 	})
 }
@@ -373,12 +375,18 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/replication/{id}/history", h.getReplicationHistory)
 }
 
+// SetOtelInfo injects the effective OpenTelemetry status for the sysinfo
+// response. Set once at startup by main; this package cannot import
+// internal/otel (cycle via internal/logging).
+func (h *Handler) SetOtelInfo(v any) { h.otelInfo = v }
+
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
 	type response struct {
 		AppVersion string `json:"app_version"`
+		Otel       any    `json:"otel,omitempty"`
 		system.Info
 	}
-	writeJSON(r.Context(), w, response{AppVersion: h.version, Info: system.Get()})
+	writeJSON(r.Context(), w, response{AppVersion: h.version, Otel: h.otelInfo, Info: system.Get()})
 }
 
 func (h *Handler) getNetwork(w http.ResponseWriter, r *http.Request) {

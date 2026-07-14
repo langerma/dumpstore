@@ -15,6 +15,13 @@ ExecStart=/usr/local/lib/dumpstore/dumpstore -addr :8080 -dir /usr/local/lib/dum
 StandardOutput=journal
 StandardError=journal
 
+# OpenTelemetry export (optional) — uncomment to push traces, logs, and
+# runtime metrics to an OTLP collector (Alloy, Tempo/Loki, Jaeger, ...).
+# All OTEL machinery is a no-op while these are unset.
+#Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.example:4318
+#Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+#Environment=OTEL_SERVICE_NAME=dumpstore
+
 Restart=on-failure
 RestartSec=5
 

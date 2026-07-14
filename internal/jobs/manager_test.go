@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ func waitTerminal(t *testing.T, m *Manager, id string) Job {
 
 func TestRun_Success(t *testing.T) {
 	m := newTestManager(t)
-	j, err := m.Run("test", []string{"sh", "-c", "echo hello; echo err >&2; exit 0"})
+	j, err := m.Run(context.Background(), "test", []string{"sh", "-c", "echo hello; echo err >&2; exit 0"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestRun_Success(t *testing.T) {
 
 func TestRun_Failure(t *testing.T) {
 	m := newTestManager(t)
-	j, _ := m.Run("test", []string{"sh", "-c", "exit 7"})
+	j, _ := m.Run(context.Background(), "test", []string{"sh", "-c", "exit 7"})
 	final := waitTerminal(t, m, j.ID)
 	if final.Status != StatusFailed {
 		t.Fatalf("status = %s, want failed", final.Status)
@@ -69,7 +70,7 @@ func TestRun_Failure(t *testing.T) {
 
 func TestCancel(t *testing.T) {
 	m := newTestManager(t)
-	j, _ := m.Run("test", []string{"sh", "-c", "sleep 30"})
+	j, _ := m.Run(context.Background(), "test", []string{"sh", "-c", "sleep 30"})
 	// Give the child a moment to actually start before signalling.
 	time.Sleep(50 * time.Millisecond)
 	if err := m.Cancel(j.ID); err != nil {
@@ -87,7 +88,7 @@ func TestPersistence_Reload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j, _ := m1.Run("test", []string{"sh", "-c", "exit 0"})
+	j, _ := m1.Run(context.Background(), "test", []string{"sh", "-c", "exit 0"})
 	waitTerminal(t, m1, j.ID)
 
 	// New manager over the same dir loads the record.
@@ -137,7 +138,7 @@ func TestPersistence_RunningBecomesInterrupted(t *testing.T) {
 func TestRunPipeline_Success(t *testing.T) {
 	m := newTestManager(t)
 	// `printf hello | tr a-z A-Z` should write HELLO to stdout.
-	j, err := m.RunPipeline("test",
+	j, err := m.RunPipeline(context.Background(), "test",
 		[]string{"sh", "-c", "printf hello"},
 		[]string{"tr", "a-z", "A-Z"},
 	)
@@ -157,7 +158,7 @@ func TestRunPipeline_LeftFails(t *testing.T) {
 	m := newTestManager(t)
 	// Left exits non-zero; the right side may or may not have produced output,
 	// but the job result must be failure.
-	j, _ := m.RunPipeline("test",
+	j, _ := m.RunPipeline(context.Background(), "test",
 		[]string{"sh", "-c", "exit 5"},
 		[]string{"cat"},
 	)
@@ -172,7 +173,7 @@ func TestRunPipeline_LeftFails(t *testing.T) {
 
 func TestRemove_RefusesRunning(t *testing.T) {
 	m := newTestManager(t)
-	j, _ := m.Run("test", []string{"sh", "-c", "sleep 5"})
+	j, _ := m.Run(context.Background(), "test", []string{"sh", "-c", "sleep 5"})
 	time.Sleep(50 * time.Millisecond)
 	if err := m.Remove(j.ID); err == nil {
 		t.Fatalf("Remove on running job should fail")
@@ -205,7 +206,7 @@ func TestNotifier_FiresOnStartAndFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j, _ := m.Run("test", []string{"sh", "-c", "exit 0"})
+	j, _ := m.Run(context.Background(), "test", []string{"sh", "-c", "exit 0"})
 	waitTerminal(t, m, j.ID)
 
 	// m.fire(snap) for the terminal event runs after the job's status becomes

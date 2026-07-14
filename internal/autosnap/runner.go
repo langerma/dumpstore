@@ -11,9 +11,18 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"dumpstore/internal/scheduler"
 	"dumpstore/internal/zfs"
 )
+
+// tracer resolves through the global provider — a no-op unless the OTEL SDK
+// is installed at startup.
+var tracer = otel.Tracer("dumpstore")
 
 // Publisher is the subset of broker.Broker used to push status updates.
 type Publisher interface {
@@ -101,9 +110,16 @@ func (r *Runner) LastRuns() map[Bucket]time.Time {
 // avoiding goroutine fan-out keeps logs / failure handling simple. Errors on
 // one dataset don't stop the rest.
 func (r *Runner) processBucket(ctx context.Context, b Bucket) {
+	// Root span per scheduled fire (the scheduler ctx carries no parent span).
+	ctx, span := tracer.Start(ctx, "autosnap.run",
+		trace.WithAttributes(attribute.String("autosnap.bucket", string(b))))
+	defer span.End()
+
 	props, err := zfs.ListAutoSnapshotProps()
 	if err != nil {
-		slog.Error("autosnap: list props failed", "bucket", b, "err", err)
+		slog.ErrorContext(ctx, "autosnap: list props failed", "bucket", b, "err", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 	now := time.Now()

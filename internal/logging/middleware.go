@@ -5,7 +5,12 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"dumpstore/internal/api"
 )
@@ -29,10 +34,31 @@ func RequestLogger(next http.Handler) http.Handler {
 		r = r.WithContext(api.WithReqID(r.Context(), id))
 		w.Header().Set("X-Request-ID", id)
 
+		// When otelhttp wraps this middleware, cross-reference the span with
+		// the journald req_id. No-op span otherwise.
+		span := trace.SpanFromContext(r.Context())
+		if span.IsRecording() {
+			span.SetAttributes(attribute.String("req_id", id))
+		}
+
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
 		elapsed := time.Since(start)
+
+		// The mux sets r.Pattern in place during dispatch, so the matched route
+		// is only known now: rename the span from the generic operation to the
+		// low-cardinality "METHOD /route". ServeMux patterns are registered
+		// method-qualified ("GET /api/pools"), so strip the method before
+		// composing — semconv http.route is the path template alone.
+		if span.IsRecording() && r.Pattern != "" {
+			route := r.Pattern
+			if _, after, ok := strings.Cut(route, " "); ok {
+				route = after
+			}
+			span.SetName(r.Method + " " + route)
+			span.SetAttributes(semconv.HTTPRoute(route))
+		}
 
 		level := slog.LevelInfo
 		if rw.status >= 500 {

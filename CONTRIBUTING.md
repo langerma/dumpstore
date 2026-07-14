@@ -4,7 +4,7 @@ Thanks for your interest in contributing. dumpstore is a focused project with a 
 
 ## Philosophy
 
-- **No external Go dependencies.** Standard library only. If you think you need a dependency, find a way without it.
+- **Minimal, justified Go dependencies.** Stdlib first — a dependency needs stdlib-grade governance and a reason the stdlib can't cover. Current exceptions: `golang.org/x` (argon2id hashing, terminal prompting) and the CNCF-governed OpenTelemetry SDK (env-gated, no-op by default). If you think you need anything else, find a way without it.
 - **No frameworks on the frontend.** Vanilla JS, no build step, no bundler.
 - **Minimal footprint on the host.** Reads go through direct CLI calls; writes go through Ansible playbooks. Don't blur that line.
 

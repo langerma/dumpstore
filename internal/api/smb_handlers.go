@@ -44,7 +44,7 @@ func (h *Handler) applyConfig(r *http.Request, cfg *smb.SMBConfig) (*ansible.Pla
 	dirsJSON, _ := json.Marshal(dirs)
 	servicesJSON, _ := json.Marshal(smb.ServiceNames(goos))
 
-	return h.runOp("smb_apply.yml", map[string]string{
+	return h.runOp(r.Context(), "smb_apply.yml", map[string]string{
 		"src":            tmp.Name(),
 		"smb_conf":       smb.ConfPath(goos),
 		"dirs":           string(dirsJSON),
@@ -95,7 +95,7 @@ func (h *Handler) initSamba(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 1: check smbd is installed, back up existing conf, create usershares dir.
-	out1, err := h.runOp("smb_init.yml", map[string]string{})
+	out1, err := h.runOp(r.Context(), "smb_init.yml", map[string]string{})
 	auditLog(r.Context(), r, "smb.init", "", err)
 	if err != nil {
 		var steps []ansible.TaskStep
@@ -170,7 +170,7 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
-	out, err := h.runOp("smb_usershare_set.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "smb_usershare_set.yml", map[string]string{
 		"dataset":   dataset,
 		"sharename": req.Sharename,
 	})
@@ -201,7 +201,7 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
-	out, err := h.runOp("smb_usershare_unset.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "smb_usershare_unset.yml", map[string]string{
 		"sharename": sharename,
 	})
 	auditLog(r.Context(), r, "smb_share.delete", dataset, err)
@@ -260,7 +260,7 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("smb_user_add.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "smb_user_add.yml", map[string]string{
 		"username":     name,
 		"smb_password": req.Password,
 	})
@@ -288,7 +288,7 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 	}
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp("smb_user_remove.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "smb_user_remove.yml", map[string]string{
 		"username": name,
 	})
 	auditLog(r.Context(), r, "smb_user.remove", name, err)

@@ -8,9 +8,18 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"dumpstore/internal/jobs"
 	"dumpstore/internal/scheduler"
 )
+
+// tracer resolves through the global provider — a no-op unless the OTEL SDK
+// is installed at startup.
+var tracer = otel.Tracer("dumpstore")
 
 // Publisher is the subset of broker.Broker the runner uses to push UI updates.
 // Decoupling keeps the package independent of the broker concrete type and
@@ -22,8 +31,8 @@ type Publisher interface {
 // JobsRunner is the subset of jobs.Manager the runner depends on. Mirrors the
 // Publisher pattern so tests can swap in a fake.
 type JobsRunner interface {
-	RunPipeline(jobType string, left, right []string) (jobs.Job, error)
-	Run(jobType string, argv []string) (jobs.Job, error)
+	RunPipeline(ctx context.Context, jobType string, left, right []string) (jobs.Job, error)
+	Run(ctx context.Context, jobType string, argv []string) (jobs.Job, error)
 	Get(id string) (jobs.Job, bool)
 }
 
@@ -183,7 +192,23 @@ func (r *Runner) register(t Task) error {
 // execute performs a single replication run end-to-end. Returns the source
 // snapshot name and the dispatched job_id once the send/recv is in flight,
 // then spawns a goroutine to wait for completion and record the outcome.
-func (r *Runner) execute(ctx context.Context, t Task) (string, string, error) {
+func (r *Runner) execute(ctx context.Context, t Task) (_ string, _ string, err error) {
+	// Root span when fired by the scheduler (no span in ctx); child of the
+	// request span on a manual "run now". The hours-long transfer itself is
+	// covered by the linked job span — this one covers the orchestration.
+	ctx, span := tracer.Start(ctx, "replication.run", trace.WithAttributes(
+		attribute.String("replication.task_id", t.ID),
+		attribute.String("replication.source", t.Source),
+		attribute.String("replication.target", t.Target),
+	))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	now := time.Now().UTC()
 	snap := snapName(now)
 	srcSnap := t.Source + "@" + snap
@@ -229,7 +254,7 @@ func (r *Runner) execute(ctx context.Context, t Task) (string, string, error) {
 		recv = recvArgs
 	}
 
-	job, err := r.jobs.RunPipeline("replication.run", send, recv)
+	job, err := r.jobs.RunPipeline(ctx, "replication.run", send, recv)
 	if err != nil {
 		_ = releaseSnapshot(HoldTag, srcSnap, t.Recursive)
 		return "", "", fmt.Errorf("dispatch job: %w", err)

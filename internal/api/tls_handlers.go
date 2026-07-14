@@ -84,7 +84,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("tls_gencert.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "tls_gencert.yml", map[string]string{
 		"hostname": req.Hostname,
 		"cert_dir": req.CertDir,
 	})
@@ -96,7 +96,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 	certPath := req.CertDir + "/cert.pem"
 	keyPath := req.CertDir + "/key.pem"
 
-	cfgOut, cfgErr := h.runOp("tls_set_config.yml", map[string]string{
+	cfgOut, cfgErr := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   certPath,
 		"key_path":    keyPath,
@@ -149,7 +149,7 @@ func (h *Handler) tlsSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("tls_set_config.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   req.CertPath,
 		"key_path":    req.KeyPath,
@@ -201,7 +201,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := h.runOp("tls_acme_issue.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "tls_acme_issue.yml", map[string]string{
 		"email":    req.Email,
 		"domain":   req.Domain,
 		"cert_dir": req.CertDir,
@@ -215,7 +215,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 	certPath := req.CertDir + "/certificates/" + req.Domain + ".crt"
 	keyPath := req.CertDir + "/certificates/" + req.Domain + ".key"
 
-	cfgOut, cfgErr := h.runOp("tls_set_config.yml", map[string]string{
+	cfgOut, cfgErr := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   certPath,
 		"key_path":    keyPath,
@@ -271,7 +271,7 @@ func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
 		certDir = certDirFromCertPath(certPath, h.configPath)
 	}
 
-	out, err := h.runOp("tls_acme_renew.yml", map[string]string{
+	out, err := h.runOp(r.Context(), "tls_acme_renew.yml", map[string]string{
 		"email":    acmeEmail,
 		"domain":   acmeDomain,
 		"cert_dir": certDir,

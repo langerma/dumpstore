@@ -82,9 +82,10 @@ go test -run TestFoo ./internal/api/   # run a single test by name
 go test -tags integration ./tests/integration/...  # integration tests (requires live VM)
 ```
 
-External Go dependencies (both are official golang.org/x packages, same governance as stdlib):
-- `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format)
-- `golang.org/x/term` — echo-disabled password prompting in `--set-password`
+External Go dependencies:
+- `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format); official golang.org/x package
+- `golang.org/x/term` — echo-disabled password prompting in `--set-password`; official golang.org/x package
+- `go.opentelemetry.io/otel` + SDK/contrib modules — traces, runtime metrics, and the log pipeline (#49); CNCF-governed. All exporters are env-gated (`OTEL_EXPORTER_OTLP_*`) and no-op by default. The log SDK always runs: `internal/logging.JournalExporter` is the single producer for journald output, and the OTLP log branch attaches to the same provider when enabled — never tee logs at the slog level.
 
 ---
 
@@ -190,8 +191,11 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
-| `internal/logging/handler.go` | `NewJournalHandler` — slog handler with systemd journal priority prefixes |
-| `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation |
+| `internal/logging/handler.go` | `NewJournalHandler` — legacy slog handler with systemd journal priority prefixes (fallback path only) |
+| `internal/logging/journal_exporter.go` | `JournalExporter` — OTEL log exporter reproducing the journald format (single producer for journald + OTLP logs, #49) |
+| `internal/logging/apphandler.go` | `NewAppHandler` — process-wide slog handler: otelslog bridge + level gate + req_id injection |
+| `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation; renames the otelhttp span to `METHOD /route` after mux dispatch |
+| `internal/otel/otel.go` | `Init`/`Enabled`/`Tracer` — env-gated OTEL SDK setup: trace/meter providers, log pipeline, autoexport OTLP factories (#49) |
 | `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot, rewrite (background job) |
 | `internal/api/device_handlers.go` | Block device list, `zpool replace`, device offline/online |
 | `internal/blockdev/blockdev.go` | `List` — physical block devices (`/sys/block` on Linux, `geom disk list` on FreeBSD); `MarkInUse` — best-effort vdev→device matching |

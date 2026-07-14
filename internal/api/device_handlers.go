@@ -58,7 +58,7 @@ func (h *Handler) replaceDevice(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("replacement device must differ from the old device"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{
+	out, err := h.runLocal(r.Context(), ops.Step{
 		Name: "Replace " + req.OldDevice + " with " + req.NewDevice + " in " + pool,
 		Argv: []string{"zpool", "replace", pool, req.OldDevice, req.NewDevice},
 	})
@@ -99,7 +99,7 @@ func (h *Handler) setDeviceState(w http.ResponseWriter, r *http.Request, subcmd,
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
 		return
 	}
-	out, err := h.runLocal(ops.Step{
+	out, err := h.runLocal(r.Context(), ops.Step{
 		Name: "Take " + req.Device + " " + subcmd + " in " + pool,
 		Argv: []string{"zpool", subcmd, pool, req.Device},
 	})

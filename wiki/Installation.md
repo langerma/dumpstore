@@ -17,6 +17,8 @@
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine — the server checks for `zfs`, `zpool`, and `ansible-playbook` in PATH at startup and refuses to start with a clear error if any is missing. On FreeBSD, the System tab warns when the ZFS kernel module is not loaded even though the userland tools are installed.
 
+Optional: set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. via `systemctl edit dumpstore` or `dumpstore_env` in rc.conf) to export traces, logs, and runtime metrics to an OTLP collector — see the Observability section of the README. Without it, all OTEL machinery is a no-op.
+
 ### Optional packages
 
 Install only what you need:
@@ -186,9 +188,11 @@ The rc script is installed to `/usr/local/etc/rc.d/dumpstore`. To customise, add
 dumpstore_enable="YES"
 dumpstore_addr=":9090"
 dumpstore_dir="/usr/local/lib/dumpstore"
+# optional: OpenTelemetry export (no-op when unset)
+dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.example:4318"
 ```
 
-Then restart: `service dumpstore restart`
+Then restart: `service dumpstore restart`. Logs go to `/var/log/dumpstore.log` in the same format as previous releases; with OTLP enabled they are additionally exported with `trace_id` correlation.
 
 ---
 

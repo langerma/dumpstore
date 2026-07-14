@@ -57,6 +57,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
+- **OpenTelemetry export** — set `OTEL_EXPORTER_OTLP_ENDPOINT` and dumpstore pushes traces (per-request root spans, Ansible/ops child spans, background-job/replication/autosnap spans), logs (the journald stream with `trace_id` correlation), and Go runtime metrics to any OTLP collector; no-op without the env var
 - **Request ID correlation** — every request gets a unique `req_id` carried on all log lines for that request; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
 - **Audit logging** — every mutating operation (dataset/snapshot/user/group/ACL/SMB/iSCSI/scrub create, modify, destroy) emits a structured `slog` audit line with `remote_ip`, `action`, `target`, and `outcome` (`ok`/`err`); `req_id` is included automatically
 
@@ -372,6 +373,37 @@ If no password is configured the service starts but **binds to `127.0.0.1` only*
 
 dumpstore runs as root (required for ZFS). See [SECURITY.md](SECURITY.md) for notes on TLS and the recommended deployment topology.
 
+## Observability
+
+Two complementary exports, both integrations with an external stack (dumpstore never embeds dashboards or alerting — see the scope boundary):
+
+**Prometheus (pull)** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters/latency histograms, and Ansible/ops run metrics. Always on, no configuration.
+
+**OpenTelemetry (push)** — set the standard OTLP environment variables and dumpstore exports traces, logs, and runtime metrics to your collector (Alloy, Tempo/Loki/Mimir, Jaeger, …). Without them, every OTEL code path is a no-op.
+
+```bash
+# Linux (systemd): systemctl edit dumpstore, or uncomment the examples in the unit
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318
+Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf   # default; "grpc" also supported
+Environment=OTEL_SERVICE_NAME=dumpstore                 # default
+
+# FreeBSD (rc.d): rc.subr passes ${name}_env to the daemon
+sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318"
+service dumpstore restart
+```
+
+On Linux the log stream keeps its systemd journal integration (syslog `<N>` priority prefixes when attached to the journal); on FreeBSD the same records go to the daemon logfile (`/var/log/dumpstore.log`) in the plain format, unchanged from previous releases. The OTLP export behaves identically on both.
+
+What gets exported when enabled:
+
+- **Traces** — a root span per API request (named `METHOD /route/pattern`, carrying the journald `req_id` for two-way correlation); child spans for every Ansible playbook run (`ansible.playbook`, extra-var *keys* only — values may hold secrets) and every ops-lane command (`ops.zfs snapshot`, argv attached); root spans for background work — jobs (`job.<type>`, linked to the dispatching request's span), scheduled replication runs (`replication.run`), and auto-snapshot fires (`autosnap.run`). ZFS *read* calls are deliberately not traced (sub-10 ms, high volume).
+- **Logs** — the same records that go to journald, shipped over OTLP with `trace_id`/`span_id` correlation. Logging is a single-producer pipeline: slog feeds the OTEL log SDK, whose journald exporter reproduces the classic output (identical format, syslog priority prefixes) while the OTLP branch exports the same stream. journald lines gain `trace_id`/`span_id` too when a request context is present. If the collector is down, OTLP records buffer and drop in the background — journald output is never affected.
+- **Metrics** — Go runtime metrics (`contrib/instrumentation/runtime`) and `http.server.*` metrics pushed via OTLP, alongside the unchanged Prometheus endpoint.
+
+All standard OTEL SDK env vars are honored (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_TRACES_SAMPLER`, `OTEL_SDK_DISABLED`, …); a client disconnect never cancels a mutating command — request contexts are used for span parenting only.
+
+For OTLP-only setups, local logging can be switched off with `-log-stdout=false` — the journald/logfile branch is dropped from the pipeline and records go exclusively to the collector. With no OTLP endpoint configured this discards all logs, so dumpstore prints a warning to stderr at startup in that combination.
+
 ## Requirements
 
 |                        | Linux                                                     | FreeBSD                                      |
@@ -604,8 +636,14 @@ sudo make uninstall
 │   │   ├── acl.go                   # GetPosixACL, GetNFS4ACL — getfacl/nfs4_getfacl parsing
 │   │   └── cronparse.go             # Parse zfsutils-linux / zfstools cron entries for scrub schedules
 │   ├── ansible/
-│   │   ├── runner.go                # Run(playbook, extraVars) → PlaybookOutput; ndjson output parsing
+│   │   ├── runner.go                # Run(ctx, playbook, extraVars) → PlaybookOutput; ndjson output parsing; trace span per run
 │   │   └── metrics.go               # Prometheus counters/histograms for Ansible playbook runs
+│   ├── otel/
+│   │   └── otel.go                  # Env-gated OTEL SDK setup: trace/meter providers, log pipeline (no-op without OTLP env)
+│   ├── logging/
+│   │   ├── journal_exporter.go      # OTEL log exporter reproducing the journald format (single producer)
+│   │   ├── apphandler.go            # Process-wide slog handler: otelslog bridge + level gate + req_id
+│   │   └── middleware.go            # RequestLogger: req_id correlation, span rename to METHOD /route
 │   ├── auth/
 │   │   ├── config.go                # Load/save dumpstore.conf (username, password hash, TLS, trusted proxies)
 │   │   ├── config_handlers.go       # API handlers for auth config changes (username, password)
