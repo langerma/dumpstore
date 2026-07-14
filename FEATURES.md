@@ -62,6 +62,8 @@
 | Datasets tab redesign      | v0.2.0 | Per-pool sections with health/capacity header rows, usage bars, status chips, hover-revealed quick actions, and a slide-in detail drawer with grouped actions and inline property editing; part 1 of #63 |
 | Snapshots tab redesign     | v0.2.0 | Collapsible per-dataset groups with count/size/age headers, relative ages, per-group bulk select, hover-revealed actions; part 2 of #63, closes #63 |
 | Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
+| Software card tiers        | Unreleased | Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones — new "Needed for" column names the feature each optional tool unlocks; a missing required tool shows a red "missing" badge instead of grey N/A. Closes #135 |
+| ZFS presence checks        | Unreleased | Startup dependency check now verifies `zfs`/`zpool` in PATH (fail fast instead of every tab erroring); on FreeBSD a System-panel warning appears when the ZFS kernel module is not loaded (`kldstat -q -m zfs`). Closes #136 |
 
 ---
 

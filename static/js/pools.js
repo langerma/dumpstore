@@ -70,16 +70,20 @@ export function renderSoftware() {
 
   const rows = tools.map(t => {
     const na = !t.version;
+    const status = na
+      ? (t.required ? '<span class="type-badge sw-missing">missing</span>' : 'N/A')
+      : esc(t.version);
     return `<tr>
       <td class="mono">${esc(t.name)}</td>
-      <td class="${na ? 'sw-na' : 'mono'}">${na ? 'N/A' : esc(t.version)}</td>
+      <td class="${na && !t.required ? 'sw-na' : 'mono'}">${status}</td>
+      <td class="${t.required ? '' : 'sw-na'}">${t.required ? 'Core (required)' : esc(t.feature || '—')}</td>
     </tr>`;
   }).join('');
 
   wrap.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Tool</th><th>Version / Status</th></tr></thead>
+        <thead><tr><th>Tool</th><th>Version / Status</th><th>Needed for</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
