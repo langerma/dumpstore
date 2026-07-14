@@ -44,6 +44,9 @@ func TestJournalExporterMatchesTextHandler(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// CI runners execute under systemd with JOURNAL_STREAM set, which
+			// would add <N> prefixes; the plain TextHandler format is under test.
+			t.Setenv("JOURNAL_STREAM", "")
 			var got, want bytes.Buffer
 			otelLogger, provider := pipeline(&got)
 			tc.log(otelLogger)
