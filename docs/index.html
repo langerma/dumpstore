@@ -661,7 +661,7 @@
           <span class="pool-name">system info</span>
           <span class="health-badge badge-blue">sysinfo</span>
         </div>
-        <p>Hostname, OS, kernel, CPU, uptime, load averages, and process stats. Software inventory tab shows versions of all runtime tools (Go, ZFS, Ansible, smartctl, etc.).</p>
+        <p>Hostname, OS, kernel, CPU, uptime, load averages, and process stats. The software inventory distinguishes required tools (ZFS, Ansible, Python) from optional ones, names the feature each optional tool unlocks, and flags a missing required tool with a red badge. Platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded).</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

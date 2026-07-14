@@ -15,7 +15,7 @@
 | iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
-Go and Ansible are the only hard requirements. ZFS must be available on the target machine.
+Go and Ansible are the only hard requirements. ZFS must be available on the target machine — the server checks for `zfs`, `zpool`, and `ansible-playbook` in PATH at startup and refuses to start with a clear error if any is missing. On FreeBSD, the System tab warns when the ZFS kernel module is not loaded even though the userland tools are installed.
 
 ### Optional packages
 

@@ -25,7 +25,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 ## Features
 
-- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats
+- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats; the Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones and names the feature each optional tool unlocks — a missing required tool is flagged with a red badge; platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded, `zfs_enable` not set)
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **Pool scrub management** — trigger and cancel scrubs; last scrub time, status, and progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **Pool lifecycle** — create pools (single/mirror/raidz1-3/draid1-3) with an unused-device picker, optional ashift/compression, and confirm-by-typing; import exported pools (with force option); export pools from the pool card
@@ -388,7 +388,7 @@ dumpstore runs as root (required for ZFS). See [SECURITY.md](SECURITY.md) for no
 | TLS / ACME (optional)  | `openssl` (usually pre-installed); `lego` for ACME         | same                                         |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
-Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
+Go and Ansible are the only hard requirements. ZFS must be available on the target machine — the server checks for `zfs`, `zpool`, and `ansible-playbook` in PATH at startup and refuses to start with a clear error if any is missing; the binary itself builds and runs on any platform. On FreeBSD, the System tab additionally warns when the ZFS kernel module is not loaded even though the userland tools are installed. The Installed Software card on the System tab shows which of the optional tools below are present and which feature each one unlocks.
 
 The NFS server and ACL tools are optional — the relevant dialogs will show an error if the required tool is not installed. Install only what you need:
 

@@ -6,7 +6,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 
 ## Features
 
-- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats
+- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats; the Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones, names the feature each optional tool unlocks, and flags a missing required tool with a red badge; platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded)
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **Pool scrub management** — trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
