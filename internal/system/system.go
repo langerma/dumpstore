@@ -219,8 +219,10 @@ func UIDMin() int {
 // SoftwareTool holds the name and detected version of an external tool.
 // Version is empty when the tool is not found (rendered as N/A in the UI).
 type SoftwareTool struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Required bool   `json:"required"`          // dumpstore core does not function without it
+	Feature  string `json:"feature,omitempty"` // what the tool enables when optional
 }
 
 // NetworkInterface holds information about a single network interface.
@@ -598,19 +600,19 @@ func probeNFSServer() string {
 
 func softwareVersions() []SoftwareTool {
 	return []SoftwareTool{
-		{Name: "ZFS", Version: probeVersion("zfs", "version")},
-		{Name: "Ansible", Version: probeVersion("ansible-playbook", "--version")},
-		{Name: "Python", Version: probePython()},
-		{Name: "smartctl", Version: probeVersion("smartctl", "--version")},
-		{Name: "NFS server", Version: probeNFSServer()},
-		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
-		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
-		{Name: "zfs-auto-snapshot", Version: probePresence("zfs-auto-snapshot")},
-		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
-		{Name: "wsdd (WS-Discovery)", Version: probePresence("wsdd")},
-		{Name: "iSCSI backend", Version: probeISCSIBackend()},
-		{Name: "lego (ACME)", Version: probeVersion("lego", "--version")},
-		{Name: "Package manager", Version: detectPkgManager()},
+		{Name: "ZFS", Version: probeVersion("zfs", "version"), Required: true},
+		{Name: "Ansible", Version: probeVersion("ansible-playbook", "--version"), Required: true},
+		{Name: "Python", Version: probePython(), Required: true},
+		{Name: "smartctl", Version: probeVersion("smartctl", "--version"), Feature: "SMART drive health"},
+		{Name: "NFS server", Version: probeNFSServer(), Feature: "NFS sharing"},
+		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl"), Feature: "NFSv4 ACLs"},
+		{Name: "setfacl (ACL)", Version: probePresence("setfacl"), Feature: "POSIX ACLs"},
+		{Name: "zfs-auto-snapshot", Version: probePresence("zfs-auto-snapshot"), Feature: "Auto-snapshots"},
+		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version"), Feature: "SMB shares"},
+		{Name: "wsdd (WS-Discovery)", Version: probePresence("wsdd"), Feature: "Windows share discovery"},
+		{Name: "iSCSI backend", Version: probeISCSIBackend(), Feature: "iSCSI targets"},
+		{Name: "lego (ACME)", Version: probeVersion("lego", "--version"), Feature: "TLS via ACME (Let's Encrypt)"},
+		{Name: "Package manager", Version: detectPkgManager(), Feature: "Install hints"},
 	}
 }
 
@@ -618,6 +620,12 @@ func softwareVersions() []SoftwareTool {
 func platformWarnings() []string {
 	var w []string
 	if runtime.GOOS == "freebsd" {
+		// #136: userland binaries can be present while the kernel module is not
+		// loaded. -q also matches modules compiled into a custom kernel.
+		if err := exec.Command("kldstat", "-q", "-m", "zfs").Run(); err != nil {
+			w = append(w, "ZFS kernel module is not loaded — run 'kldload zfs' or set zfs_enable=YES in rc.conf")
+		}
+
 		// #76: Check zfs_enable in rc.conf — pools won't mount after reboot without it.
 		out, err := exec.Command("sysrc", "-n", "zfs_enable").Output()
 		if err != nil || strings.TrimSpace(string(out)) != "YES" {

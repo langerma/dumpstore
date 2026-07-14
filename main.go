@@ -213,6 +213,11 @@ func main() {
 }
 
 func checkDeps(baseDir string) error {
+	for _, bin := range []string{"zfs", "zpool"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			return fmt.Errorf("%s not found in PATH (is ZFS installed?): %w", bin, err)
+		}
+	}
 	if _, err := exec.LookPath("ansible-playbook"); err != nil {
 		return fmt.Errorf("ansible-playbook not found in PATH: %w", err)
 	}

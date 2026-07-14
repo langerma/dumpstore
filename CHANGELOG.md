@@ -4,7 +4,14 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Installed Software card shows requirement tiers** — each probed tool now carries `required`/`feature` metadata; the System tab table gained a "Needed for" column (Core for ZFS/Ansible/Python, otherwise the feature the tool unlocks — SMB shares, iSCSI targets, Windows share discovery, …), and a missing required tool renders a red "missing" badge instead of the same grey N/A as optional tools. Closes #135.
+- **FreeBSD warning when the ZFS kernel module is not loaded** — `platformWarnings()` runs `kldstat -q -m zfs` (also matches compiled-in modules) and surfaces a System-panel warning with the fix (`kldload zfs` / `zfs_enable=YES`), since userland binaries can be present while the module is not loaded. Part of #136.
+
+### Fixed
+
+- **Startup now fails fast when ZFS is missing** — `checkDeps()` verifies `zfs` and `zpool` are in PATH alongside the existing `ansible-playbook` check, instead of starting a server where every tab errors at runtime. Closes #136.
 
 ## [v0.2.0] — 2026-07-13
 
