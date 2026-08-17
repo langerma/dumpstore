@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	attribute "go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/log/logtest"
@@ -98,7 +99,7 @@ func TestJournalExporterTraceCorrelation(t *testing.T) {
 	spanID, _ := trace.SpanIDFromHex("0123456789abcdef")
 
 	rec := logtest.RecordFactory{
-		Body:     otellog.StringValue("hello"),
+		Body:     attribute.StringValue("hello"),
 		Severity: otellog.SeverityInfo,
 		TraceID:  traceID,
 		SpanID:   spanID,

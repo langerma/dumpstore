@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	attribute "go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 )
 
@@ -66,7 +67,7 @@ func TestNoLocalLogBranch(t *testing.T) {
 	defer p.Shutdown(context.Background()) //nolint:errcheck
 
 	var rec otellog.Record
-	rec.SetBody(otellog.StringValue("dropped"))
+	rec.SetBody(attribute.StringValue("dropped"))
 	rec.SetSeverity(otellog.SeverityInfo)
 	p.Logs.Logger("test").Emit(context.Background(), rec) // must not panic
 }
@@ -103,7 +104,7 @@ func TestOTLPExport(t *testing.T) {
 	span.End()
 	// …and one log record through the provider.
 	var rec otellog.Record
-	rec.SetBody(otellog.StringValue("hello otlp"))
+	rec.SetBody(attribute.StringValue("hello otlp"))
 	rec.SetSeverity(otellog.SeverityInfo)
 	p.Logs.Logger("test").Emit(context.Background(), rec)
 

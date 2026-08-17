@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	attribute "go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 )
@@ -44,8 +45,8 @@ func (e *JournalExporter) Export(ctx context.Context, records []sdklog.Record) e
 		}
 		level := severityToLevel(r.Severity())
 		rec := slog.NewRecord(ts, level, r.Body().AsString(), 0)
-		r.WalkAttributes(func(kv otellog.KeyValue) bool {
-			rec.AddAttrs(slog.Attr{Key: kv.Key, Value: logValueToSlog(kv.Value)})
+		r.WalkAttributes(func(kv attribute.KeyValue) bool {
+			rec.AddAttrs(slog.Attr{Key: string(kv.Key), Value: logValueToSlog(kv.Value)})
 			return true
 		})
 		if r.TraceID().IsValid() {
@@ -84,31 +85,31 @@ func severityToLevel(s otellog.Severity) slog.Level {
 
 // logValueToSlog converts an OTEL log value back to a slog value for
 // TextHandler rendering.
-func logValueToSlog(v otellog.Value) slog.Value {
-	switch v.Kind() {
-	case otellog.KindBool:
+func logValueToSlog(v attribute.Value) slog.Value {
+	switch v.Type() {
+	case attribute.BOOL:
 		return slog.BoolValue(v.AsBool())
-	case otellog.KindFloat64:
+	case attribute.FLOAT64:
 		return slog.Float64Value(v.AsFloat64())
-	case otellog.KindInt64:
+	case attribute.INT64:
 		return slog.Int64Value(v.AsInt64())
-	case otellog.KindString:
+	case attribute.STRING:
 		return slog.StringValue(v.AsString())
-	case otellog.KindBytes:
-		return slog.StringValue(string(v.AsBytes()))
-	case otellog.KindSlice:
+	case attribute.BYTESLICE:
+		return slog.StringValue(string(v.AsByteSlice()))
+	case attribute.SLICE:
 		vals := v.AsSlice()
 		out := make([]any, len(vals))
 		for i, sv := range vals {
 			out[i] = logValueToSlog(sv).Any()
 		}
 		return slog.AnyValue(out)
-	case otellog.KindMap:
+	case attribute.MAP:
 		kvs := v.AsMap()
 		attrs := make([]slog.Attr, len(kvs))
-		for i, kv := range kvs {
-			attrs[i] = slog.Attr{Key: kv.Key, Value: logValueToSlog(kv.Value)}
-		}
+	for i, kv := range kvs {
+		attrs[i] = slog.Attr{Key: string(kv.Key), Value: logValueToSlog(kv.Value)}
+	}
 		return slog.GroupValue(attrs...)
 	default:
 		return slog.AnyValue(nil)
