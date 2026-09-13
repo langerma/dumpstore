@@ -1,6 +1,6 @@
 module dumpstore
 
-go 1.25.0
+go 1.26.0
 
 require (
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
@@ -14,7 +14,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log/logtest v0.22.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/term v0.45.0
 )
 
