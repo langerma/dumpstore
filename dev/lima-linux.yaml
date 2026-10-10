@@ -59,6 +59,9 @@ provision:
       echo "==> Installing optional tools..."
       apt-get install -y -qq smartmontools rsync make
 
+      echo "==> Installing share + ACL tools (exercised by the integration suite)..."
+      apt-get install -y -qq acl samba nfs-kernel-server targetcli-fb zfs-auto-snapshot
+
       echo "==> Writing default dev config (admin/admin)..."
       install -d -m 0700 /etc/dumpstore
       python3 -c 'import json,os; cfg={"username":"admin","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$ZHVtcHN0b3JlLWRldi12bQ$+quqbq+vJQm6WpP8GUB9+CeE6fPwSXXOl+XuSi1R4aM","session_ttl":"24h","trusted_proxies":[],"unprotected_paths":["/metrics"],"tls_enabled":False,"tls_cert_path":"","tls_key_path":"","acme_enabled":False,"acme_email":"","acme_domain":""}; f=open("/etc/dumpstore/dumpstore.conf","w"); json.dump(cfg,f,indent=2); f.close(); os.chmod("/etc/dumpstore/dumpstore.conf",0o600)'
