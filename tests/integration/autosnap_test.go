@@ -4,6 +4,7 @@ package integration
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -19,8 +20,6 @@ const (
 
 // TestAutoSnapshotProperties sets the per-dataset auto-snapshot properties,
 // reads them back through both read endpoints, and clears them to inherit.
-// Takeover/release of the OS daemon is not exercised: on Debian's cron-based
-// zfs-auto-snapshot it cannot restore the host's prior state (#152).
 func TestAutoSnapshotProperties(t *testing.T) {
 	ds := testPool + "/itest-autosnap"
 	createDataset(t, ds)
@@ -87,4 +86,56 @@ func TestScrubSchedule(t *testing.T) {
 		t.Fatalf("pool %s still in scrub schedules after DELETE", testPool)
 	}
 	apiStatus(t, http.StatusBadRequest, "PUT", "/api/scrub-schedule/bad@pool", map[string]any{})
+}
+
+type autosnapStatus struct {
+	OSDaemonActive   bool `json:"os_daemon_active"`
+	DumpstoreManaged bool `json:"dumpstore_managed"`
+}
+
+// autosnapCronFiles mirrors autosnap.CronFiles (Debian/Ubuntu packaging).
+const autosnapCronFiles = "/etc/cron.d/zfs-auto-snapshot /etc/cron.hourly/zfs-auto-snapshot" +
+	" /etc/cron.daily/zfs-auto-snapshot /etc/cron.weekly/zfs-auto-snapshot /etc/cron.monthly/zfs-auto-snapshot"
+
+// TestAutosnapTakeoverRelease hands auto-snapshot execution from the OS
+// daemon to dumpstore and back, and checks the host's cron entry points come
+// back byte-for-byte (#152).
+func TestAutosnapTakeoverRelease(t *testing.T) {
+	skipUnlessVMTool(t, "zfs-auto-snapshot")
+	status := func() autosnapStatus {
+		return decode[autosnapStatus](t, apiOK(t, "GET", "/api/auto-snapshot/status", nil))
+	}
+	fingerprint := func() string {
+		return vmExec(t, "for f in "+autosnapCronFiles+"; do [ -e $f ] && md5sum $f; done; true")
+	}
+	before, initial := fingerprint(), status()
+	if !initial.OSDaemonActive || initial.DumpstoreManaged {
+		t.Skipf("expected the OS daemon to own auto-snapshots initially, got %+v", initial)
+	}
+	t.Cleanup(func() {
+		if st, _ := api(t, "POST", "/api/auto-snapshot/release", nil); st != http.StatusOK {
+			t.Errorf("cleanup release returned %d", st)
+		}
+		// Backstop: put any still-disabled entry point back.
+		_, _ = vmExecErr("for f in " + autosnapCronFiles + "; do [ -e $f.dumpstore-disabled ] && [ ! -e $f ] && mv $f.dumpstore-disabled $f; done; true")
+	})
+
+	// Twice: takeover must be idempotent.
+	for range 2 {
+		assertTasks(t, apiOK(t, "POST", "/api/auto-snapshot/takeover", nil))
+	}
+	if st := status(); st.OSDaemonActive || !st.DumpstoreManaged {
+		t.Fatalf("status after takeover: %+v, want daemon inactive and dumpstore managed", st)
+	}
+	if left := fingerprint(); strings.TrimSpace(left) != "" {
+		t.Fatalf("OS cron entry points still active after takeover:\n%s", left)
+	}
+
+	assertTasks(t, apiOK(t, "POST", "/api/auto-snapshot/release", nil))
+	if st := status(); !st.OSDaemonActive || st.DumpstoreManaged {
+		t.Fatalf("status after release: %+v, want daemon active and dumpstore not managed", st)
+	}
+	if after := fingerprint(); after != before {
+		t.Fatalf("cron entry points not restored:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
 }

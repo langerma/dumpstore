@@ -1,29 +1,88 @@
 ---
-# Re-enable the OS auto-snapshot daemon so dumpstore can step back. Symmetric
-# to auto_snapshot_takeover.yml. Does NOT reinstall the package on Linux —
-# only enables units the package would have shipped. If the package is gone,
-# the systemd step is a no-op (swallowed via failed_when).
+# Re-enable the OS auto-snapshot daemon so dumpstore can step back. Exact
+# inverse of auto_snapshot_takeover.yml:
+#   cron: rename <file>.dumpstore-disabled back (never over a file the
+#     package has since recreated).
+#   systemd timers: re-enable the timers recorded in timer_state_file. With
+#     no record (takeover by an older dumpstore), enable the installed ones.
+#     Timers that are not installed are never touched.
+# Does NOT reinstall the package.
+#
+# Required extra vars:
+#   timer_state_file - record written by auto_snapshot_takeover.yml
 - name: Release auto-snapshot execution back to the OS daemon
   hosts: localhost
   gather_facts: true
+  vars:
+    autosnap_cron_files:
+      - /etc/cron.d/zfs-auto-snapshot
+      - /etc/cron.hourly/zfs-auto-snapshot
+      - /etc/cron.daily/zfs-auto-snapshot
+      - /etc/cron.weekly/zfs-auto-snapshot
+      - /etc/cron.monthly/zfs-auto-snapshot
+    autosnap_known_timers:
+      - zfs-auto-snapshot-frequent.timer
+      - zfs-auto-snapshot-hourly.timer
+      - zfs-auto-snapshot-daily.timer
+      - zfs-auto-snapshot-weekly.timer
+      - zfs-auto-snapshot-monthly.timer
+    autosnap_installed_timers: >-
+      {{ (autosnap_timer_scan.stdout_lines | default([]))
+         | map('split') | map('first')
+         | select('in', autosnap_known_timers) | list }}
+    autosnap_release_timers: >-
+      {{ ((autosnap_timer_record.stdout_lines | default([]))
+          if (autosnap_timer_record.rc | default(1)) == 0
+          else autosnap_installed_timers)
+         | select('in', autosnap_installed_timers) | list }}
   tasks:
+    - name: Assert required vars are defined
+      ansible.builtin.assert:
+        that:
+          - timer_state_file is defined and timer_state_file | length > 0
+        fail_msg: "timer_state_file is required"
+
+    - name: Linux — restore zfs-auto-snapshot cron entries
+      ansible.builtin.command:
+        argv: [mv, "{{ item }}.dumpstore-disabled", "{{ item }}"]
+        removes: "{{ item }}.dumpstore-disabled"
+        creates: "{{ item }}"
+      loop: "{{ autosnap_cron_files }}"
+      when: ansible_system == "Linux"
+
+    - name: Linux — read the timers takeover disabled
+      ansible.builtin.command:
+        argv: [cat, "{{ timer_state_file }}"]
+      register: autosnap_timer_record
+      changed_when: false
+      failed_when: false
+      when: ansible_system == "Linux"
+
+    - name: Linux — detect installed zfs-auto-snapshot systemd timers
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - list-unit-files
+          - --no-legend
+          - zfs-auto-snapshot-*.timer
+      register: autosnap_timer_scan
+      changed_when: false
+      failed_when: false
+      when: ansible_system == "Linux"
+
     - name: Linux — enable and start zfs-auto-snapshot systemd timers
       ansible.builtin.systemd:
         name: "{{ item }}"
         enabled: true
         state: started
-      loop:
-        - zfs-auto-snapshot-frequent.timer
-        - zfs-auto-snapshot-hourly.timer
-        - zfs-auto-snapshot-daily.timer
-        - zfs-auto-snapshot-weekly.timer
-        - zfs-auto-snapshot-monthly.timer
+      loop: "{{ autosnap_release_timers }}"
       when: ansible_system == "Linux"
-      register: linux_systemd
-      failed_when:
-        - linux_systemd.failed | default(false)
-        - "'could not be found' not in (linux_systemd.msg | default(''))"
-        - "'not loaded' not in (linux_systemd.msg | default(''))"
+
+    - name: Linux — remove the takeover record
+      ansible.builtin.file:
+        path: "{{ timer_state_file }}"
+        state: absent
+      when: ansible_system == "Linux"
 
     - name: FreeBSD — re-enable daily_zfs_snapshot_enable in periodic.conf
       ansible.builtin.lineinfile:
