@@ -6,7 +6,7 @@
 #   shell         - new login shell
 #   primary_group - new primary group name (must already exist)
 #   user_groups   - comma-separated supplementary groups (replaces existing; empty = clear all)
-#   password      - plaintext password; empty = no change; set via chpasswd (no passlib needed)
+#   password      - plaintext password; empty = no change; set via chpasswd (Linux) / pw usermod -h 0 (FreeBSD)
 #   home          - new home directory path; empty = no change
 #   move_home     - "true" to copy existing home contents (incl. dotfiles) to new path
 #   smb_sync      - "true" to also update Samba password (requires smbpasswd in PATH)
@@ -53,10 +53,18 @@
       until: user_result is not failed
       changed_when: user_result.changed
 
+    - name: Detect OS for password tool
+      ansible.builtin.command: uname -s
+      register: os_name
+      changed_when: false
+      when: password != ""
+
     - name: Set user password
+      # chpasswd on Linux; FreeBSD has no chpasswd — pw reads the plaintext
+      # password from fd 0 with -h 0. Both hash it with the system default.
       ansible.builtin.command:
-        cmd: chpasswd
-        stdin: "{{ username }}:{{ password }}"
+        argv: "{{ ['chpasswd'] if os_name.stdout == 'Linux' else ['pw', 'usermod', username, '-h', '0'] }}"
+        stdin: "{{ (username ~ ':' ~ password) if os_name.stdout == 'Linux' else password }}"
       no_log: true
       changed_when: true
       when: password != ""
