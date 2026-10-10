@@ -6,7 +6,7 @@
 #   uid         - explicit UID (omit for auto-assignment)
 #   group       - primary group name (created if it does not exist)
 #   groups      - comma-separated supplementary groups
-#   password    - plaintext password; set via chpasswd (hashed by the OS, no passlib needed)
+#   password    - plaintext password; set via chpasswd (Linux) / pw usermod -h 0 (FreeBSD), hashed by the OS
 #   create_group - "true" to ensure a group named <username> is created first
 #   smb_user    - "true" to also register the user in Samba's tdbsam database
 #                 (requires smbpasswd; uses the same plaintext password field)
@@ -72,10 +72,18 @@
       until: user_result is not failed
       changed_when: user_result.changed
 
+    - name: Detect OS for password tool
+      ansible.builtin.command: uname -s
+      register: os_name
+      changed_when: false
+      when: password != ""
+
     - name: Set user password
+      # chpasswd on Linux; FreeBSD has no chpasswd — pw reads the plaintext
+      # password from fd 0 with -h 0. Both hash it with the system default.
       ansible.builtin.command:
-        cmd: chpasswd
-        stdin: "{{ username }}:{{ password }}"
+        argv: "{{ ['chpasswd'] if os_name.stdout == 'Linux' else ['pw', 'usermod', username, '-h', '0'] }}"
+        stdin: "{{ (username ~ ':' ~ password) if os_name.stdout == 'Linux' else password }}"
       no_log: true
       changed_when: true
       when: password != ""
