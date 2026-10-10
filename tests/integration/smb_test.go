@@ -5,6 +5,7 @@ package integration
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,7 @@ func TestSMBSurface(t *testing.T) {
 	}](t, apiOK(t, "GET", "/api/smb/status", nil)).Initialized {
 		t.Fatalf("smb not initialized after POST /api/smb/init")
 	}
+	smbdPID := smbdMainPID(t)
 
 	t.Run("usershare", func(t *testing.T) {
 		ds := testPool + "/itest-smb"
@@ -113,6 +115,28 @@ func TestSMBSurface(t *testing.T) {
 		}
 		apiStatus(t, http.StatusBadRequest, "POST", "/api/smb/timemachine", map[string]string{"dataset": ds})
 	})
+
+	// Every write above re-rendered smb.conf. Samba must have been reloaded,
+	// not restarted: a restart drops clients, and a few in quick succession
+	// trip systemd's start limit and leave smbd failed.
+	if smbdPID != "" {
+		if after := smbdMainPID(t); after != smbdPID {
+			t.Fatalf("smbd restarted by config writes: MainPID %s → %s", smbdPID, after)
+		}
+	}
+}
+
+// smbdMainPID returns smbd's systemd MainPID, or "" on non-systemd hosts.
+func smbdMainPID(t *testing.T) string {
+	t.Helper()
+	if _, err := vmExecErr("command -v systemctl"); err != nil {
+		return ""
+	}
+	pid := strings.TrimSpace(vmExec(t, "systemctl show -p MainPID --value smbd"))
+	if pid == "" || pid == "0" {
+		t.Fatalf("smbd not running (MainPID %q)", pid)
+	}
+	return pid
 }
 
 func hasUsershare(t *testing.T, name string) bool {
