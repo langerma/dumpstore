@@ -24,10 +24,10 @@ const (
 
 var errBcryptHash = errors.New("bcrypt hash detected")
 
-// hashPassword hashes password with argon2id and returns a PHC string:
+// HashPassword hashes password with argon2id and returns a PHC string:
 //
 //	$argon2id$v=19$m=65536,t=3,p=4$<base64-salt>$<base64-hash>
-func hashPassword(password []byte) (string, error) {
+func HashPassword(password []byte) (string, error) {
 	salt := make([]byte, argonSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("generate salt: %w", err)
@@ -36,10 +36,10 @@ func hashPassword(password []byte) (string, error) {
 	return encodePHC(salt, hash), nil
 }
 
-// verifyPassword checks password against a PHC string produced by hashPassword.
+// VerifyPassword checks password against a PHC string produced by HashPassword.
 // If hash looks like a bcrypt hash, it logs a warning and returns an error so
 // the operator knows to run --set-password after upgrading.
-func verifyPassword(hash string, password []byte) error {
+func VerifyPassword(hash string, password []byte) error {
 	if strings.HasPrefix(hash, "$2a$") || strings.HasPrefix(hash, "$2b$") {
 		slog.Warn("bcrypt password hash detected — run --set-password to reset after upgrading")
 		return errors.New("unsupported hash format")
@@ -68,7 +68,7 @@ func encodePHC(salt, hash []byte) string {
 }
 
 // decodePHC parses a PHC string and returns the salt and hash.
-// Only the fixed parameters produced by hashPassword are accepted.
+// Only the fixed parameters produced by HashPassword are accepted.
 func decodePHC(s string) (salt, hash []byte, err error) {
 	// expected: $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
 	parts := strings.Split(s, "$")

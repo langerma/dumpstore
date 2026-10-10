@@ -44,7 +44,7 @@ func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.Handler
 
 		valid := username == cfg.Username &&
 			cfg.PasswordHash != "" &&
-			verifyPassword(cfg.PasswordHash, []byte(password)) == nil
+			VerifyPassword(cfg.PasswordHash, []byte(password)) == nil
 
 		if !valid {
 			http.Redirect(w, r, "/login?error=Invalid+username+or+password.", http.StatusFound)
