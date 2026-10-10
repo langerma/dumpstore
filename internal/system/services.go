@@ -20,26 +20,47 @@ type ServiceStatus struct {
 type managedServiceDef struct {
 	name    string
 	display string
-	linux   string
+	linux   []string // candidate systemd units, first installed one wins
 	freebsd string
 }
 
 var managedServices = []managedServiceDef{
-	{"samba", "Samba (SMB)", "smbd", "samba_server"},
-	{"nfs", "NFS Server", "nfs-kernel-server", "nfsd"},
-	{"iscsi", "iSCSI Target", "iscsid", "ctld"},
+	{"samba", "Samba (SMB)", []string{"smbd"}, "samba_server"},
+	{"nfs", "NFS Server", []string{"nfs-kernel-server"}, "nfsd"},
+	// The LIO target config (targetcli saveconfig) is restored at boot by
+	// rtslib-fb-targetctl on Debian/Ubuntu and by target.service elsewhere.
+	// Not iscsid — that is the open-iscsi initiator.
+	{"iscsi", "iSCSI Target", []string{"rtslib-fb-targetctl", "target"}, "ctld"},
+}
+
+// unitFor returns the platform-specific unit name for svc.
+func (svc managedServiceDef) unitFor() string {
+	if runtime.GOOS == "freebsd" {
+		return svc.freebsd
+	}
+	return resolveLinuxUnit(svc.linux)
+}
+
+// resolveLinuxUnit returns the first candidate systemd knows about, or the
+// first candidate when none is installed (reported as inactive).
+func resolveLinuxUnit(candidates []string) string {
+	if len(candidates) > 1 {
+		for _, u := range candidates {
+			out, err := exec.Command("systemctl", "show", "-p", "LoadState", "--value", u).Output()
+			if err == nil && strings.TrimSpace(string(out)) == "loaded" {
+				return u
+			}
+		}
+	}
+	return candidates[0]
 }
 
 // ServiceUnitName returns the platform-specific unit name for a logical service
 // name (e.g. "samba" → "smbd" on Linux). Returns "" if the name is unknown.
 func ServiceUnitName(logical string) string {
-	isFreeBSD := runtime.GOOS == "freebsd"
 	for _, svc := range managedServices {
 		if svc.name == logical {
-			if isFreeBSD {
-				return svc.freebsd
-			}
-			return svc.linux
+			return svc.unitFor()
 		}
 	}
 	return ""
@@ -51,10 +72,7 @@ func ListServices() []ServiceStatus {
 	isFreeBSD := runtime.GOOS == "freebsd"
 	out := make([]ServiceStatus, 0, len(managedServices))
 	for _, svc := range managedServices {
-		unit := svc.linux
-		if isFreeBSD {
-			unit = svc.freebsd
-		}
+		unit := svc.unitFor()
 		st := ServiceStatus{
 			Name:        svc.name,
 			DisplayName: svc.display,

@@ -15,6 +15,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Services panel controls the iSCSI target, not the initiator** — on Linux the "iSCSI Target" service mapped to `iscsid` (the open-iscsi initiator), so it showed inactive while targets were served and start/stop/restart/enable acted on the wrong daemon. It now resolves to the LIO restore unit: `rtslib-fb-targetctl` (Debian/Ubuntu), falling back to `target`. Closes #159.
 - **Startup now fails fast when ZFS is missing** — `checkDeps()` verifies `zfs` and `zpool` are in PATH alongside the existing `ansible-playbook` check, instead of starting a server where every tab errors at runtime. Closes #136.
 - **`GET /api/sysinfo` no longer re-runs every software probe per request** — the Installed Software probes (~13 external `--version` execs) and platform warnings are cached for 5 minutes; concurrent requests during a refresh share one probe round. Tracing showed p95 ≈ 4 s while the frontend polls sysinfo every 60 s per tab. Response shape unchanged. Closes #139.
 - **No more bare `GET` spans for requests that never reach a route** — auth-middleware 401s are now named `METHOD (unauthenticated)` and unrouted requests `METHOD (unmatched)`, each with a `dumpstore.short_circuit` attribute (`auth` / `unmatched`); the raw URL path is never used, keeping span names low-cardinality. Closes #140.
