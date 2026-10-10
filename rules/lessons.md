@@ -40,3 +40,13 @@ A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/a
 1. Read the actual diff (`git show <sha>`) — do the changes exercise what the issue asks for, or just create files shaped like it?
 2. Confirm the commit is on `origin/main` (`git branch -r --contains <sha>`), not just local.
 3. For CI workflows: confirm the workflow is registered on GitHub and has at least one green run.
+
+## 5. Unit tests on macOS are not verification — deploy to both Lima VMs
+
+**Mistake:** Reported the #139/#140 fixes as verified after `go test ./...` on the macOS host. The code execs OS binaries (`zfs`, `sysctl`, `kldstat`, …) whose behavior differs per platform, and none of it had run on Linux or FreeBSD.
+
+**Rule:** Before reporting a backend change done:
+
+1. `make vm-linux-start && make vm-linux-deploy` (creates the VM on first run) and `make vm-freebsd-start && make vm-freebsd-deploy`.
+2. Run `make test-integration` against each (FreeBSD env vars in `tests/integration/README.md`).
+3. Exercise the changed endpoint directly with curl (form login: `-d 'username=admin&password=admin' /auth/login`) and confirm the behavior the change claims.

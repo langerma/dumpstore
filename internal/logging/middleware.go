@@ -51,13 +51,8 @@ func RequestLogger(next http.Handler) http.Handler {
 		// low-cardinality "METHOD /route". ServeMux patterns are registered
 		// method-qualified ("GET /api/pools"), so strip the method before
 		// composing — semconv http.route is the path template alone.
-		if span.IsRecording() && r.Pattern != "" {
-			route := r.Pattern
-			if _, after, ok := strings.Cut(route, " "); ok {
-				route = after
-			}
-			span.SetName(r.Method + " " + route)
-			span.SetAttributes(semconv.HTTPRoute(route))
+		if span.IsRecording() {
+			nameSpan(span, r, rw.status)
 		}
 
 		level := slog.LevelInfo
@@ -76,6 +71,28 @@ func RequestLogger(next http.Handler) http.Handler {
 		)
 		api.RecordHTTP(r.Method, r.URL.Path, rw.status, elapsed)
 	})
+}
+
+// nameSpan gives the request span a low-cardinality name. Requests that never
+// reached the mux (auth middleware 401, no matching route) have an empty
+// r.Pattern; they get a fixed suffix and a dumpstore.short_circuit attribute
+// instead — never the raw URL path, which would explode span cardinality.
+func nameSpan(span trace.Span, r *http.Request, status int) {
+	if r.Pattern == "" {
+		reason, suffix := "unmatched", "(unmatched)"
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			reason, suffix = "auth", "(unauthenticated)"
+		}
+		span.SetName(r.Method + " " + suffix)
+		span.SetAttributes(attribute.String("dumpstore.short_circuit", reason))
+		return
+	}
+	route := r.Pattern
+	if _, after, ok := strings.Cut(route, " "); ok {
+		route = after
+	}
+	span.SetName(r.Method + " " + route)
+	span.SetAttributes(semconv.HTTPRoute(route))
 }
 
 // statusRecorder captures the HTTP status code written by a handler.

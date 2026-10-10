@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -398,9 +399,39 @@ func Get() Info {
 		NumGC:          ms.NumGC,
 	}
 	info.Load1, info.Load5, info.Load15 = loadAverages()
-	info.Software = softwareVersions()
-	info.Warnings = platformWarnings()
+	info.Software, info.Warnings = cachedProbes()
 	return info
+}
+
+// probeTTL bounds how stale the Installed Software list and platform warnings
+// may be. The probes exec ~13 external binaries (seconds in total, #139) and
+// the frontend polls sysinfo every 60s per tab, while installed software
+// changes rarely.
+const probeTTL = 5 * time.Minute
+
+// collectProbes runs the expensive probes; a variable so tests can count calls.
+var collectProbes = func() ([]SoftwareTool, []string) {
+	return softwareVersions(), platformWarnings()
+}
+
+var probeCache struct {
+	mu       sync.Mutex
+	at       time.Time
+	software []SoftwareTool
+	warnings []string
+}
+
+// cachedProbes returns the probe results, re-running them once probeTTL has
+// elapsed. The lock is held across the refresh so concurrent requests wait
+// for one probe round instead of each starting their own.
+func cachedProbes() ([]SoftwareTool, []string) {
+	probeCache.mu.Lock()
+	defer probeCache.mu.Unlock()
+	if probeCache.at.IsZero() || time.Since(probeCache.at) >= probeTTL {
+		probeCache.software, probeCache.warnings = collectProbes()
+		probeCache.at = time.Now()
+	}
+	return probeCache.software, probeCache.warnings
 }
 
 func kernelRelease() string {
