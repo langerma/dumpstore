@@ -44,8 +44,16 @@
       delay: 2
       until: gid_result is not failed
 
+    - name: Detect OS for group tools
+      ansible.builtin.command: uname -s
+      register: os_name
+      changed_when: false
+      when: update_members == "true" or (new_name != "" and new_name != groupname)
+
+    # gpasswd/groupmod are Linux shadow-utils; FreeBSD uses pw groupmod.
     - name: Set members
-      ansible.builtin.shell: "gpasswd -M '{{ members }}' '{{ groupname }}'"
+      ansible.builtin.command:
+        argv: "{{ ['gpasswd', '-M', members, groupname] if os_name.stdout == 'Linux' else ['pw', 'groupmod', groupname, '-M', members] }}"
       when: update_members == "true"
       register: members_result
       retries: 5
@@ -54,7 +62,8 @@
       changed_when: true
 
     - name: Rename group
-      ansible.builtin.shell: "groupmod -n '{{ new_name }}' '{{ groupname }}'"
+      ansible.builtin.command:
+        argv: "{{ ['groupmod', '-n', new_name, groupname] if os_name.stdout == 'Linux' else ['pw', 'groupmod', groupname, '-l', new_name] }}"
       when: new_name != "" and new_name != groupname
       register: rename_result
       retries: 5
