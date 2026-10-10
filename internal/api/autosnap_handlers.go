@@ -3,9 +3,12 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"dumpstore/internal/autosnap"
+	"dumpstore/internal/platform"
 )
 
 // autoSnapshotStatusResponse is the body of GET /api/auto-snapshot/status.
@@ -28,6 +31,14 @@ func (h *Handler) getAutoSnapshotStatus(w http.ResponseWriter, r *http.Request) 
 	writeJSON(r.Context(), w, resp)
 }
 
+// autosnapPlaybookVars carries where takeover records the systemd timers it
+// disabled, so release re-enables exactly those.
+func autosnapPlaybookVars() map[string]string {
+	return map[string]string{
+		"timer_state_file": filepath.Join(platform.StateDir(runtime.GOOS), "autosnap-disabled-timers"),
+	}
+}
+
 // takeoverAutoSnapshot disables the OS daemon then registers dumpstore's
 // bucket tasks with the scheduler. Returns 200 + ansible task steps.
 func (h *Handler) takeoverAutoSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +46,7 @@ func (h *Handler) takeoverAutoSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("autosnap runner not initialised"), nil)
 		return
 	}
-	out, err := h.runOp(r.Context(), "auto_snapshot_takeover.yml", map[string]string{})
+	out, err := h.runOp(r.Context(), "auto_snapshot_takeover.yml", autosnapPlaybookVars())
 	auditLog(r.Context(), r, "auto_snapshot.takeover", "", err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -56,7 +67,7 @@ func (h *Handler) releaseAutoSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.autosnap.Unregister()
-	out, err := h.runOp(r.Context(), "auto_snapshot_release.yml", map[string]string{})
+	out, err := h.runOp(r.Context(), "auto_snapshot_release.yml", autosnapPlaybookVars())
 	auditLog(r.Context(), r, "auto_snapshot.release", "", err)
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)

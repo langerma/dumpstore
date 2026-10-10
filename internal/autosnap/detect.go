@@ -22,7 +22,7 @@ type Status struct {
 // handler from Runner.IsRegistered().
 //
 // Linux: any of the five `zfs-auto-snapshot-*.timer` units being enabled,
-// OR `/etc/cron.d/zfs-auto-snapshot` existing, counts as active.
+// OR any of the package's cron entry points existing, counts as active.
 // FreeBSD: `daily_zfs_snapshot_enable="YES"` in periodic.conf{,.local}.
 func DetectStatus() Status {
 	switch runtime.GOOS {
@@ -55,11 +55,25 @@ func detectLinux() Status {
 			return s
 		}
 	}
-	// Older packaging uses cron rather than systemd.
-	if _, err := os.Stat("/etc/cron.d/zfs-auto-snapshot"); err == nil {
-		s.OSDaemonActive = true
+	// Debian/Ubuntu packaging uses cron rather than systemd. Takeover renames
+	// these to <file>.dumpstore-disabled, so existence means active.
+	for _, path := range CronFiles {
+		if _, err := os.Stat(path); err == nil {
+			s.OSDaemonActive = true
+			return s
+		}
 	}
 	return s
+}
+
+// CronFiles are the cron entry points of the cron-based zfs-auto-snapshot
+// packaging: frequent in cron.d, the other buckets as run-parts scripts.
+var CronFiles = []string{
+	"/etc/cron.d/zfs-auto-snapshot",
+	"/etc/cron.hourly/zfs-auto-snapshot",
+	"/etc/cron.daily/zfs-auto-snapshot",
+	"/etc/cron.weekly/zfs-auto-snapshot",
+	"/etc/cron.monthly/zfs-auto-snapshot",
 }
 
 func detectFreeBSD() Status {
