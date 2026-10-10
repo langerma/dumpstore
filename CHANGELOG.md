@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [v0.2.1] — 2026-10-10
+
 ### Added
 
 - **Integration coverage for most API endpoints** (#141) — the Lima VM suite grew from ~17 paths to most of the API: all read endpoints and SSE, users/groups/SSH keys, Samba (init, usershares, users, homes, Time Machine), POSIX ACLs, chown, iSCSI targets, replication CRUD + run + history, auto-snapshot properties, scrub schedules, service control, TLS gencert/config, and password change — with negative cases (400/401/403/404/409) throughout. The Linux dev VM now provisions `acl samba nfs-kernel-server targetcli-fb zfs-auto-snapshot`; tests skip when a tool is missing. Fixtures are cleaned up before and after each test and rewritten host config is restored byte-for-byte; the suite is green twice in a row on both the Linux and FreeBSD VMs with the host left unchanged. Building it surfaced the fixes listed under Fixed (password change, replication runs, iSCSI IQN, FreeBSD users/groups/chown) plus #152 (autosnap takeover on cron-based Debian) and #156 (FreeBSD ACLs).
