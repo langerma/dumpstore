@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"os/user"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -451,22 +454,29 @@ func ListAutoSnapshotProps() (map[string]AutoSnapshotProps, error) {
 }
 
 // GetMountpointOwnership returns the owner username and group name of a
-// mountpoint directory by running `stat -L --format=%U %G <path>`.
-// -L causes stat to follow symlinks: ownership is reported for the symlink
-// target, not the symlink itself. ZFS mountpoints are never symlinks in
-// practice, so the flag is a no-op in normal use, but makes the behaviour
-// explicit and avoids surprising results if a symlink is somehow present.
-// This is Linux-specific and matches the target platform for the service.
+// mountpoint directory. os.Stat follows symlinks, so ownership is reported
+// for the target (ZFS mountpoints are never symlinks in practice). Read via
+// the stat syscall rather than stat(1), whose flags differ between GNU
+// (Linux) and BSD (FreeBSD). Like stat(1), ids without a passwd/group entry
+// are returned numerically.
 func GetMountpointOwnership(mountpoint string) (owner, group string, err error) {
-	out, err := run("stat", "-L", "--format=%U %G", mountpoint)
+	fi, err := os.Stat(mountpoint)
 	if err != nil {
 		return "", "", fmt.Errorf("stat %s: %w", mountpoint, err)
 	}
-	parts := strings.Fields(strings.TrimSpace(out))
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("unexpected stat output: %q", out)
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", "", fmt.Errorf("stat %s: no ownership information", mountpoint)
 	}
-	return parts[0], parts[1], nil
+	owner = strconv.FormatUint(uint64(st.Uid), 10)
+	group = strconv.FormatUint(uint64(st.Gid), 10)
+	if u, err := user.LookupId(owner); err == nil {
+		owner = u.Username
+	}
+	if g, err := user.LookupGroupId(group); err == nil {
+		group = g.Name
+	}
+	return owner, group, nil
 }
 
 // Version returns the OpenZFS version string reported by `zpool version`
