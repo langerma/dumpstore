@@ -151,4 +151,3 @@ Request ID correlation: every request gets `req_id` (from `X-Request-ID` header 
 ## Documentation
 
 - Keep README.md, docs/index.html, wiki/ up to date when routes/architecture/features change.
-- Document new features in logseq via mcp-logseq.

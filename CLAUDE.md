@@ -61,14 +61,13 @@ The test: *does the feature make dumpstore better at running ZFS + shares, or do
 - Go fix failing CI tests without being told how.
 
 ### Self-improvement loop
-- After ANY correction from the user: update `rules/lessons.md` and via `mcp-logseq` with the pattern.
+- After ANY correction from the user: update `rules/lessons.md` with the pattern.
 - Write rules for yourself that prevent the same mistake.
 - Review lessons at session start for relevant context.
 
 ### Docs & branch hygiene
 - **Always create a feature branch** before implementing anything — `git checkout -b feat/<name>`.
 - **Keep README.md, docs/index.html, and wiki/ up to date** whenever routes, features, architecture, or project layout change.
-- **Document and plan in logseq via mcp-logseq** if we add a new feature or a fix.
 
 ---
 
