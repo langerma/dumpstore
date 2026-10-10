@@ -20,7 +20,7 @@ type aclEntry struct {
 // mountpoint, then checks the 404 on removing it twice.
 func TestPosixACL(t *testing.T) {
 	if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) != "Linux" {
-		t.Skip("POSIX ACLs are Linux-only; FreeBSD NFSv4 ACL support is #156")
+		t.Skip("POSIX ACLs are Linux-only; FreeBSD datasets use NFSv4 ACLs (TestNFSv4ACL)")
 	}
 	skipUnlessVMTool(t, "setfacl")
 	ds := testPool + "/itest-acl"
@@ -60,6 +60,59 @@ func TestPosixACL(t *testing.T) {
 	apiStatus(t, http.StatusBadRequest, "POST", "/api/acl/"+ds, map[string]string{"ace": "user:x y:rwx"})
 	apiStatus(t, http.StatusBadRequest, "DELETE", "/api/acl/"+ds, nil)
 	apiStatus(t, http.StatusNotFound, "POST", "/api/acl/"+testPool+"/itest-nonexistent", map[string]string{"ace": "user:root:r"})
+}
+
+// TestNFSv4ACL adds and removes an NFSv4 ACE through the API's
+// nfs4-acl-tools entry form. FreeBSD only: its base setfacl applies NFSv4
+// ACLs to ZFS natively, while Linux ZFS cannot apply them to a local mount.
+func TestNFSv4ACL(t *testing.T) {
+	if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) != "FreeBSD" {
+		t.Skip("NFSv4 ACLs on local ZFS are FreeBSD-only")
+	}
+	ds := testPool + "/itest-nfs4acl"
+	const user = "itest-nfsuser"
+	mp := createDataset(t, ds)
+	createUser(t, user)
+	apiOK(t, "PATCH", "/api/datasets/"+ds, map[string]string{"acltype": "nfsv4"})
+
+	type nfs4ACL struct {
+		ACLType string `json:"acl_type"`
+		Entries []struct {
+			Tag       string `json:"tag"`
+			Flags     string `json:"flags"`
+			Qualifier string `json:"qualifier"`
+			Perms     string `json:"perms"`
+		} `json:"entries"`
+	}
+	find := func(a nfs4ACL) (flags, perms string, ok bool) {
+		for _, e := range a.Entries {
+			if e.Tag == "A" && e.Qualifier == user {
+				return e.Flags, e.Perms, true
+			}
+		}
+		return "", "", false
+	}
+	acl := decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil))
+	if acl.ACLType != "nfsv4" || len(acl.Entries) == 0 {
+		t.Fatalf("fresh ACL: %+v, want nfsv4 with owner@/group@/everyone@", acl)
+	}
+
+	assertTasks(t, apiOK(t, "POST", "/api/acl/"+ds, map[string]string{"ace": "A:fd:" + user + ":rwx"}))
+	flags, perms, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil)))
+	if !ok || flags != "fd" || perms != "rwx" {
+		t.Fatalf("entry after add: flags %q perms %q (found %v), want fd/rwx", flags, perms, ok)
+	}
+	if out := vmExec(t, "getfacl -q "+mp); !strings.Contains(out, "user:"+user+":rwx") {
+		t.Fatalf("getfacl does not show the entry:\n%s", out)
+	}
+
+	entry := url.QueryEscape("A:fd:" + user + ":rwx")
+	assertTasks(t, apiOK(t, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil))
+	if _, _, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil))); ok {
+		t.Fatalf("entry still present after delete")
+	}
+	apiStatus(t, http.StatusNotFound, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil)
+	apiStatus(t, http.StatusBadRequest, "POST", "/api/acl/"+ds, map[string]string{"ace": "A::" + user + ":rwq"})
 }
 
 func hasACE(entries []aclEntry, user string) bool {
