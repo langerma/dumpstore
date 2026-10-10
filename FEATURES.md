@@ -62,9 +62,10 @@
 | Datasets tab redesign      | v0.2.0 | Per-pool sections with health/capacity header rows, usage bars, status chips, hover-revealed quick actions, and a slide-in detail drawer with grouped actions and inline property editing; part 1 of #63 |
 | Snapshots tab redesign     | v0.2.0 | Collapsible per-dataset groups with count/size/age headers, relative ages, per-group bulk select, hover-revealed actions; part 2 of #63, closes #63 |
 | Drive replacement          | v0.1.14 | Replace pool devices from the vdev tree with an unused-device picker (`zpool replace`); offline/online devices for maintenance; resilver progress bar + completion toast; `GET /api/devices` lists block devices with in-use detection (new `internal/blockdev`); closes #55 |
-| Software card tiers        | Unreleased | Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones — new "Needed for" column names the feature each optional tool unlocks; a missing required tool shows a red "missing" badge instead of grey N/A. Closes #135 |
-| ZFS presence checks        | Unreleased | Startup dependency check now verifies `zfs`/`zpool` in PATH (fail fast instead of every tab erroring); on FreeBSD a System-panel warning appears when the ZFS kernel module is not loaded (`kldstat -q -m zfs`). Closes #136 |
-| OpenTelemetry export       | Unreleased | Env-gated OTLP export (no-op by default): per-request trace spans with Ansible/ops child spans and background job/replication/autosnap root spans; single-producer log pipeline (journald format preserved byte-for-byte, OTLP branch adds `trace_id` correlation); Go runtime + HTTP metrics via OTLP alongside the unchanged Prometheus `/metrics`. Phases 1+2 of #49 |
+| Software card tiers        | v0.2.1     | Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones — new "Needed for" column names the feature each optional tool unlocks; a missing required tool shows a red "missing" badge instead of grey N/A. Closes #135 |
+| ZFS presence checks        | v0.2.1     | Startup dependency check now verifies `zfs`/`zpool` in PATH (fail fast instead of every tab erroring); on FreeBSD a System-panel warning appears when the ZFS kernel module is not loaded (`kldstat -q -m zfs`). Closes #136 |
+| OpenTelemetry export       | v0.2.1     | Env-gated OTLP export (no-op by default): per-request trace spans with Ansible/ops child spans and background job/replication/autosnap root spans; single-producer log pipeline (journald format preserved byte-for-byte, OTLP branch adds `trace_id` correlation); Go runtime + HTTP metrics via OTLP alongside the unchanged Prometheus `/metrics`. Phases 1+2 of #49 |
+| Integration coverage for most endpoints | v0.2.1 | VM suite extended from ~17 paths to most of the API: every read endpoint + SSE, users/groups/SSH keys, Samba, POSIX + NFSv4 ACLs, chown, iSCSI, replication, auto-snapshot properties + takeover/release, scrub schedules, services, TLS, password change — with negative cases; green on Linux (CI) and FreeBSD. Surfaced and fixed eleven bugs. Closes #141 |
 
 ---
 
@@ -72,7 +73,6 @@
 
 | Bug                                                                                         | Priority | Issue                                                   | Notes                                                                                                   |
 |---------------------------------------------------------------------------------------------|----------|---------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
-| FreeBSD: no `zfs_enable` check in rc.conf — pools disappear after reboot if ZFS not enabled | Medium   | [#76](https://github.com/langerma/dumpstore/issues/76)  | UI shows warning; full detection/remediation not yet implemented                                        |
 
 ---
 
@@ -85,6 +85,7 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | Privilege separation               | Medium   | internal | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
 | wsdd configuration management      | Medium   | manage | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares — discovery helper for managed SMB |
 | FreeBSD port (sysutils/dumpstore)  | Medium   | internal | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
+| .deb / .rpm packages               | Medium   | internal | [#142](https://github.com/langerma/dumpstore/issues/142) | Linux counterpart to the FreeBSD port (#89): native packages with the systemd unit, playbooks, and static assets |
 | lldap integration                  | Medium   | integrate | [#62](https://github.com/langerma/dumpstore/issues/62) | Auth bind + read-only directory display; user/group management stays in lldap's UI (scope trimmed per #121) |
 | UPS / NUT integration              | Low      | integrate | [#52](https://github.com/langerma/dumpstore/issues/52) | Status display via `upsc` + thin low-battery shutdown hook; no NUT configuration management (scope trimmed per #121) |
 | ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
