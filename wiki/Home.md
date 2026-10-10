@@ -30,7 +30,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **SMB home shares** — enable/configure the Samba `[homes]` section for automatic per-user home directory shares; configurable base path, browseable, read only, create/directory masks
 - **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN, portal IP/port, auth mode (None/CHAP), and initiator ACL list
-- **ACL management** — POSIX ACL and NFSv4 ACL entries per dataset; recursive apply supported
+- **ACL management** — POSIX ACL and NFSv4 ACL entries per dataset (NFSv4 on FreeBSD via the base `getfacl`/`setfacl`); recursive apply supported
 - **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
 - **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
 - **OpenTelemetry export** — set `OTEL_EXPORTER_OTLP_ENDPOINT` and dumpstore pushes traces (per-request spans, Ansible/ops child spans, background job/replication/autosnap spans), logs (the journald stream with `trace_id` correlation), and Go runtime metrics to any OTLP collector; every OTEL code path is a no-op without the env var

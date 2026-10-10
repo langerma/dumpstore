@@ -45,7 +45,8 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestUserLifecycle` / `TestUserNegatives` | user create/modify/delete, SSH key add/list/remove, `id` in the VM; invalid names 400, system user 403, unknown user 404 |
 | `TestGroupLifecycle` | group create, members + rename, unknown member 400, delete; system group 403 |
 | `TestSMBSurface` | init (409 gate when smb.conf is absent), usershare set/list/unset, Samba user add/remove, `[homes]`, Time Machine shares |
-| `TestPosixACL` | acltype gate, POSIX ACE set/get/remove (+ `getfacl` check), 404 on re-delete — Linux only (FreeBSD: #156) |
+| `TestPosixACL` | acltype gate, POSIX ACE set/get/remove (+ `getfacl` check), 404 on re-delete — Linux only |
+| `TestNFSv4ACL` | NFSv4 ACE add/list/remove in the nfs4-acl-tools form (+ `getfacl` check), 404 on re-delete, bad permission 400 — FreeBSD only (Linux ZFS cannot apply NFSv4 ACLs locally) |
 | `TestChown` | mountpoint owner/group read + change, verified with `stat` |
 | `TestISCSITarget` | zvol → targetcli target create/list/delete; CHAP-without-password and bad IQN 400 — Linux only |
 | `TestReplicationTask` | task CRUD, invalid schedule/target 400, manual run → job → received snapshot → history record, hold released |

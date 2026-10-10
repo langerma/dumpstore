@@ -54,7 +54,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **SMB home shares** — enable and configure the Samba `[homes]` section; configurable base path (pick a ZFS dataset or specify a custom path), browseable, read only, create mask, and directory mask; base directory is created automatically on apply
 - **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users; target directory created automatically on apply
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN (auto-generated, editable), portal IP/port, auth mode (None/CHAP), and initiator ACL list
-- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
+- **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (Linux: `nfs4_getfacl`/`nfs4_setfacl` from `nfs4-acl-tools`; FreeBSD: base `getfacl`/`setfacl`, translated to the same entry format) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
 - **OpenTelemetry export** — set `OTEL_EXPORTER_OTLP_ENDPOINT` and dumpstore pushes traces (per-request root spans, Ansible/ops child spans, background-job/replication/autosnap spans), logs (the journald stream with `trace_id` correlation), and Go runtime metrics to any OTLP collector; no-op without the env var
@@ -415,7 +415,7 @@ For OTLP-only setups, local logging can be switched off with `-log-stdout=false`
 | POSIX ACLs (optional)  | `acl` pkg (`getfacl`/`setfacl`)                           | `py311-pylibacl` or `acl` port               |
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
 | SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also install `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
-| NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
+| NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | base system (`getfacl`/`setfacl`)            |
 | iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
 | TLS / ACME (optional)  | `openssl` (usually pre-installed); `lego` for ACME         | same                                         |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
@@ -633,7 +633,7 @@ sudo make uninstall
 │   │   └── paths.go                 # ConfigDir(goos) — /etc/dumpstore or /usr/local/etc/dumpstore
 │   ├── zfs/
 │   │   ├── zfs.go                   # ListPools, ListDatasets, ListSnapshots, IOStats, PoolStatuses (direct CLI)
-│   │   ├── acl.go                   # GetPosixACL, GetNFS4ACL — getfacl/nfs4_getfacl parsing
+│   │   ├── acl.go                   # GetPosixACL, GetNFS4ACL — getfacl/nfs4_getfacl parsing; FreeBSD NFSv4 translation
 │   │   └── cronparse.go             # Parse zfsutils-linux / zfstools cron entries for scrub schedules
 │   ├── ansible/
 │   │   ├── runner.go                # Run(ctx, playbook, extraVars) → PlaybookOutput; ndjson output parsing; trace span per run

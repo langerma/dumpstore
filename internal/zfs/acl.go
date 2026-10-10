@@ -171,8 +171,13 @@ func parsePOSIXACLLine(line string) (ACLEntry, bool) {
 	return ACLEntry{}, false
 }
 
-// getNFSv4ACL runs nfs4_getfacl and parses the output.
+// getNFSv4ACL reads the NFSv4 ACL of mountpoint: nfs4_getfacl on Linux,
+// base getfacl on FreeBSD (translated to the nfs4-acl-tools entry form so the
+// API and UI see one format on both platforms).
 func getNFSv4ACL(mountpoint string) ([]ACLEntry, error) {
+	if runtime.GOOS == "freebsd" {
+		return getFreeBSDNFSv4ACL(mountpoint)
+	}
 	out, err := run("nfs4_getfacl", mountpoint)
 	if err != nil {
 		return nil, fmt.Errorf("nfs4_getfacl %s: %w", mountpoint, err)
@@ -191,6 +196,9 @@ func getNFSv4ACL(mountpoint string) ([]ACLEntry, error) {
 	return entries, nil
 }
 
+// ParseNFSv4ACE parses an ACE in nfs4-acl-tools form ("A:fd:alice:rwx").
+func ParseNFSv4ACE(ace string) (ACLEntry, bool) { return parseNFSv4ACLLine(ace) }
+
 // parseNFSv4ACLLine parses one line from nfs4_getfacl output.
 // Format: type:flags:principal:perms
 // Example: "A::OWNER@:rwaDxtTnNcCoy"
@@ -208,4 +216,147 @@ func parseNFSv4ACLLine(line string) (ACLEntry, bool) {
 		Qualifier: parts[2],
 		Perms:     parts[3],
 	}, true
+}
+
+// ── FreeBSD NFSv4 ACLs ────────────────────────────────────────────────────────
+//
+// FreeBSD's base getfacl/setfacl speak NFSv4 ACLs natively, in their own form:
+//
+//	<tag>[:<qualifier>]:<perms>:<inheritance flags>:<type>
+//	owner@:rwxp--aARWcCos:-------:allow
+//	user:alice:rwx-----------:fd-----:allow
+//
+// The API and UI use the nfs4-acl-tools form ("type:flags:principal:perms")
+// on every platform; these helpers translate between the two.
+
+// nfs4-acl-tools permission letter → FreeBSD letter, in FreeBSD's display order.
+var freebsdPerms = []struct{ nfs4, bsd byte }{
+	{'r', 'r'}, {'w', 'w'}, {'x', 'x'}, {'a', 'p'}, {'D', 'D'}, {'d', 'd'}, {'t', 'a'},
+	{'T', 'A'}, {'n', 'R'}, {'N', 'W'}, {'c', 'c'}, {'C', 'C'}, {'o', 'o'}, {'y', 's'},
+}
+
+// Inheritance flag letters, identical in both forms ('g' is nfs4-only: it marks
+// a group principal, which FreeBSD expresses with the "group:" tag instead).
+const freebsdFlags = "fdinSFI"
+
+var freebsdTypes = map[string]string{"A": "allow", "D": "deny", "U": "audit", "L": "alarm"}
+
+var freebsdSpecial = map[string]string{"OWNER@": "owner@", "GROUP@": "group@", "EVERYONE@": "everyone@"}
+
+func getFreeBSDNFSv4ACL(mountpoint string) ([]ACLEntry, error) {
+	out, err := run("getfacl", "-q", mountpoint)
+	if err != nil {
+		return nil, fmt.Errorf("getfacl %s: %w", mountpoint, err)
+	}
+	var entries []ACLEntry
+	for _, line := range splitLines(out) {
+		if e, ok := parseFreeBSDNFSv4Line(strings.TrimSpace(line)); ok {
+			entries = append(entries, e)
+		}
+	}
+	return entries, nil
+}
+
+// parseFreeBSDNFSv4Line converts one FreeBSD getfacl NFSv4 line into the
+// nfs4-acl-tools entry form.
+func parseFreeBSDNFSv4Line(line string) (ACLEntry, bool) {
+	f := strings.Split(line, ":")
+	var e ACLEntry
+	switch {
+	case len(f) == 4 && strings.HasSuffix(f[0], "@"): // owner@:perms:flags:type
+		e.Qualifier = strings.ToUpper(f[0])
+		f = f[1:]
+	case len(f) == 5 && (f[0] == "user" || f[0] == "group"): // user:alice:perms:flags:type
+		e.Qualifier = f[1]
+		if f[0] == "group" {
+			e.Flags = "g"
+		}
+		f = f[2:]
+	default:
+		return ACLEntry{}, false
+	}
+	perms, flags, typ := f[0], f[1], f[2]
+	for t, name := range freebsdTypes {
+		if name == typ {
+			e.Tag = t
+		}
+	}
+	if e.Tag == "" {
+		return ACLEntry{}, false
+	}
+	for _, p := range freebsdPerms {
+		if strings.IndexByte(perms, p.bsd) >= 0 {
+			e.Perms += string(p.nfs4)
+		}
+	}
+	// FreeBSD pads flags with dashes ("fd-----"); orderFlags keeps known letters.
+	e.Flags = orderFlags(e.Flags + flags)
+	return e, true
+}
+
+// orderFlags returns the known flag letters of flags in canonical order, with
+// the group-principal marker 'g' last.
+func orderFlags(flags string) string {
+	var b strings.Builder
+	for i := range len(freebsdFlags) {
+		if strings.IndexByte(flags, freebsdFlags[i]) >= 0 {
+			b.WriteByte(freebsdFlags[i])
+		}
+	}
+	if strings.Contains(flags, "g") {
+		b.WriteByte('g')
+	}
+	return b.String()
+}
+
+// FreeBSDACESpec converts an nfs4-acl-tools entry into a FreeBSD setfacl
+// NFSv4 entry ("user:alice:rwx:fd:allow"). A "@domain" suffix on a user or
+// group principal is dropped — FreeBSD names local accounts directly.
+func FreeBSDACESpec(e ACLEntry) (string, error) {
+	typ, ok := freebsdTypes[e.Tag]
+	if !ok {
+		return "", fmt.Errorf("unsupported ACE type %q", e.Tag)
+	}
+	var perms strings.Builder
+	for i := range len(e.Perms) {
+		found := false
+		for _, p := range freebsdPerms {
+			if p.nfs4 == e.Perms[i] {
+				perms.WriteByte(p.bsd)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", fmt.Errorf("unsupported permission %q", e.Perms[i])
+		}
+	}
+	if perms.Len() == 0 {
+		return "", fmt.Errorf("ACE grants no permissions")
+	}
+	var flags strings.Builder
+	for i := range len(e.Flags) {
+		c := e.Flags[i]
+		switch {
+		case c == 'g':
+		case strings.IndexByte(freebsdFlags, c) >= 0:
+			flags.WriteByte(c)
+		default:
+			return "", fmt.Errorf("unsupported flag %q", c)
+		}
+	}
+	var tag string
+	if special, ok := freebsdSpecial[strings.ToUpper(e.Qualifier)]; ok {
+		tag = special
+	} else {
+		name, _, _ := strings.Cut(e.Qualifier, "@")
+		if name == "" {
+			return "", fmt.Errorf("ACE has no principal")
+		}
+		tag = "user:" + name
+		if strings.Contains(e.Flags, "g") {
+			tag = "group:" + name
+		}
+	}
+	return tag + ":" + perms.String() + ":" + flags.String() + ":" + typ, nil
 }

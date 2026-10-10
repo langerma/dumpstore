@@ -591,7 +591,7 @@
           <span class="pool-name">ACL management</span>
           <span class="health-badge badge-orange">POSIX / NFSv4</span>
         </div>
-        <p>View, add, and remove POSIX and NFSv4 ACL entries per dataset. One-click <code>acltype</code> enable. Recursive apply.</p>
+        <p>View, add, and remove POSIX and NFSv4 ACL entries per dataset — NFSv4 on FreeBSD via the base <code>getfacl</code>/<code>setfacl</code>. One-click <code>acltype</code> enable. Recursive apply.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -915,7 +915,7 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
           <tr>
             <td>NFSv4 ACLs<span class="opt-badge">optional</span></td>
             <td class="muted">nfs4-acl-tools</td>
-            <td class="muted">nfs4-acl-tools port</td>
+            <td class="muted">base system</td>
           </tr>
           <tr>
             <td>NFS sharing<span class="opt-badge">optional</span></td>

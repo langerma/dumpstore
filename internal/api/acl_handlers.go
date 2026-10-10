@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"dumpstore/internal/zfs"
@@ -173,6 +174,19 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		playbook = "acl_set_posix.yml"
 	case "nfsv4":
 		playbook = "acl_set_nfs4.yml"
+		if runtime.GOOS == "freebsd" {
+			e, ok := zfs.ParseNFSv4ACE(req.ACE)
+			if !ok {
+				writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace must be type:flags:principal:perms"), nil)
+				return
+			}
+			spec, err := zfs.FreeBSDACESpec(e)
+			if err != nil {
+				writeError(r.Context(), w, http.StatusBadRequest, err, nil)
+				return
+			}
+			vars["ace"] = spec
+		}
 	default:
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
 		return
@@ -187,13 +201,13 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
 }
 
-// aclEntryExists reports whether the given ACL removal spec matches at least one
-// entry in the dataset's current ACL. This prevents setfacl -x / nfs4_setfacl -x
-// from silently succeeding on a nonexistent entry.
+// findACLEntry returns the first entry in the dataset's current ACL matched by
+// the given removal spec. This prevents setfacl -x / nfs4_setfacl -x from
+// silently succeeding on a nonexistent entry.
 //
 // For POSIX the spec is "tag:qualifier" or "default:tag:qualifier".
 // For NFSv4 the spec is "type:flags:principal:perms"; we match on type+principal (parts[0] and [2]).
-func aclEntryExists(acl *zfs.DatasetACL, entry string) bool {
+func findACLEntry(acl *zfs.DatasetACL, entry string) (zfs.ACLEntry, bool) {
 	switch acl.ACLType {
 	case "posix":
 		isDefault := false
@@ -210,22 +224,22 @@ func aclEntryExists(acl *zfs.DatasetACL, entry string) bool {
 		}
 		for _, e := range acl.Entries {
 			if e.Tag == tag && e.Qualifier == qualifier && e.Default == isDefault {
-				return true
+				return e, true
 			}
 		}
 	case "nfsv4":
 		parts := strings.SplitN(entry, ":", 4)
 		if len(parts) < 3 {
-			return false
+			return zfs.ACLEntry{}, false
 		}
 		typ, principal := parts[0], parts[2]
 		for _, e := range acl.Entries {
 			if e.Tag == typ && e.Qualifier == principal {
-				return true
+				return e, true
 			}
 		}
 	}
-	return false
+	return zfs.ACLEntry{}, false
 }
 
 // removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
@@ -270,7 +284,8 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
 		return
 	}
-	if !aclEntryExists(acl, entry) {
+	match, ok := findACLEntry(acl, entry)
+	if !ok {
 		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("ACL entry %q not found on dataset %s", entry, name), nil)
 		return
 	}
@@ -291,6 +306,15 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 		playbook = "acl_remove_posix.yml"
 	case "nfsv4":
 		playbook = "acl_remove_nfs4.yml"
+		if runtime.GOOS == "freebsd" {
+			// setfacl -x needs the entry exactly as stored: remove the matched one.
+			spec, err := zfs.FreeBSDACESpec(match)
+			if err != nil {
+				writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+				return
+			}
+			vars["ace"] = spec
+		}
 	default:
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
 		return

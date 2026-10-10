@@ -5,7 +5,9 @@
 #   dataset     - ZFS dataset name (e.g. tank/data)
 #   mountpoint  - absolute path of the dataset mountpoint (e.g. /tank/data)
 #   ace         - full NFSv4 ACE string (e.g. "A::alice@localdomain:rwaDxtTnNcCoy")
-#                 Format: type:flags:principal:perms
+#                 Format: type:flags:principal:perms (nfs4_setfacl, Linux)
+#                 FreeBSD: setfacl NFSv4 form, e.g. "user:alice:rwx:fd:allow"
+#                 (translated by the handler)
 
 - name: Set NFSv4 ACL entry
   hosts: localhost
@@ -22,14 +24,21 @@
           - ace is not search('[;|&$`]')
         fail_msg: "dataset, mountpoint and ace are required and must not contain shell-special characters"
 
-    - name: Ensure acltype is set to nfsv4acls
+    - name: Detect OS for ACL tool
+      ansible.builtin.command: uname -s
+      register: os_name
+      changed_when: false
+
+    - name: Ensure acltype is set to nfsv4
       ansible.builtin.command:
-        argv: ["zfs", "set", "acltype=nfsv4acls", "{{ dataset }}"]
+        argv: ["zfs", "set", "acltype=nfsv4", "{{ dataset }}"]
       register: acltype_result
       changed_when: acltype_result.rc == 0
 
+    # nfs4-acl-tools on Linux; FreeBSD's base setfacl speaks NFSv4 natively
+    # (the handler has already translated the ACE to FreeBSD syntax).
     - name: Add NFSv4 ACL entry
       ansible.builtin.command:
-        argv: ["nfs4_setfacl", "-a", "{{ ace }}", "{{ mountpoint }}"]
+        argv: "{{ ['nfs4_setfacl', '-a', ace, mountpoint] if os_name.stdout == 'Linux' else ['setfacl', '-m', ace, mountpoint] }}"
       register: acl_result
       changed_when: acl_result.rc == 0
