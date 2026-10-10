@@ -1,15 +1,17 @@
 ---
-# smb_apply.yml — Atomically apply a fully rendered smb.conf and restart Samba.
+# smb_apply.yml — Atomically apply a fully rendered smb.conf and reload Samba.
 #
 # Called by dumpstore after rendering the complete config from its internal
 # template. This playbook creates any referenced directories, deploys the
-# rendered file, and restarts the service.
+# rendered file, and reloads the services (started if not running). A reload
+# re-reads smb.conf without dropping client connections; a restart per write
+# trips systemd's start limit when several edits land within seconds.
 #
 # Required extra vars:
 #   src             – path to the rendered smb.conf temp file
 #   smb_conf        – destination path (e.g. /etc/samba/smb.conf)
 #   dirs            – JSON list of directories to ensure exist (may be empty: [])
-#   samba_services  – JSON list of service names to restart
+#   samba_services  – JSON list of service names to reload
 
 - name: Apply dumpstore Samba configuration
   hosts: localhost
@@ -41,8 +43,8 @@
         mode: "0644"
         backup: true
 
-    - name: Restart Samba services
+    - name: Reload Samba services
       ansible.builtin.service:
         name: "{{ item }}"
-        state: restarted
+        state: reloaded
       loop: "{{ samba_services | from_json }}"
