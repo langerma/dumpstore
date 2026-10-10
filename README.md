@@ -25,7 +25,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 ## Features
 
-- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats; the Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones and names the feature each optional tool unlocks — a missing required tool is flagged with a red badge; platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded, `zfs_enable` not set)
+- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats; the Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones and names the feature each optional tool unlocks — a missing required tool is flagged with a red badge; platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded, `zfs_enable` not set); software probes and warnings are cached for 5 minutes, so a newly installed tool can take that long to appear
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
 - **Pool scrub management** — trigger and cancel scrubs; last scrub time, status, and progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **Pool lifecycle** — create pools (single/mirror/raidz1-3/draid1-3) with an unused-device picker, optional ashift/compression, and confirm-by-typing; import exported pools (with force option); export pools from the pool card
@@ -396,7 +396,7 @@ On Linux the log stream keeps its systemd journal integration (syslog `<N>` prio
 
 What gets exported when enabled:
 
-- **Traces** — a root span per API request (named `METHOD /route/pattern`, carrying the journald `req_id` for two-way correlation); child spans for every Ansible playbook run (`ansible.playbook`, extra-var *keys* only — values may hold secrets) and every ops-lane command (`ops.zfs snapshot`, argv attached); root spans for background work — jobs (`job.<type>`, linked to the dispatching request's span), scheduled replication runs (`replication.run`), and auto-snapshot fires (`autosnap.run`). ZFS *read* calls are deliberately not traced (sub-10 ms, high volume).
+- **Traces** — a root span per API request (named `METHOD /route/pattern`, carrying the journald `req_id` for two-way correlation; requests that never reach a route are named `METHOD (unauthenticated)` or `METHOD (unmatched)` with a `dumpstore.short_circuit` attribute — never the raw path); child spans for every Ansible playbook run (`ansible.playbook`, extra-var *keys* only — values may hold secrets) and every ops-lane command (`ops.zfs snapshot`, argv attached); root spans for background work — jobs (`job.<type>`, linked to the dispatching request's span), scheduled replication runs (`replication.run`), and auto-snapshot fires (`autosnap.run`). ZFS *read* calls are deliberately not traced (sub-10 ms, high volume).
 - **Logs** — the same records that go to journald, shipped over OTLP with `trace_id`/`span_id` correlation. Logging is a single-producer pipeline: slog feeds the OTEL log SDK, whose journald exporter reproduces the classic output (identical format, syslog priority prefixes) while the OTLP branch exports the same stream. journald lines gain `trace_id`/`span_id` too when a request context is present. If the collector is down, OTLP records buffer and drop in the background — journald output is never affected.
 - **Metrics** — Go runtime metrics (`contrib/instrumentation/runtime`) and `http.server.*` metrics pushed via OTLP, alongside the unchanged Prometheus endpoint.
 
@@ -643,7 +643,7 @@ sudo make uninstall
 │   ├── logging/
 │   │   ├── journal_exporter.go      # OTEL log exporter reproducing the journald format (single producer)
 │   │   ├── apphandler.go            # Process-wide slog handler: otelslog bridge + level gate + req_id
-│   │   └── middleware.go            # RequestLogger: req_id correlation, span rename to METHOD /route
+│   │   └── middleware.go            # RequestLogger: req_id correlation, span rename to METHOD /route (or short-circuit name)
 │   ├── auth/
 │   │   ├── config.go                # Load/save dumpstore.conf (username, password hash, TLS, trusted proxies)
 │   │   ├── config_handlers.go       # API handlers for auth config changes (username, password)
