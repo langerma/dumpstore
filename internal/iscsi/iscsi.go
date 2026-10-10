@@ -61,7 +61,7 @@ type linuxSaveconfig struct {
 	} `json:"storage_objects"`
 	Targets []struct {
 		Fabric string `json:"fabric"`
-		Name   string `json:"name"`
+		WWN    string `json:"wwn"` // the target IQN
 		TPGs   []struct {
 			Tag     int  `json:"tag"`
 			Enable  bool `json:"enable"`
@@ -91,6 +91,12 @@ func listLinuxTargets() ([]Target, error) {
 		}
 		return nil, fmt.Errorf("reading targetcli saveconfig: %w", err)
 	}
+	return parseLinuxSaveconfig(data)
+}
+
+// parseLinuxSaveconfig extracts zvol-backed iSCSI targets from targetcli's
+// saveconfig JSON.
+func parseLinuxSaveconfig(data []byte) ([]Target, error) {
 	var cfg linuxSaveconfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing targetcli saveconfig: %w", err)
@@ -149,7 +155,7 @@ func listLinuxTargets() ([]Target, error) {
 			zvolName := strings.TrimPrefix(zvolDev, "/dev/zvol/")
 
 			targets = append(targets, Target{
-				IQN:        t.Name,
+				IQN:        t.WWN,
 				ZvolName:   zvolName,
 				ZvolDevice: zvolDev,
 				LUN:        lun,
