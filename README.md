@@ -614,7 +614,7 @@ With the Linux VM up and deployed, run the end-to-end suite from the host:
 make test-integration
 ```
 
-It drives the deployed API over HTTP — auth, dataset/snapshot lifecycle, `zfs diff`, user quotas, send/recv jobs, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on the scratch disks. CI runs the same suite nightly and on PRs labeled `run-integration` (`.github/workflows/integration-tests.yml`). See [tests/integration/README.md](tests/integration/README.md) for configuration and for running it against the FreeBSD VM.
+It drives the deployed API over HTTP — every read endpoint, auth and password change, dataset/snapshot lifecycle, `zfs diff`, quotas, send/recv and replication jobs, users/groups/SSH keys, Samba (shares, users, homes, Time Machine), ACLs, chown, iSCSI targets, TLS, service control, auto-snapshot properties, scrub schedules, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on the scratch disks. Fixtures are `itest`-prefixed and cleaned up before and after each test; host config files a test rewrites are restored byte-for-byte. CI runs the same suite nightly and on PRs labeled `run-integration` (`.github/workflows/integration-tests.yml`). See [tests/integration/README.md](tests/integration/README.md) for configuration and for running it against the FreeBSD VM.
 
 ## Uninstall
 

@@ -187,14 +187,23 @@ func vmExec(t *testing.T, script string) string {
 	return out
 }
 
+// vmOutputMarker separates login-shell noise (FreeBSD prints a fortune on
+// every `limactl shell`) from the script's own output.
+const vmOutputMarker = "__ITEST_OUTPUT__"
+
 // vmExecErr is vmExec without the fatal-on-error behavior, for cleanup paths.
 func vmExecErr(script string) (string, error) {
-	cmd := exec.Command("limactl", "shell", "--tty=false", vmName, "--", "sudo", "sh", "-c", script)
+	cmd := exec.Command("limactl", "shell", "--tty=false", vmName, "--",
+		"sudo", "sh", "-c", "echo "+vmOutputMarker+"; "+script)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	err := cmd.Run()
-	return buf.String(), err
+	out := buf.String()
+	if _, after, ok := strings.Cut(out, vmOutputMarker+"\n"); ok {
+		out = after
+	}
+	return out, err
 }
 
 // waitFor polls cond until it returns true or the timeout expires.
@@ -297,6 +306,92 @@ func poolStatus(t *testing.T, name string) (poolDetail, bool) {
 
 // destroyDatasetInVM force-destroys a dataset tree directly in the VM.
 // Used for cleanup so a failed test cannot strand state for the next run.
+// Replication holds are released first — a held snapshot blocks destroy.
 func destroyDatasetInVM(name string) {
-	_, _ = vmExecErr("zfs destroy -r " + name + " 2>/dev/null || true")
+	_, _ = vmExecErr("zfs list -H -o name -t snapshot -r " + name + " 2>/dev/null" +
+		" | xargs -r -n1 zfs release -r dumpstore-repl 2>/dev/null;" +
+		" zfs destroy -r " + name + " 2>/dev/null || true")
+}
+
+// apiStatus is api plus an assertion on the exact status code.
+func apiStatus(t *testing.T, want int, method, path string, body any) []byte {
+	t.Helper()
+	status, b := api(t, method, path, body)
+	if status != want {
+		t.Fatalf("%s %s: status %d, want %d; body: %s", method, path, status, want, truncate(b, 2000))
+	}
+	return b
+}
+
+// assertTasks checks that an Ansible-backed write response carries a
+// non-empty op-log, which the frontend renders in the op-log dialog.
+func assertTasks(t *testing.T, b []byte) {
+	t.Helper()
+	r := decode[struct {
+		Tasks []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"tasks"`
+	}](t, b)
+	if len(r.Tasks) == 0 {
+		t.Fatalf("write response has no tasks: %s", truncate(b, 2000))
+	}
+}
+
+// skipUnlessVMTool skips the test when tool is not installed in the VM
+// (stale local VMs provisioned before the tool was added, FreeBSD).
+func skipUnlessVMTool(t *testing.T, tool string) {
+	t.Helper()
+	if _, err := vmExecErr("command -v " + tool); err != nil {
+		t.Skipf("%s not installed in VM %s — rebuild it: make vm-linux-destroy vm-linux-start vm-linux-deploy", tool, vmName)
+	}
+}
+
+// createDataset creates a filesystem through the API (destroying any stale
+// copy first) and registers cleanup. Returns its mountpoint.
+func createDataset(t *testing.T, name string) string {
+	t.Helper()
+	destroyDatasetInVM(name)
+	t.Cleanup(func() { destroyDatasetInVM(name) })
+	apiOK(t, "POST", "/api/datasets", map[string]any{"name": name, "type": "filesystem"})
+	ds, ok := datasetByName(t, name)
+	if !ok || ds.Mountpoint == "" {
+		t.Fatalf("dataset %s missing or unmounted after create: %+v", name, ds)
+	}
+	return ds.Mountpoint
+}
+
+// createUser creates a local user with a same-named primary group through
+// the API and registers best-effort cleanup in the VM.
+func createUser(t *testing.T, name string) {
+	t.Helper()
+	removeUserInVM(name)
+	t.Cleanup(func() { removeUserInVM(name) })
+	assertTasks(t, apiStatus(t, http.StatusCreated, "POST", "/api/users", map[string]any{
+		"username": name, "shell": "/bin/sh", "password": "itest-pass", "create_group": true,
+	}))
+}
+
+// removeUserInVM deletes a user, its home, its same-named group, and its
+// Samba registration — whichever exist.
+func removeUserInVM(name string) {
+	// userdel/groupdel on Linux, pw on FreeBSD — whichever exists.
+	_, _ = vmExecErr("pdbedit -x -u " + name + " >/dev/null 2>&1;" +
+		" userdel -r " + name + " >/dev/null 2>&1 || pw userdel " + name + " -r >/dev/null 2>&1;" +
+		" groupdel " + name + " >/dev/null 2>&1 || pw groupdel " + name + " >/dev/null 2>&1; true")
+}
+
+func removeGroupInVM(name string) {
+	_, _ = vmExecErr("groupdel " + name + " >/dev/null 2>&1 || pw groupdel " + name + " >/dev/null 2>&1; true")
+}
+
+// waitJob polls a job until it leaves the running state and returns it.
+func waitJob(t *testing.T, id string, timeout time.Duration) job {
+	t.Helper()
+	var j job
+	waitFor(t, "job "+id+" to finish", timeout, func() bool {
+		j = decode[job](t, apiOK(t, "GET", "/api/jobs/"+id, nil))
+		return j.Status != "pending" && j.Status != "running"
+	})
+	return j
 }
