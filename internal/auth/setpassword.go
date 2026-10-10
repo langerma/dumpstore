@@ -8,8 +8,8 @@ import (
 	"golang.org/x/term"
 )
 
-// SetPassword interactively prompts for a new admin password, bcrypt-hashes it
-// at cost 12, and saves it to the config file at configPath.
+// SetPassword interactively prompts for a new admin password, argon2id-hashes it
+// and saves it to the config file at configPath.
 // It reads from /dev/tty directly so it works correctly even when stdin is
 // piped (e.g. inside install.sh).
 func SetPassword(configPath string) error {
@@ -42,7 +42,7 @@ func SetPassword(configPath string) error {
 		return errors.New("passwords do not match")
 	}
 
-	hash, err := hashPassword(pass1)
+	hash, err := HashPassword(pass1)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}

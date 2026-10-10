@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"golang.org/x/crypto/bcrypt"
+	"dumpstore/internal/auth"
 )
 
 // reUsername allows letters, digits, underscores, hyphens, and dots — no
@@ -26,7 +26,7 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	pwHash := h.authCfg.PasswordHash
 	h.authMu.RUnlock()
 
-	if pwHash == "" || bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(req.CurrentPassword)) != nil {
+	if pwHash == "" || auth.VerifyPassword(pwHash, []byte(req.CurrentPassword)) != nil {
 		writeError(r.Context(), w, http.StatusUnauthorized, errors.New("current password is incorrect"), nil)
 		return
 	}
@@ -34,14 +34,14 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("new password must not be empty"), nil)
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
+	hash, err := auth.HashPassword([]byte(req.NewPassword))
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, errors.New("failed to hash password"), nil)
 		return
 	}
 	out, err := h.runOp(r.Context(), "auth_set_password.yml", map[string]string{
 		"config_path":   h.configPath,
-		"password_hash": string(hash),
+		"password_hash": hash,
 	})
 	if err != nil {
 		writeRunOpError(r.Context(), w, err, out)
@@ -49,7 +49,7 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	// Update in-memory config so subsequent logins use the new hash immediately.
 	h.authMu.Lock()
-	h.authCfg.PasswordHash = string(hash)
+	h.authCfg.PasswordHash = hash
 	username := h.authCfg.Username
 	h.authMu.Unlock()
 

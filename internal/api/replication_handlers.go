@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -217,7 +218,10 @@ func (h *Handler) runReplication(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, errors.New("id required"), nil)
 		return
 	}
-	snap, jobID, err := h.repl.RunOnce(r.Context(), id)
+	// Detach from the request: RunOnce starts a goroutine that waits for the
+	// job to finish, then releases the hold, prunes, and records history.
+	// The request context is cancelled as soon as this handler returns.
+	snap, jobID, err := h.repl.RunOnce(context.WithoutCancel(r.Context()), id)
 	if err != nil {
 		if errors.Is(err, replication.ErrNotFound) {
 			writeError(r.Context(), w, http.StatusNotFound, err, nil)
