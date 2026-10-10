@@ -21,6 +21,7 @@ All notable changes to this project will be documented here.
 - **iSCSI targets on Linux now show their IQN** — the targetcli `saveconfig.json` parser read the target name from a `name` key, but targetcli stores it under `wwn`. Every Linux target was listed with an empty IQN, so the UI could not display it and deleting a target from the UI sent an empty IQN (rejected with 400). Covered by a parser test against a real targetcli-fb saveconfig.
 - **Setting a user password works on FreeBSD** — `user_create.yml` and `user_modify.yml` set passwords with `chpasswd`, which FreeBSD does not have: creating a user with a password (or changing one) failed with a 500 at the "Set user password" step, after the account itself had already been created. FreeBSD now uses `pw usermod <user> -h 0` (password on stdin); Linux keeps `chpasswd`.
 - **Dataset ownership is readable on FreeBSD** — `GET /api/chown/{dataset}` ran GNU `stat -L --format=%U %G`, which FreeBSD's BSD `stat` rejects (500). Ownership is now read via the stat syscall and resolved with `os/user`, identical on both platforms (numeric ids when there is no passwd/group entry, as before).
+- **Group members and rename work on FreeBSD** — `group_modify.yml` used Linux-only `gpasswd -M` and `groupmod -n`; on FreeBSD every group edit failed at "Set members" (500). FreeBSD now uses `pw groupmod -M` / `-l`; both tasks run argv-based instead of through a shell.
 
 ## [v0.2.0] — 2026-07-13
 
