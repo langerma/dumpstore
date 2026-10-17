@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/smb"
@@ -44,12 +45,94 @@ func (h *Handler) applyConfig(r *http.Request, cfg *smb.SMBConfig) (*ansible.Pla
 	dirsJSON, _ := json.Marshal(dirs)
 	servicesJSON, _ := json.Marshal(smb.ServiceNames(goos))
 
-	return h.runOp(r.Context(), "smb_apply.yml", map[string]string{
+	vars := map[string]string{
 		"src":            tmp.Name(),
 		"smb_conf":       smb.ConfPath(goos),
 		"dirs":           string(dirsJSON),
 		"samba_services": string(servicesJSON),
-	})
+	}
+
+	// wsdd announces the host under Samba's workgroup; render its options
+	// file alongside smb.conf whenever wsdd is installed.
+	if st, ok, conf := wsddTarget(); ok && conf != "" {
+		wtmp, err := os.CreateTemp("", "dumpstore-wsdd-*")
+		if err != nil {
+			return nil, fmt.Errorf("create temp file: %w", err)
+		}
+		wtmp.Close()
+		defer os.Remove(wtmp.Name())
+		if err := cfg.RenderWSDDToFile(wtmp.Name()); err != nil {
+			return nil, err
+		}
+		vars["wsdd_src"] = wtmp.Name()
+		vars["wsdd_conf"] = conf
+		vars["wsdd_unit"] = st.UnitName
+		vars["wsdd_restart"] = strconv.FormatBool(st.Active)
+	}
+
+	return h.runOp(r.Context(), "smb_apply.yml", vars)
+}
+
+// wsddTarget returns the wsdd service status, whether it is installed, and
+// the options file dumpstore renders for it. confPath is "" on FreeBSD (the
+// rc.d script reads the workgroup from smb4.conf) and for Linux units that do
+// not take their arguments from $WSDD_PARAMS (left untouched).
+func wsddTarget() (st system.ServiceStatus, installed bool, confPath string) {
+	st, installed = system.LookupService("wsdd")
+	if installed && runtime.GOOS != "freebsd" {
+		confPath = system.UnitParamsFile(st.UnitName, smb.WSDDParamsVar)
+	}
+	return st, installed, confPath
+}
+
+// wsddStatus describes wsdd for GET /api/smb/status.
+func wsddStatus(cfg *smb.SMBConfig) map[string]any {
+	st, installed, conf := wsddTarget()
+	if !installed {
+		return map[string]any{"installed": false, "install_hint": system.WSDDInstallHint()}
+	}
+	freebsd := runtime.GOOS == "freebsd"
+	return map[string]any{
+		"installed": true,
+		"unit":      st.UnitName,
+		"state":     st.State,
+		"active":    st.Active,
+		"enabled":   st.Enabled,
+		"conf_path": conf,
+		// FreeBSD: the rc.d script derives the workgroup from smb4.conf.
+		"manageable": freebsd || conf != "",
+		"managed":    freebsd || (conf != "" && smb.WSDDManaged(conf)),
+		"workgroup":  cfg.WSDDWorkgroup(),
+	}
+}
+
+// applyWSDD handles POST /api/smb/wsdd
+// Re-applies the current Samba config so wsdd's options file is rendered —
+// for hosts where wsdd was installed after Samba was initialised.
+func (h *Handler) applyWSDD(w http.ResponseWriter, r *http.Request) {
+	if h.requireSMBInit(w, r) {
+		return
+	}
+	h.smbMu.Lock()
+	defer h.smbMu.Unlock()
+
+	if _, ok, conf := wsddTarget(); !ok || conf == "" {
+		writeError(r.Context(), w, http.StatusConflict,
+			fmt.Errorf("wsdd is not installed or its unit does not read $%s", smb.WSDDParamsVar), nil)
+		return
+	}
+	cfg, err := smb.ParseSMBConfig(runtime.GOOS)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	out, err := h.applyConfig(r, &cfg)
+	auditLog(r.Context(), r, "smb.wsdd", "", err)
+	if err != nil {
+		writeRunOpError(r.Context(), w, err, out)
+		return
+	}
+	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
 }
 
 // getSMBStatus handles GET /api/smb/status
@@ -64,6 +147,9 @@ func (h *Handler) getSMBStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if fi, err := os.Stat(confPath); err == nil {
 		resp["conf_mtime"] = fi.ModTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if cfg, err := smb.ParseSMBConfig(goos); err == nil {
+		resp["wsdd"] = wsddStatus(&cfg)
 	}
 	writeJSON(r.Context(), w, resp)
 }

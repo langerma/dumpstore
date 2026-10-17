@@ -53,6 +53,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); dumpstore takes full ownership of `smb.conf` / `smb4.conf` and renders it from a template on every write; all sub-features gated behind one-time initialisation (`POST /api/smb/init`); cross-platform (Linux and FreeBSD)
 - **SMB home shares** — enable and configure the Samba `[homes]` section; configurable base path (pick a ZFS dataset or specify a custom path), browseable, read only, create mask, and directory mask; base directory is created automatically on apply
 - **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users; target directory created automatically on apply
+- **Windows discovery (wsdd)** — wsdd announces the host in the Windows Network view under Samba's workgroup; dumpstore treats it as part of the Samba config it owns: on Linux the unit's options file (`/etc/default/wsdd` on Debian/Ubuntu, located via systemd) is rendered from `smb.conf` on every Samba write, and a running wsdd is restarted only when the file changed; on FreeBSD the rc.d script reads the workgroup from `smb4.conf` itself. Status, install hint, and a take-over action live in the SMB section; start/stop/enable in the Services tab
 - **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN (auto-generated, editable), portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (Linux: `nfs4_getfacl`/`nfs4_setfacl` from `nfs4-acl-tools`; FreeBSD: base `getfacl`/`setfacl`, translated to the same entry format) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
@@ -189,6 +190,7 @@ The rule is binary: **own it completely, or don't touch it at all.**
 | Service | Owned? | Config file | Restart mechanism |
 |---------|--------|-------------|-------------------|
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |
+| wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
 | iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
 | TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
@@ -660,7 +662,7 @@ sudo make uninstall
 │   │   ├── device_handlers.go       # Block devices, zpool replace, device offline/online
 │   │   ├── user_handlers.go         # Users, groups, SSH key management
 │   │   ├── acl_handlers.go          # POSIX + NFSv4 ACL handlers
-│   │   ├── smb_handlers.go          # SMB: init, shares, users, homes, Time Machine
+│   │   ├── smb_handlers.go          # SMB: init, shares, users, homes, Time Machine, wsdd
 │   │   ├── iscsi_handlers.go        # iSCSI target create/delete/list
 │   │   ├── tls_handlers.go          # TLS: status, self-signed gen, ACME issue/renew, load existing cert
 │   │   ├── service_handlers.go      # Service start/stop/restart/enable/disable (Samba, NFS, iSCSI)
@@ -806,8 +808,9 @@ sudo make uninstall
 | GET    | `/api/smb-shares`           | List all active Samba usershares      |
 | POST   | `/api/smb-share/{dataset}`  | Create or update a Samba usershare    |
 | DELETE | `/api/smb-share/{dataset}`  | Remove a Samba usershare              |
-| GET    | `/api/smb/status`           | Samba init state, conf path, OS       |
+| GET    | `/api/smb/status`           | Samba init state, conf path, OS, wsdd status |
 | POST   | `/api/smb/init`             | Initialise Samba (create conf + dirs) |
+| POST   | `/api/smb/wsdd`             | Render wsdd options from smb.conf (take over wsdd) |
 | GET    | `/api/smb-users`            | List users registered in smbpasswd   |
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd               |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd          |

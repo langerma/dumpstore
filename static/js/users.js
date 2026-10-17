@@ -771,16 +771,76 @@ document.getElementById('configureSambaConfirmBtn').addEventListener('click', as
   try {
     const result = await api('POST', '/api/smb/init');
     showOpLog('Samba initialised', result.tasks, null);
-    const status = await api('GET', '/api/smb/status').catch(() => null);
-    if (status !== null) {
-      storeBatch(() => {
-        storeSet('smbInitialized', status?.initialized ?? false);
-        storeSet('smbConfPath', status?.conf_path ?? '');
-        storeSet('smbOs', status?.os ?? '');
-        storeSet('smbConfMtime', status?.conf_mtime ?? '');
-      });
-    }
+    await refreshSMBStatus();
   } catch (err) {
     showOpLog('Failed to initialise Samba', err.tasks, err.message);
   }
 });
+
+async function refreshSMBStatus() {
+  const status = await api('GET', '/api/smb/status').catch(() => null);
+  if (status === null) return;
+  storeBatch(() => {
+    storeSet('smbInitialized', status?.initialized ?? false);
+    storeSet('smbConfPath', status?.conf_path ?? '');
+    storeSet('smbOs', status?.os ?? '');
+    storeSet('smbConfMtime', status?.conf_mtime ?? '');
+    storeSet('smbWsdd', status?.wsdd ?? null);
+  });
+}
+
+// ── Render: Windows discovery (wsdd) ──────────────────────────────────────────
+// wsdd announces the host to Windows' Network view under Samba's workgroup.
+// dumpstore renders its options from smb.conf; start/stop lives in Services.
+export function renderSMBWsdd() {
+  const wrap = document.getElementById('smb-wsdd-wrap');
+  if (!wrap) return;
+  const w = state.smbWsdd;
+  if (!state.smbInitialized) {
+    wrap.innerHTML = '<div class="muted" style="padding:0.5rem 0">Samba not initialised.</div>';
+    return;
+  }
+  if (!w) {
+    wrap.innerHTML = '';
+    return;
+  }
+  if (!w.installed) {
+    wrap.innerHTML = `
+      <div class="muted" style="padding:0.5rem 0">
+        <span class="svc-badge unknown">not installed</span>
+        Windows clients won't list this host under Network. Install wsdd: <code>${esc(w.install_hint)}</code>
+      </div>`;
+    return;
+  }
+  let config;
+  if (!w.manageable) {
+    config = `<span class="muted">The <code>${esc(w.unit)}</code> unit does not read <code>$WSDD_PARAMS</code> — dumpstore leaves its config alone.</span>`;
+  } else if (!w.managed) {
+    config = `<span class="muted">Options not managed yet (announces as <code>WORKGROUP</code>).</span>
+      <button class="btn-primary btn-small" data-action="apply">Manage</button>`;
+  } else {
+    const wg = w.workgroup || 'WORKGROUP';
+    config = `<span class="muted">Announces workgroup <code>${esc(wg)}</code> from smb.conf${
+      w.conf_path ? ` → <code>${esc(w.conf_path)}</code>` : ''}.</span>`;
+  }
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;padding:0.5rem 0">
+      <span class="svc-badge ${esc(w.state)}">${esc(w.state)}</span>
+      <span class="mono">${esc(w.unit)}</span>
+      ${config}
+      <span class="muted">Start/stop in the Services tab.</span>
+    </div>`;
+}
+
+async function applySMBWsdd() {
+  showOpLogRunning('Applying wsdd options…');
+  try {
+    const result = await api('POST', '/api/smb/wsdd');
+    showOpLog('wsdd options applied', result.tasks, null);
+    await refreshSMBStatus();
+  } catch (err) {
+    showOpLog('Failed to apply wsdd options', err.tasks, err.message);
+  }
+}
+
+delegate(document.getElementById('smb-wsdd-wrap'), { apply: applySMBWsdd });

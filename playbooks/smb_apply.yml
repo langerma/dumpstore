@@ -12,6 +12,15 @@
 #   smb_conf        – destination path (e.g. /etc/samba/smb.conf)
 #   dirs            – JSON list of directories to ensure exist (may be empty: [])
 #   samba_services  – JSON list of service names to reload
+#
+# Optional extra vars (Linux, set only when wsdd is installed and its unit
+# reads $WSDD_PARAMS from an EnvironmentFile):
+#   wsdd_src        – path to the rendered wsdd options temp file
+#   wsdd_conf       – destination path (the unit's EnvironmentFile)
+#   wsdd_unit       – wsdd systemd unit name
+#   wsdd_restart    – "true" if wsdd was running; it is restarted only when
+#                     its options file changed (wsdd has no reload). A stopped
+#                     wsdd is left stopped and picks the file up on next start.
 
 - name: Apply dumpstore Samba configuration
   hosts: localhost
@@ -48,3 +57,21 @@
         name: "{{ item }}"
         state: reloaded
       loop: "{{ samba_services | from_json }}"
+
+    - name: Deploy wsdd options
+      ansible.builtin.copy:
+        src: "{{ wsdd_src }}"
+        dest: "{{ wsdd_conf }}"
+        owner: root
+        mode: "0644"
+        backup: true
+      register: wsdd_deploy
+      when: (wsdd_conf | default('')) | length > 0
+
+    - name: Restart wsdd
+      ansible.builtin.service:
+        name: "{{ wsdd_unit }}"
+        state: restarted
+      when:
+        - wsdd_deploy is changed
+        - (wsdd_restart | default('false')) == 'true'

@@ -607,6 +607,28 @@ func SambaInstallHint() string {
 	return "install the samba package for your distribution"
 }
 
+// WSDDInstallHint returns a distro-specific install command for the wsdd
+// daemon. Debian/Ubuntu split the service unit into the wsdd-server package.
+func WSDDInstallHint() string {
+	managers := []struct {
+		cmd  string
+		hint string
+	}{
+		{"apt", "apt install wsdd-server"},
+		{"dnf", "dnf install wsdd"},
+		{"pacman", "pacman -S wsdd"},
+		{"zypper", "zypper install wsdd"},
+		{"apk", "apk add wsdd"},
+		{"pkg", "pkg install -g 'py3*-wsdd'"}, // flavor tracks the ports' default Python
+	}
+	for _, m := range managers {
+		if _, err := exec.LookPath(m.cmd); err == nil {
+			return m.hint
+		}
+	}
+	return "install the wsdd package for your distribution"
+}
+
 // probeISCSIBackend returns "targetcli <version>" on Linux or "ctld (installed)"
 // on FreeBSD, whichever is found first. Returns "" if neither is present.
 func probeISCSIBackend() string {

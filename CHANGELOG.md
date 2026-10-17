@@ -4,7 +4,9 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Windows discovery (wsdd) management** — wsdd only announces the host and its workgroup, so dumpstore now treats it as part of the Samba config it owns instead of a separate settings surface. On Linux the options file is located from the unit itself (`EnvironmentFile` of a unit whose `ExecStart` expands `$WSDD_PARAMS` — `/etc/default/wsdd` for Debian/Ubuntu's `wsdd-server`) and rendered from `smb.conf` on every Samba write, so Windows sees the same workgroup Samba serves; a running wsdd is restarted only when the file changed, a stopped one is left stopped. On FreeBSD the port's rc.d script already reads the workgroup from `smb4.conf`, so nothing is rendered. The Services tab gains a wsdd row (`wsdd-server` → `wsdd` on Linux, `wsdd` on FreeBSD); the SMB section shows wsdd status, a distro install hint when missing, and a *Manage* action (`POST /api/smb/wsdd`) for hosts where wsdd was installed after Samba was initialised. `GET /api/smb/status` carries the `wsdd` block. Closes #86.
 
 ## [v0.2.1] — 2026-10-10
 

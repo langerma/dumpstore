@@ -109,6 +109,7 @@ This is one half of the project's **scope boundary** (#121). The other half: dom
 | Service | Owned? | Config file | Restart mechanism |
 |---------|--------|-------------|-------------------|
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |
+| wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
 | iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
 | TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
