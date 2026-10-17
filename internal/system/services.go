@@ -14,7 +14,8 @@ type ServiceStatus struct {
 	UnitName    string `json:"unit_name"`    // platform-specific unit/service name
 	Active      bool   `json:"active"`
 	Enabled     bool   `json:"enabled"`
-	State       string `json:"state"` // "active", "inactive", "failed", "unknown"
+	State       string `json:"state"`     // "active", "inactive", "failed", "unknown"
+	Installed   bool   `json:"installed"` // unit file / rc.d script present
 }
 
 // managedServiceDef maps a logical service name to platform-specific unit names.
@@ -72,18 +73,13 @@ func systemdProp(unit, prop string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// LookupService returns the status of one managed service and whether its
-// unit/rc script is installed. Returns false for unknown logical names.
-func LookupService(logical string) (ServiceStatus, bool) {
+// LookupService returns the status of one managed service. ok is false for
+// unknown logical names; check st.Installed before acting on the unit.
+func LookupService(logical string) (st ServiceStatus, ok bool) {
 	for _, svc := range managedServices {
-		if svc.name != logical {
-			continue
+		if svc.name == logical {
+			return svc.status(), true
 		}
-		st := svc.status()
-		if runtime.GOOS == "freebsd" {
-			return st, rcScriptExists(st.UnitName)
-		}
-		return st, linuxUnitLoaded(st.UnitName)
 	}
 	return ServiceStatus{}, false
 }
@@ -113,17 +109,6 @@ func UnitParamsFile(unit, variable string) string {
 	return fields[0]
 }
 
-// ServiceUnitName returns the platform-specific unit name for a logical service
-// name (e.g. "samba" → "smbd" on Linux). Returns "" if the name is unknown.
-func ServiceUnitName(logical string) string {
-	for _, svc := range managedServices {
-		if svc.name == logical {
-			return svc.unitFor()
-		}
-	}
-	return ""
-}
-
 // ListServices returns the current status of all managed sharing services.
 // Failures for individual services are swallowed; the state is set to "unknown".
 func ListServices() []ServiceStatus {
@@ -144,8 +129,10 @@ func (svc managedServiceDef) status() ServiceStatus {
 		State:       "unknown",
 	}
 	if runtime.GOOS == "freebsd" {
+		st.Installed = rcScriptExists(unit)
 		st.Active, st.Enabled, st.State = serviceStatusFreeBSD(unit)
 	} else {
+		st.Installed = linuxUnitLoaded(unit)
 		st.Active, st.Enabled, st.State = serviceStatusLinux(unit)
 	}
 	return st

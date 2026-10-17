@@ -49,14 +49,19 @@ func (h *Handler) mutateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	unitName := system.ServiceUnitName(svc)
-	if unitName == "" {
+	st, ok := system.LookupService(svc)
+	if !ok {
 		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("unknown service: %s", svc), nil)
+		return
+	}
+	if !st.Installed {
+		writeError(r.Context(), w, http.StatusConflict,
+			fmt.Errorf("%s is not installed (no %s service on this host)", st.DisplayName, st.UnitName), nil)
 		return
 	}
 
 	out, err := h.runOp(r.Context(), servicePlaybook(), map[string]string{
-		"service_name": unitName,
+		"service_name": st.UnitName,
 		"action":       action,
 	})
 	auditLog(r.Context(), r, "service."+action, svc, err)

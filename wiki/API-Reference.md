@@ -616,7 +616,7 @@ Returns Ansible task steps.
 
 Manage the sharing daemons dumpstore controls (Samba, NFS, iSCSI). Status reads happen directly via `systemctl`/`service` — no Ansible overhead. Mutations (start/stop/restart/enable/disable) go through playbooks with op-log.
 
-Logical service names: `samba`, `nfs`, `iscsi`.
+Logical service names: `samba`, `nfs`, `iscsi`, `wsdd`.
 
 ### GET /api/services
 
@@ -630,18 +630,19 @@ Returns the status of all managed services.
     "unit_name": "smbd",
     "active": true,
     "enabled": true,
-    "state": "active"
+    "state": "active",
+    "installed": true
   }
 ]
 ```
 
-`state` values: `active`, `inactive`, `failed`, `unknown`.
+`state` values: `active`, `inactive`, `failed`, `unknown`. `installed` is false when the unit file (Linux) or rc.d script (FreeBSD) is absent — `unit_name` is then the preferred candidate name.
 
 ### POST /api/services/{name}/{action}
 
 Control a service. Valid actions: `start`, `stop`, `restart`, `enable`, `disable`.
 
-Returns Ansible task steps.
+Returns Ansible task steps. `409` if the service is not installed on this host.
 
 ---
 

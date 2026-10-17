@@ -78,7 +78,8 @@ func (h *Handler) applyConfig(r *http.Request, cfg *smb.SMBConfig) (*ansible.Pla
 // rc.d script reads the workgroup from smb4.conf) and for Linux units that do
 // not take their arguments from $WSDD_PARAMS (left untouched).
 func wsddTarget() (st system.ServiceStatus, installed bool, confPath string) {
-	st, installed = system.LookupService("wsdd")
+	st, _ = system.LookupService("wsdd")
+	installed = st.Installed
 	if installed && runtime.GOOS != "freebsd" {
 		confPath = system.UnitParamsFile(st.UnitName, smb.WSDDParamsVar)
 	}
