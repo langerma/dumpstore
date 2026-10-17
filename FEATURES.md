@@ -66,6 +66,7 @@
 | ZFS presence checks        | v0.2.1     | Startup dependency check now verifies `zfs`/`zpool` in PATH (fail fast instead of every tab erroring); on FreeBSD a System-panel warning appears when the ZFS kernel module is not loaded (`kldstat -q -m zfs`). Closes #136 |
 | OpenTelemetry export       | v0.2.1     | Env-gated OTLP export (no-op by default): per-request trace spans with Ansible/ops child spans and background job/replication/autosnap root spans; single-producer log pipeline (journald format preserved byte-for-byte, OTLP branch adds `trace_id` correlation); Go runtime + HTTP metrics via OTLP alongside the unchanged Prometheus `/metrics`. Phases 1+2 of #49 |
 | Integration coverage for most endpoints | v0.2.1 | VM suite extended from ~17 paths to most of the API: every read endpoint + SSE, users/groups/SSH keys, Samba, POSIX + NFSv4 ACLs, chown, iSCSI, replication, auto-snapshot properties + takeover/release, scrub schedules, services, TLS, password change — with negative cases; green on Linux (CI) and FreeBSD. Surfaced and fixed eleven bugs. Closes #141 |
+| wsdd management            | Unreleased | wsdd treated as part of the owned Samba config: options file (unit's EnvironmentFile, `/etc/default/wsdd` on Debian/Ubuntu) rendered from `smb.conf` with every Samba write, restart only when changed and running; FreeBSD rc.d reads `smb4.conf` itself. Services-tab row, SMB-section status + install hint + take-over action (`POST /api/smb/wsdd`). Closes #86 |
 
 ---
 
@@ -83,7 +84,6 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | Feature                            | Priority | Scope | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|-------|--------------------------------------------------------------------------------------------------------------------------|
 | Privilege separation               | Medium   | internal | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
-| wsdd configuration management      | Medium   | manage | [#86](https://github.com/langerma/dumpstore/issues/86) | Enable/configure wsdd (WS-Discovery) for Windows network visibility of SMB shares — discovery helper for managed SMB |
 | FreeBSD port (sysutils/dumpstore)  | Medium   | internal | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
 | .deb / .rpm packages               | Medium   | internal | [#142](https://github.com/langerma/dumpstore/issues/142) | Linux counterpart to the FreeBSD port (#89): native packages with the systemd unit, playbooks, and static assets |
 | lldap integration                  | Medium   | integrate | [#62](https://github.com/langerma/dumpstore/issues/62) | Auth bind + read-only directory display; user/group management stays in lldap's UI (scope trimmed per #121) |

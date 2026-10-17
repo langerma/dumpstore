@@ -1,6 +1,7 @@
 package system
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -31,6 +32,9 @@ var managedServices = []managedServiceDef{
 	// rtslib-fb-targetctl on Debian/Ubuntu and by target.service elsewhere.
 	// Not iscsid — that is the open-iscsi initiator.
 	{"iscsi", "iSCSI Target", []string{"rtslib-fb-targetctl", "target"}, "ctld"},
+	// Debian/Ubuntu ship the daemon unit in the wsdd-server package;
+	// upstream and other distros name it wsdd.service.
+	{"wsdd", "WS-Discovery (wsdd)", []string{"wsdd-server", "wsdd"}, "wsdd"},
 }
 
 // unitFor returns the platform-specific unit name for svc.
@@ -46,13 +50,67 @@ func (svc managedServiceDef) unitFor() string {
 func resolveLinuxUnit(candidates []string) string {
 	if len(candidates) > 1 {
 		for _, u := range candidates {
-			out, err := exec.Command("systemctl", "show", "-p", "LoadState", "--value", u).Output()
-			if err == nil && strings.TrimSpace(string(out)) == "loaded" {
+			if linuxUnitLoaded(u) {
 				return u
 			}
 		}
 	}
 	return candidates[0]
+}
+
+// linuxUnitLoaded reports whether systemd has a unit file for u.
+func linuxUnitLoaded(u string) bool {
+	return systemdProp(u, "LoadState") == "loaded"
+}
+
+// systemdProp returns the value of a single unit property, or "" on error.
+func systemdProp(unit, prop string) string {
+	out, err := exec.Command("systemctl", "show", "-p", prop, "--value", unit).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// LookupService returns the status of one managed service and whether its
+// unit/rc script is installed. Returns false for unknown logical names.
+func LookupService(logical string) (ServiceStatus, bool) {
+	for _, svc := range managedServices {
+		if svc.name != logical {
+			continue
+		}
+		st := svc.status()
+		if runtime.GOOS == "freebsd" {
+			return st, rcScriptExists(st.UnitName)
+		}
+		return st, linuxUnitLoaded(st.UnitName)
+	}
+	return ServiceStatus{}, false
+}
+
+// rcScriptExists reports whether a base or ports rc.d script exists for name.
+func rcScriptExists(name string) bool {
+	for _, dir := range []string{"/etc/rc.d/", "/usr/local/etc/rc.d/"} {
+		if _, err := os.Stat(dir + name); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// UnitParamsFile returns the EnvironmentFile of a systemd unit whose ExecStart
+// expands $<variable>, or "" if the unit does not take its arguments that way.
+// Used to locate a daemon's options file instead of hardcoding distro paths.
+func UnitParamsFile(unit, variable string) string {
+	if !strings.Contains(systemdProp(unit, "ExecStart"), "$"+variable) {
+		return ""
+	}
+	// Format: "/etc/default/wsdd (ignore_errors=no)", possibly several.
+	fields := strings.Fields(systemdProp(unit, "EnvironmentFiles"))
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "/") {
+		return ""
+	}
+	return fields[0]
 }
 
 // ServiceUnitName returns the platform-specific unit name for a logical service
@@ -69,24 +127,28 @@ func ServiceUnitName(logical string) string {
 // ListServices returns the current status of all managed sharing services.
 // Failures for individual services are swallowed; the state is set to "unknown".
 func ListServices() []ServiceStatus {
-	isFreeBSD := runtime.GOOS == "freebsd"
 	out := make([]ServiceStatus, 0, len(managedServices))
 	for _, svc := range managedServices {
-		unit := svc.unitFor()
-		st := ServiceStatus{
-			Name:        svc.name,
-			DisplayName: svc.display,
-			UnitName:    unit,
-			State:       "unknown",
-		}
-		if isFreeBSD {
-			st.Active, st.Enabled, st.State = serviceStatusFreeBSD(unit)
-		} else {
-			st.Active, st.Enabled, st.State = serviceStatusLinux(unit)
-		}
-		out = append(out, st)
+		out = append(out, svc.status())
 	}
 	return out
+}
+
+// status queries the platform service manager for svc.
+func (svc managedServiceDef) status() ServiceStatus {
+	unit := svc.unitFor()
+	st := ServiceStatus{
+		Name:        svc.name,
+		DisplayName: svc.display,
+		UnitName:    unit,
+		State:       "unknown",
+	}
+	if runtime.GOOS == "freebsd" {
+		st.Active, st.Enabled, st.State = serviceStatusFreeBSD(unit)
+	} else {
+		st.Active, st.Enabled, st.State = serviceStatusLinux(unit)
+	}
+	return st
 }
 
 // serviceStatusLinux queries systemd for the unit's active and enabled states.

@@ -94,6 +94,7 @@ export async function loadAll() {
         storeSet('smbConfPath', smbStatus?.conf_path ?? '');
         storeSet('smbOs', smbStatus?.os ?? '');
         storeSet('smbConfMtime', smbStatus?.conf_mtime ?? '');
+        storeSet('smbWsdd', smbStatus?.wsdd ?? null);
       }
       if (smbShares !== null) storeSet('smbShares', smbShares);
       if (smbHomes !== null) storeSet('smbHomes', smbHomes);

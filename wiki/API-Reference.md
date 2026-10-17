@@ -50,6 +50,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd |
 | POST   | `/api/smb-config/pam`       | Run Samba setup playbook |
+| POST   | `/api/smb/wsdd`             | Render wsdd options from smb.conf (take over wsdd) |
 | GET    | `/api/smb/homes`            | Get current SMB [homes] config |
 | POST   | `/api/smb/homes`            | Enable/update SMB [homes] section |
 | DELETE | `/api/smb/homes`            | Disable/remove SMB [homes] section |
@@ -742,6 +743,28 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 ### DELETE /api/smb/homes
 
 Remove the `[homes]` section from `smb.conf`. Returns Ansible task steps.
+
+---
+
+## Windows Discovery (wsdd)
+
+wsdd announces the host in the Windows Network view. It advertises only the host and its workgroup, so dumpstore derives everything from `smb.conf` — there are no separate settings. `GET /api/smb/status` carries a `wsdd` object:
+
+| Field | Description |
+|-------|-------------|
+| `installed` | wsdd unit (Linux) / rc.d script (FreeBSD) present |
+| `install_hint` | Distro install command (only when not installed) |
+| `unit`, `state`, `active`, `enabled` | Service status (`wsdd-server` on Debian/Ubuntu, else `wsdd`) |
+| `conf_path` | Options file dumpstore renders — the unit's `EnvironmentFile`; `""` on FreeBSD |
+| `manageable` | Linux: the unit expands `$WSDD_PARAMS`; always true on FreeBSD |
+| `managed` | Options file carries dumpstore's header (FreeBSD: always true — rc.d reads `smb4.conf`) |
+| `workgroup` | Workgroup announced (`""` → wsdd's default `WORKGROUP`; names with spaces/shell characters are not passed) |
+
+On Linux every Samba config write (`smb_apply.yml`) also renders the options file and restarts wsdd only if it was running and the file changed.
+
+### POST /api/smb/wsdd
+
+Re-applies the current Samba config so the wsdd options file is rendered — for hosts where wsdd was installed after Samba was initialised. Returns Ansible task steps. `409` if Samba is not initialised, or wsdd is not installed / its unit does not read `$WSDD_PARAMS`.
 
 ---
 

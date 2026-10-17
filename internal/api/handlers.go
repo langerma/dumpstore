@@ -324,6 +324,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
 	mux.HandleFunc("GET /api/smb/status", h.getSMBStatus)
 	mux.HandleFunc("POST /api/smb/init", h.initSamba)
+	mux.HandleFunc("POST /api/smb/wsdd", h.applyWSDD)
 	mux.HandleFunc("GET /api/smb-users", h.getSambaUsers)
 	mux.HandleFunc("POST /api/smb-users/{name}", h.addSambaUser)
 	mux.HandleFunc("DELETE /api/smb-users/{name}", h.removeSambaUser)

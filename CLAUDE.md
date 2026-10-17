@@ -108,6 +108,7 @@ The service lifecycle (unit file, enable/disable) stays with the OS. dumpstore o
 | Service | Owns config? | Config file |
 |---------|-------------|-------------|
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` |
+| wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd`), rendered from smb.conf with Samba; FreeBSD: none (rc.d reads `smb4.conf`) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) |
 | iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` |
 | TLS | ✅ full | `dumpstore.conf` |
@@ -200,7 +201,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/blockdev/blockdev.go` | `List` — physical block devices (`/sys/block` on Linux, `geom disk list` on FreeBSD); `MarkInUse` — best-effort vdev→device matching |
 | `internal/api/user_handlers.go` | User + group handlers, SSH key management |
 | `internal/api/acl_handlers.go` | ACL handlers (POSIX + NFSv4) |
-| `internal/api/smb_handlers.go` | SMB handlers: shares, users, homes, Time Machine |
+| `internal/api/smb_handlers.go` | SMB handlers: shares, users, homes, Time Machine, wsdd |
 | `internal/api/iscsi_handlers.go` | iSCSI target handlers |
 | `internal/api/httpmetrics.go` | HTTP middleware for request count/latency metrics |
 | `internal/api/metrics.go` | `/metrics` handler (Prometheus exposition) |

@@ -1,0 +1,5 @@
+# {{ marker }}
+# Rendered from smb.conf on every Samba change — manual edits are overwritten.
+# wsdd announces this host to Windows clients (Network view) under the same
+# workgroup Samba serves.
+WSDD_PARAMS="{{ with workgroup }}--workgroup {{ . }}{{ end }}"

@@ -623,6 +623,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">Windows discovery</span>
+          <span class="health-badge badge-blue">wsdd</span>
+        </div>
+        <p>wsdd lists the host in the Windows Network view under Samba's workgroup. dumpstore renders its options from <code>smb.conf</code> on every Samba change (Linux) and restarts it only when they changed; on FreeBSD the rc.d script reads <code>smb4.conf</code> directly. Status and install hint in the SMB section, start/stop in Services.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">auto-snapshot scheduling</span>
           <span class="health-badge badge-green">com.sun:auto-snapshot</span>
         </div>
