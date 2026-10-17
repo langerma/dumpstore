@@ -133,12 +133,12 @@ func (r *Runner) processBucket(ctx context.Context, b Bucket) {
 		}
 		snap := dataset + "@" + label
 		if err := runCmd("zfs", "snapshot", snap); err != nil {
-			slog.Error("autosnap: snapshot failed", "dataset", dataset, "bucket", b, "err", err)
+			slog.ErrorContext(ctx, "autosnap: snapshot failed", "dataset", dataset, "bucket", b, "err", err)
 			continue
 		}
 		created++
 		if destroyed, err := pruneBucket(dataset, b, keep); err != nil {
-			slog.Warn("autosnap: prune failed", "dataset", dataset, "bucket", b, "err", err)
+			slog.WarnContext(ctx, "autosnap: prune failed", "dataset", dataset, "bucket", b, "err", err)
 		} else {
 			pruned += destroyed
 		}
@@ -147,7 +147,7 @@ func (r *Runner) processBucket(ctx context.Context, b Bucket) {
 	r.lastRun[b] = now.UTC()
 	r.mu.Unlock()
 	if created > 0 || pruned > 0 {
-		slog.Info("autosnap: tick complete",
+		slog.InfoContext(ctx, "autosnap: tick complete",
 			"bucket", b, "created", created, "pruned", pruned)
 		if r.pub != nil {
 			r.pub.Publish("snapshot.query", nil) // best-effort trigger UI refresh

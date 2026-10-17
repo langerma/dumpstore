@@ -8,6 +8,10 @@ All notable changes to this project will be documented here.
 
 - **Windows discovery (wsdd) management** — wsdd only announces the host and its workgroup, so dumpstore now treats it as part of the Samba config it owns instead of a separate settings surface. On Linux the options file is located from the unit itself (`EnvironmentFile` of a unit whose `ExecStart` expands `$WSDD_PARAMS` — `/etc/default/wsdd` for Debian/Ubuntu's `wsdd-server`) and rendered from `smb.conf` on every Samba write, so Windows sees the same workgroup Samba serves; a running wsdd is restarted only when the file changed, a stopped one is left stopped. On FreeBSD the port's rc.d script already reads the workgroup from `smb4.conf`, so nothing is rendered. The Services tab gains a wsdd row (`wsdd-server` → `wsdd` on Linux, `wsdd` on FreeBSD); the SMB section shows wsdd status, a distro install hint when missing, and a *Manage* action (`POST /api/smb/wsdd`) for hosts where wsdd was installed after Samba was initialised. `GET /api/smb/status` carries the `wsdd` block. Closes #86.
 
+### Fixed
+
+- **Background-worker log lines carry trace ids** — auto-snapshot (snapshot/prune failures, tick summary) and replication (prune results, run-record write failures) logged without the span context, so those lines lacked `trace_id`/`span_id` in journald and OTLP. They now use the `*Context` slog variants. Last open item of #49.
+
 ## [v0.2.1] — 2026-10-10
 
 ### Added

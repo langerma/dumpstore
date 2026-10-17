@@ -89,7 +89,8 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | lldap integration                  | Medium   | integrate | [#62](https://github.com/langerma/dumpstore/issues/62) | Auth bind + read-only directory display; user/group management stays in lldap's UI (scope trimmed per #121) |
 | UPS / NUT integration              | Low      | integrate | [#52](https://github.com/langerma/dumpstore/issues/52) | Status display via `upsc` + thin low-battery shutdown hook; no NUT configuration management (scope trimmed per #121) |
 | ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
-| OpenTelemetry                      | Low      | integrate | [#49](https://github.com/langerma/dumpstore/issues/49) | Export traces/metrics/logs only; dashboards/alert rules live in `contrib/observability/` examples, never in-tree. **Deferred until collector infra available** |
+| OTEL ZFS read-path spans           | Low      | integrate | [#167](https://github.com/langerma/dumpstore/issues/167) | Child spans for `internal/zfs` read commands; needs ctx threaded through read helpers. Split out of #49 |
+| OTEL meter migration (phase 3)     | Low      | integrate | [#168](https://github.com/langerma/dumpstore/issues/168) | Move the Prometheus registry onto the OTEL meter + Prometheus exporter, keeping `/metrics` names stable. Split out of #49 |
 
 ---
 
