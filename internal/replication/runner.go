@@ -279,7 +279,7 @@ func (r *Runner) afterJob(ctx context.Context, taskID, srcSnap string, t Task, j
 		}
 		j, ok := r.jobs.Get(jobID)
 		if !ok {
-			r.finishRun(t, srcSnap, jobID, startedAt, "failed", errors.New("job record disappeared"))
+			r.finishRun(ctx, t, srcSnap, jobID, startedAt, "failed", errors.New("job record disappeared"))
 			return
 		}
 		if !isTerminal(j.Status) {
@@ -296,18 +296,18 @@ func (r *Runner) afterJob(ctx context.Context, taskID, srcSnap string, t Task, j
 		}
 		if j.Status == jobs.StatusSuccess {
 			if destroyed, err := pruneTarget(t.Target, t.Remote, t.RetentionCount); err != nil {
-				slog.Warn("replication: prune failed", "task", t.ID, "err", err)
+				slog.WarnContext(ctx, "replication: prune failed", "task", t.ID, "err", err)
 			} else if len(destroyed) > 0 {
-				slog.Info("replication: pruned destination snapshots",
+				slog.InfoContext(ctx, "replication: pruned destination snapshots",
 					"task", t.ID, "count", len(destroyed))
 			}
 		}
-		r.finishRun(t, srcSnap, jobID, startedAt, string(j.Status), runErr)
+		r.finishRun(ctx, t, srcSnap, jobID, startedAt, string(j.Status), runErr)
 		return
 	}
 }
 
-func (r *Runner) finishRun(t Task, srcSnap, jobID string, startedAt time.Time, status string, runErr error) {
+func (r *Runner) finishRun(ctx context.Context, t Task, srcSnap, jobID string, startedAt time.Time, status string, runErr error) {
 	rec := RunRecord{
 		JobID:      jobID,
 		Snapshot:   srcSnap,
@@ -319,7 +319,7 @@ func (r *Runner) finishRun(t Task, srcSnap, jobID string, startedAt time.Time, s
 		rec.Error = runErr.Error()
 	}
 	if err := r.store.AppendRun(t.ID, rec); err != nil {
-		slog.Warn("replication: append run record failed", "task", t.ID, "err", err)
+		slog.WarnContext(ctx, "replication: append run record failed", "task", t.ID, "err", err)
 	}
 	if r.pub != nil {
 		r.pub.Publish("replication.update", r.store.List())
