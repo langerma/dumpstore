@@ -23,7 +23,14 @@ export function renderServices() {
         </tr>
       </thead>
       <tbody>
-        ${svcs.map(s => `
+        ${svcs.map(s => !s.installed ? `
+          <tr>
+            <td>${esc(s.display_name)}</td>
+            <td class="mono">${esc(s.unit_name)}</td>
+            <td><span class="svc-badge unknown">not installed</span></td>
+            <td><span class="svc-disabled">—</span></td>
+            <td class="svc-actions"></td>
+          </tr>` : `
           <tr>
             <td>${esc(s.display_name)}</td>
             <td class="mono">${esc(s.unit_name)}</td>
