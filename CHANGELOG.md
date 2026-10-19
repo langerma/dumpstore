@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [v0.2.3] — 2026-10-19
+
 ### Fixed
 
 - **Services tab no longer offers actions for services that aren't installed** — when no candidate unit existed (e.g. `wsdd` installed without Debian/Ubuntu's `wsdd-server`, or no iSCSI target stack), the row fell back to a unit name that doesn't exist, showed it as inactive with Start/Enable buttons, and every action failed in Ansible with *Could not find the requested service*. `GET /api/services` now reports `installed` per service; such rows show *not installed* without actions, and `POST /api/services/{name}/{action}` returns `409` instead of running the playbook.
