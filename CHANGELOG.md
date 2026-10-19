@@ -4,7 +4,9 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **README trimmed to an overview (1,039 → 126 lines)**; the details live in the wiki, which was brought up to date. Architecture, the route map, the API reference, the project layout, observability setup, and per-distro requirements moved to the wiki's Installation, Architecture, and API Reference pages; the stale "Planned" table was replaced by a link to FEATURES.md. Corrected along the way: argon2id (not bcrypt) password hashes, Go 1.26+, Samba reloads instead of restarting, the *Initialize Samba* flow (the old `smb_setup.yml` no longer exists), FreeBSD ACLs being NFSv4-only, and playbook names for operations that moved to the in-process ops lane. The wiki API table now lists all 109 registered routes (25 were missing) and all 13 SSE topics; FEATURES.md gained the missing audit-logging row.
 
 ## [v0.2.3] — 2026-10-19
 

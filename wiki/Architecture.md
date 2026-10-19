@@ -4,98 +4,36 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Browser  (vanilla JS SPA)                       │
-│  state object → render functions → api() helper                     │
-│                                                                     │
-│  ┌─ boot ──────────────────────────────────────────────────────┐    │
-│  │  loadAll() → parallel REST fetches (fast path first)        │    │
-│  │  startSSE() → EventSource /api/events?topics=…              │    │
-│  │    on message: state[key] = data; render()                  │    │
-│  │    on close:   fallback to setInterval(loadAll, 30 000)     │    │
-│  └─────────────────────────────────────────────────────────────┘    │
+│                     Browser  (vanilla JS, no build step)            │
+│  state + reactive store: subscribe(keys, renderFn) / storeSet()     │
+│  boot: loadAll() parallel REST fetches → startSSE() EventSource     │
+│        SSE drops → poll loadAll() every 30 s, retry SSE after 5 s   │
 └──────────────────────────┬──────────────────────────────────────────┘
-                           │ HTTP :8080  (REST + SSE)
+                           │ HTTP(S) :8080  (REST + SSE)
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                          main.go                                    │
-│  • flag: -addr  -dir  -debug                                        │
-│  • startup: checks ansible-playbook in PATH,                        │
-│             playbooks/ and static/ dirs exist                       │
-│  • signal.NotifyContext → graceful shutdown on SIGTERM/SIGINT       │
-│  • logging.RequestLogger middleware: reads X-Request-ID from proxy  │
-│    (or generates one), stores in ctx, logs req_id on every line    │
-│  • GET /      → http.FileServer  (static/)                          │
-│  • /api/*     → api.Handler                                         │
-└───────────────────┬─────────────────────────────────────────────────┘
-                    │
-      ┌─────────────┼───────────────────────────────┐
-      │             │                               │
-      │     ┌───────┴──────────────────┐            │
-      │     │  internal/broker         │            │
-      │     │                          │            │
-      │     │  Broker — pub/sub core   │◄── StartPoller() goroutine
-      │     │    Subscribe(topic)      │    polls ZFS + users/groups every 10 s
-      │     │    Publish(topic, data)  │    publishes only on change
-      │     │    Unsubscribe(topic,ch) │
-      │     │                          │
-      │     │  GET /api/events         │──► streams SSE to browsers
-      │     └──────────────────────────┘
-      │
-      ├─── READ requests                    WRITE requests ───────────┐
-      │  pools, datasets, snapshots,      create / edit / destroy     │
-      │  iostat, status, props,           datasets, snapshots,        │
-      │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
-      │  users, groups, ACLs,             SMB users/shares/config,    │
-      │  SMB users/shares/homes,          dataset chown, scrub,       │
-      │  iSCSI targets,                   iSCSI targets,              │
-      │  Time Machine shares              SMB homes config,           │
-      │                                   Time Machine shares         │
-      │                                                               │
-      ▼                                                               ▼
-┌───────────────────────┐                        ┌────────────────────────────┐
-│  internal/zfs/zfs.go  │                        │ internal/ansible/runner.go │
-│  internal/system/     │                        │                            │
-│  internal/smart/      │                        │  Run(playbook, extraVars)  │
-│  internal/iscsi/      │                        │                            │
-│  internal/smb/        │                        │                            │
-│                       │                        │  exec: ansible-playbook    │
-│  ListPools()          │                        │    -i inventory/localhost  │
-│  ListDatasets()       │                        │    --extra-vars '{...}'    │
-│  ListSnapshots()      │                        │  env: ANSIBLE_STDOUT_      │
-│  IOStats()            │                        │    CALLBACK=ndjson         │
-│  GetDatasetProps()    │                        │                            │
-│  GetDatasetACL()      │                        │  parse ndjson output       │
-│  GetMountpointOwner() │                        │  → []TaskStep              │
-│  PoolStatuses()       │                        │  streams live via SSE      │
-│  Version()            │                        │                            │
-│  system.Get()         │                        │                            │
-│  system.ListUsers()   │                        │                            │
-│  system.ListGroups()  │                        │                            │
-│  system.ListServices()│                        │                            │
-│  smb.ParseSMBConfig() │                        │                            │
-│  smart.Collect()      │                        │                            │
-│  iscsi.ListTargets()  │                        │                            │
-│                       │                        │                            │
-│  exec: zpool / zfs /  │                        │                            │
-│  smartctl / sysctl /  │                        │                            │
-│  pdbedit / net /      │                        │                            │
-│  targetcli / ctld     │                        │                            │
-│  (no Python startup)  │                        │                            │
-└──────────┬────────────┘                        └────────────┬───────────────┘
-           │                                                  │
-           ▼                                                  ▼
-     ZFS kernel                                       playbooks/*.yml
-     subsystem                                        ┌──────────────────────────────────┐
-                                                      │  targets: localhost              │
-                                                      │  gather_facts: false             │
-                                                      │  1. assert vars                  │
-                                                      │  2. mutating command             │
-                                                      │                                  │
-                                                      │  config-owning services only:    │
-                                                      │  2a. create referenced dirs      │
-                                                      │  2b. render full config (tpl)    │
-                                                      │  2c. restart service             │
-                                                      └──────────────────────────────────┘
+│  main.go                                                            │
+│  • startup: zfs, zpool, ansible-playbook in PATH; playbooks/ and    │
+│    static/ exist — otherwise refuse to start                        │
+│  • middleware: otelhttp → RequestLogger (req_id, metrics) → auth    │
+│  • /         → http.FileServer (static/)                            │
+│  • /api/*    → internal/api handlers                                │
+│  • scheduler (auto-snapshot, replication), jobs manager, poller     │
+└───────┬──────────────────────────┬──────────────────────────┬───────┘
+        │                          │                          │
+        │ GET                      │ writes                   │ SSE
+        ▼                          ▼                          ▼
+┌───────────────┐ ┌────────────────────────────────┐ ┌────────────────┐
+│ Reads         │ │ Writes — three lanes           │ │ internal/broker│
+│ internal/zfs  │ │                                │ │ pub/sub + SSE  │
+│ system, smart │ │ internal/ops   single argv cmd │ │                │
+│ iscsi, smb    │ │   zpool/zfs, no shell, ~ms     │ │ poller: 10 s,  │
+│ blockdev      │ │ internal/ansible  playbooks    │ │ publish only   │
+│               │ │   config files, users, ACLs    │ │ on change      │
+│ exec zpool/   │ │ internal/jobs  background      │ │                │
+│ zfs/smartctl  │ │   zfs send|recv, zfs rewrite   │ │ writes stream  │
+│ no Python     │ │                                │ │ op-log steps   │
+└───────────────┘ └────────────────────────────────┘ └────────────────┘
 ```
 
 ## Service ownership model
@@ -108,7 +46,7 @@ This is one half of the project's **scope boundary** (#121). The other half: dom
 
 | Service | Owned? | Config file | Restart mechanism |
 |---------|--------|-------------|-------------------|
-| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | `systemctl restart smbd` / `service samba_server restart` |
+| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | reload `smbd`/`nmbd` / `samba_server` (started if not running) |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
 | iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
@@ -126,7 +64,7 @@ playbooks/smb_apply.yml (example)
   │  1. assert vars                  │
   │  2. create referenced dirs       │
   │  3. render full config (template)│
-  │  4. restart service              │
+  │  4. reload service               │
   └──────────────────────────────────┘
 ```
 
@@ -192,11 +130,40 @@ All playbooks target `localhost` with `gather_facts: false`. Each playbook:
 
 ## Observability
 
+How to enable it is in [[Installation]] → Observability; this section covers the design.
+
 Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the push path, gated entirely by the standard `OTEL_EXPORTER_OTLP_*` env vars — unset means every OTEL call site is a no-op.
 
 - **Traces** — `otelhttp` wraps the middleware chain (outermost, so `RequestLogger` sees the span); the span is renamed to `METHOD /route/pattern` after mux dispatch and tagged with `req_id`. Requests that never reach a route (`r.Pattern` empty) are named `METHOD (unauthenticated)` for 401/403 or `METHOD (unmatched)` otherwise, with a `dumpstore.short_circuit` attribute — never the raw path, to keep span-name cardinality bounded. The Ansible runner and the ops layer open child spans from the request context; they use `context.WithoutCancel` so a client disconnect can never kill a mutating command. Jobs get root spans linked (not parented) to the dispatching request since they outlive it; scheduled replication runs and autosnap fires get root spans of their own. ZFS read calls are deliberately untraced.
 - **Logs (single-producer pipeline)** — slog's default handler is an `otelslog` bridge into one `sdk/log.LoggerProvider`. Its synchronous journald exporter (`internal/logging.JournalExporter`) reproduces the pre-OTEL output byte-for-byte (golden-tested), including syslog `<N>` priority prefixes, and appends `trace_id`/`span_id` when present; the OTLP branch is a batch processor on the *same* provider, so both sinks emit the same record by construction. Never tee logs at the slog level. `-log-stdout=false` drops the journald branch for OTLP-only setups (startup warning when that would leave no sink at all).
 - **Metrics** — Go runtime metrics and otelhttp's `http.server.*` pushed via OTLP; the Prometheus registry is untouched (migrating it to the OTEL meter, #168, is deliberately deferred).
+
+## Project layout
+
+| Path | Responsibility |
+|------|----------------|
+| `main.go` | Flags, startup dependency checks, middleware chain, wiring of scheduler/jobs/poller |
+| `internal/api` | HTTP handlers and route registration; input validation for all writes |
+| `internal/zfs` | Direct `zpool`/`zfs` reads; POSIX/NFSv4 ACL parsing |
+| `internal/ops` | Single-command writes (argv exec, no shell) |
+| `internal/ansible` | Playbook runner (ndjson callback) and its metrics |
+| `internal/jobs` | Background process groups for long-running work, persisted status |
+| `internal/scheduler` | 5-field cron parser and ticker |
+| `internal/replication` | Scheduled send/recv tasks: holds, incrementals, pruning |
+| `internal/autosnap` | Native `com.sun:auto-snapshot*` execution and daemon takeover |
+| `internal/smb` | Owned `smb.conf` and wsdd options: parse and render from templates |
+| `internal/iscsi` | Read iSCSI targets (targetcli saveconfig / `ctl.conf`) |
+| `internal/system` | Host info, users/groups, services (systemd / rc.d), installed software |
+| `internal/smart`, `internal/blockdev` | S.M.A.R.T. data; physical devices and vdev matching |
+| `internal/broker` | SSE pub/sub and the background poller |
+| `internal/auth` | Config file, sessions, login, rate limiting, trusted-proxy identity |
+| `internal/logging`, `internal/otel` | slog pipeline (journald exporter), request logging, OTEL setup |
+| `internal/schema`, `internal/platform` | Dataset property metadata; OS-specific paths |
+| `playbooks/` | Ansible playbooks for config-file / OS-resource writes |
+| `static/` | Frontend: `index.html`, `app.js`, per-tab modules in `static/js/`, `style.css` |
+| `contrib/` | systemd unit and rc.d script |
+| `tests/integration/` | End-to-end suite against a deployed VM |
+| `dev/` | CLI stubs for `make dev` |
 
 ## Security
 
@@ -208,4 +175,5 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 
 - **Unit tests** — `go test ./...`; parser- and validator-level, no external dependencies.
 - **Integration tests** — `tests/integration` (build tag `integration`) drives a **deployed instance** in the Lima dev VM over HTTP and asserts on real host state: every read endpoint, auth and password change, dataset/snapshot lifecycle, `zfs diff`, quotas, send/recv and replication jobs, users/groups, Samba, ACLs, chown, iSCSI, TLS, service control, auto-snapshot properties, scrub schedules, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on three dedicated scratch disks. Tests skip when a host tool is missing (stale VM, FreeBSD). Run with `make vm-linux-start && make vm-linux-deploy && make test-integration`.
+- **Dev VMs** — `make vm-linux-*` (Ubuntu 24.04, follows the host architecture) and `make vm-freebsd-*` (FreeBSD 15, arm64) run headless under [Lima](https://github.com/lima-vm/lima) via QEMU; targets are `start`, `deploy`, `ssh`, `stop`, `destroy`. Each VM gets a 10 GiB disk with a `tank` pool created at first boot plus three 1 GiB scratch disks for the integration suite. `deploy` packs the source tree, copies it in, and runs `make install` natively — no cross-compilation. Port forwards are fixed (Linux `:8080`, FreeBSD `:8081`) so both can run at once; login `admin` / `admin`. `make dev` instead runs the UI on any machine against the CLI stubs in `dev/bin/`.
 - **CI** — `ci.yml` runs build/vet/unit tests plus a `release-smoke` job (the full `make release` cross-build matrix with a `--version` check) on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.
