@@ -734,8 +734,8 @@ Returns the current `[homes]` configuration. If the section is not present, `ena
 {
   "enabled": true,
   "path": "/tank/homes/%S",
-  "browseable": true,
-  "read_only": false,
+  "browseable": "yes",
+  "read_only": "no",
   "create_mask": "0644",
   "directory_mask": "0755"
 }
@@ -749,8 +749,8 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 {
   "path": "/tank/homes/%S",
   "dataset": "tank/homes",
-  "browseable": true,
-  "read_only": false,
+  "browseable": "yes",
+  "read_only": "no",
   "create_mask": "0644",
   "directory_mask": "0755"
 }
@@ -760,8 +760,8 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 |-------|----------|-------------|
 | `path` | yes | Base path for home directories (may include `%S` for username substitution) |
 | `dataset` | no | ZFS dataset to use as base path (alternative to specifying `path` directly) |
-| `browseable` | no | Whether the share is visible in browse lists (default `true`) |
-| `read_only` | no | Whether the share is read-only (default `false`) |
+| `browseable` | yes | `"yes"` or `"no"` — whether the share is visible in browse lists |
+| `read_only` | yes | `"yes"` or `"no"` |
 | `create_mask` | no | File creation mask (default `"0644"`) |
 | `directory_mask` | no | Directory creation mask (default `"0755"`) |
 

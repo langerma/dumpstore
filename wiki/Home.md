@@ -67,3 +67,4 @@ Contributions are welcome. See [CONTRIBUTING.md](https://github.com/langerma/dum
 - [[Installation]] — requirements, install options, authentication, service configuration, observability, versioning
 - [[Architecture]] — execution lanes, service ownership, frontend, observability internals, project layout, testing
 - [[API Reference]] — every endpoint with request/response examples, and the SSE event stream
+- [[Screenshots]] — every tab and dialog

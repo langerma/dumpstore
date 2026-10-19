@@ -59,22 +59,24 @@ See [FEATURES.md](FEATURES.md) for the full list with versions, and for what is 
 
 <table>
 <tr>
-<td><img src="screenshots/sysinfo.png" width="420" alt="Sysinfo, storage pools, and disk health"></td>
+<td><img src="screenshots/sysinfo.png" width="420" alt="System, installed software, network, and pools"></td>
 <td><img src="screenshots/datasets.png" width="420" alt="Dataset browser"></td>
 </tr>
 <tr>
-<td><img src="screenshots/snapshots.png" width="420" alt="Snapshot management"></td>
-<td><img src="screenshots/users-groups.png" width="420" alt="Users, groups, and SMB users"></td>
+<td><img src="screenshots/dataset-drawer.png" width="420" alt="Dataset detail drawer"></td>
+<td><img src="screenshots/snapshots.png" width="420" alt="Snapshots grouped by dataset"></td>
 </tr>
 <tr>
-<td><img src="screenshots/edit-dataset.png" width="420" alt="Edit dataset properties"></td>
-<td><img src="screenshots/create-user.png" width="420" alt="Create user dialog"></td>
+<td><img src="screenshots/snapshot-diff.png" width="420" alt="Snapshot diff"></td>
+<td><img src="screenshots/acl.png" width="420" alt="POSIX ACL editor"></td>
 </tr>
 <tr>
-<td><img src="screenshots/delete-snapshot.png" width="420" alt="Delete snapshot confirmation dialog"></td>
-<td><img src="screenshots/users-system.png" width="420" alt="Users & Groups with system users revealed"></td>
+<td><img src="screenshots/users-groups.png" width="420" alt="Users, groups, Samba, and Windows discovery"></td>
+<td><img src="screenshots/services.png" width="420" alt="Services"></td>
 </tr>
 </table>
+
+More — every dialog and panel — on the [Screenshots](https://github.com/langerma/dumpstore/wiki/Screenshots) wiki page.
 
 ## Quick start
 
@@ -108,6 +110,7 @@ The [wiki](https://github.com/langerma/dumpstore/wiki) holds the details:
 - [Installation](https://github.com/langerma/dumpstore/wiki/Installation) — requirements per distro, install options, authentication and the config file, reverse proxies, service configuration, observability setup, versioning
 - [Architecture](https://github.com/langerma/dumpstore/wiki/Architecture) — the read/write execution lanes, service ownership model, frontend, observability internals, project layout, testing
 - [API Reference](https://github.com/langerma/dumpstore/wiki/API-Reference) — every endpoint, request/response examples, and the SSE event stream
+- [Screenshots](https://github.com/langerma/dumpstore/wiki/Screenshots) — every tab and dialog, captured from the dev VM
 
 ## Development
 
@@ -117,6 +120,7 @@ make dev                 # run the UI against fake zfs/zpool/ansible stubs (macO
 make vm-linux-start      # Ubuntu 24.04 VM with ZFS via Lima, port 8080 (FreeBSD 15: vm-freebsd-*, port 8081)
 make vm-linux-deploy     # build and install the current tree in the VM (login admin / admin)
 make test-integration    # end-to-end suite against the deployed VM
+make screenshots         # regenerate screenshots/ from the VM with demo data (needs Chrome + Node)
 
 go build ./... && go vet ./... && go test ./...
 ```

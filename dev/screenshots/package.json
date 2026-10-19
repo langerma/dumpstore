@@ -1,0 +1,9 @@
+{
+  "name": "dumpstore-screenshots",
+  "private": true,
+  "description": "Captures README/wiki screenshots from the dev VM (make screenshots)",
+  "type": "module",
+  "devDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

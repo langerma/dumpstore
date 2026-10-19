@@ -11,3 +11,4 @@ dist/
 
 # Claude Code
 .claude/
+dev/screenshots/node_modules/
