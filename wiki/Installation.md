@@ -4,20 +4,20 @@
 
 |                        | Linux                                                     | FreeBSD                                      |
 |------------------------|-----------------------------------------------------------|----------------------------------------------|
-| ZFS                    | `zfsutils-linux` or equivalent                            | built-in (`zfsutils` pkg for older releases) |
+| ZFS                    | `zfsutils-linux` or equivalent                            | built-in                                     |
 | Ansible                | `ansible` package (Python 3)                              | `py311-ansible` or equivalent                |
 | Service manager        | systemd                                                   | rc.d (via `daemon(8)`)                       |
 | S.M.A.R.T. (optional)  | `smartmontools`                                           | `smartmontools` pkg                          |
-| POSIX ACLs (optional)  | `acl` pkg (`getfacl`/`setfacl`)                           | `py311-pylibacl` or `acl` port               |
-| NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
-| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`)                        | `samba` pkg                                  |
-| NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg                                      | `nfs4-acl-tools` port                        |
-| iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
-| Build                  | Go 1.22+                                                  | Go 1.22+                                     |
+| POSIX ACLs (optional)  | `acl` (`getfacl`/`setfacl`)                               | n/a — ZFS on FreeBSD uses NFSv4 ACLs         |
+| NFSv4 ACLs (optional)  | `nfs4-acl-tools` (`nfs4_getfacl`/`nfs4_setfacl`)          | base system (`getfacl`/`setfacl`)            |
+| NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | base system                                  |
+| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
+| Windows discovery (optional) | `wsdd-server` (Debian/Ubuntu — the `wsdd` package alone has no service), `wsdd` elsewhere | `py3*-wsdd` pkg |
+| iSCSI (optional)       | `targetcli-fb` (`targetcli`)                              | built-in `ctld`                              |
+| TLS / ACME (optional)  | `openssl` (usually pre-installed); `lego` for ACME        | same                                         |
+| Build                  | Go 1.26+                                                  | Go 1.26+                                     |
 
-Go and Ansible are the only hard requirements. ZFS must be available on the target machine — the server checks for `zfs`, `zpool`, and `ansible-playbook` in PATH at startup and refuses to start with a clear error if any is missing. On FreeBSD, the System tab warns when the ZFS kernel module is not loaded even though the userland tools are installed.
-
-Optional: set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. via `systemctl edit dumpstore` or `dumpstore_env` in rc.conf) to export traces, logs, and runtime metrics to an OTLP collector — see the Observability section of the README. Without it, all OTEL machinery is a no-op.
+ZFS and Ansible are the hard runtime requirements — the server checks for `zfs`, `zpool`, and `ansible-playbook` in PATH at startup and refuses to start with a clear error if any is missing. Go is only needed to build (`make install` installs it if absent). On FreeBSD, the System tab warns when the ZFS kernel module is not loaded even though the userland tools are installed. The Installed Software card on the System tab shows which optional tools are present and which feature each one unlocks; dialogs for a feature whose tool is missing show an error. To export telemetry to an OTLP collector, see [Observability](#observability).
 
 ### Optional packages
 
@@ -34,8 +34,8 @@ systemctl enable --now nfs-server
 # Debian/Ubuntu — NFSv4 ACLs
 apt install nfs4-acl-tools
 
-# Debian/Ubuntu — SMB sharing
-apt install samba
+# Debian/Ubuntu — SMB sharing (+ Windows network discovery)
+apt install samba wsdd-server
 
 # RHEL/Fedora — NFS sharing
 dnf install nfs-utils
@@ -53,19 +53,23 @@ dnf install targetcli
 # FreeBSD — iSCSI targets (ctld is built-in, just enable the service)
 sysrc ctld_enable=YES
 service ctld start
+
+# FreeBSD — Windows network discovery
+pkg install -g 'py3*-wsdd'
+
+# ACME certificates via Let's Encrypt (lego) — only needed for --tls with ACME
+apt install lego      # Debian/Ubuntu, or a release binary from https://github.com/go-acme/lego/releases
+dnf install lego      # RHEL/Fedora
+pkg install lego      # FreeBSD
 ```
 
-After installing Samba, run **Configure Samba** from the dumpstore UI (Users & Groups → Configure Samba) or manually:
-
-```bash
-ansible-playbook playbooks/smb_setup.yml
-```
+After installing Samba, click **Initialize Samba** in the SMB section of the Users & Groups tab. dumpstore backs up any existing config (`smb.conf` / `smb4.conf`) to `<file>.pre-dumpstore` and renders its own; SMB shares, home shares, and Time Machine targets are disabled until then. If wsdd is installed later, use **Manage** in the Windows Discovery section so its workgroup follows Samba's.
 
 ---
 
 ## Install script (recommended)
 
-Clone the repository and run `install.sh` as root. It is a thin wrapper around `make install`, which auto-installs Go and Ansible if absent, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
+Clone the repository and run `install.sh` as root. It is a thin wrapper around `make install`, which installs Go and Ansible if absent, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
 
 ```bash
 git clone https://github.com/langerma/dumpstore.git
@@ -97,7 +101,7 @@ sudo make install
 
 ## Authentication
 
-dumpstore uses session-based login. The password is stored as a bcrypt hash in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD).
+dumpstore uses session-based login. The password is stored as an argon2id hash (PHC string format) in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD).
 
 ### Set or reset the password
 
@@ -123,7 +127,7 @@ If the config file is missing or has no `password_hash`, the service starts but 
 ```json
 {
   "username": "admin",
-  "password_hash": "$2a$12$...",
+  "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$...",
   "session_ttl": "24h",
   "trusted_proxies": [],
   "unprotected_paths": ["/metrics"]
@@ -133,7 +137,7 @@ If the config file is missing or has no `password_hash`, the service starts but 
 | Field | Default | Description |
 |---|---|---|
 | `username` | `admin` | Login username |
-| `password_hash` | — | bcrypt hash (cost 12); set via `--set-password` |
+| `password_hash` | — | argon2id hash; set via `--set-password` (bcrypt hashes from before v0.1.13 are rejected — reset them) |
 | `session_ttl` | `24h` | How long a session cookie stays valid |
 | `trusted_proxies` | `[]` | CIDRs from which `X-Remote-User` header is trusted |
 | `unprotected_paths` | `["/metrics"]` | Paths that bypass auth (prefix match) |
@@ -193,6 +197,33 @@ dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.example:4318"
 ```
 
 Then restart: `service dumpstore restart`. Logs go to `/var/log/dumpstore.log` in the same format as previous releases; with OTLP enabled they are additionally exported with `trace_id` correlation.
+
+---
+
+## Observability
+
+Both exports integrate with an external stack — dumpstore never embeds dashboards or alerting.
+
+**Prometheus (pull)** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), write-lane metrics (`ansible_runs_total`, `ansible_run_duration_seconds`, `dumpstore_op_runs_total`, `dumpstore_op_duration_seconds`), and `dumpstore_build_info`. Always on; `/metrics` bypasses login by default (`unprotected_paths`).
+
+**OpenTelemetry (push)** — set the standard OTLP environment variables and dumpstore exports traces, logs, and runtime metrics to your collector (Alloy, Tempo/Loki/Mimir, Jaeger, …). Without them every OTEL code path is a no-op.
+
+```bash
+# Linux (systemd): systemctl edit dumpstore, or uncomment the examples in the unit
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318
+Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf   # default; "grpc" also supported
+Environment=OTEL_SERVICE_NAME=dumpstore                 # default
+
+# FreeBSD (rc.d): rc.subr passes ${name}_env to the daemon
+sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318"
+service dumpstore restart
+```
+
+When enabled you get a trace per API request (with child spans for every Ansible playbook and ops command, and root spans for jobs, scheduled replication, and auto-snapshot runs), the full log stream with `trace_id`/`span_id` correlation, and Go runtime + `http.server.*` metrics. All standard OTEL SDK env vars are honoured (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_TRACES_SAMPLER`, `OTEL_SDK_DISABLED`, …). If the collector is down, OTLP records buffer and drop in the background — local logs are never affected.
+
+Local logs are unchanged by OTEL: on Linux they go to the systemd journal (with syslog priority prefixes), on FreeBSD to `/var/log/dumpstore.log`. Every line for a request carries its `req_id` (taken from an upstream `X-Request-ID` header if present, and echoed back on the response), and every mutating operation emits an audit line with `remote_ip`, `action`, `target`, and `outcome`. For OTLP-only setups, `-log-stdout=false` turns local logging off; with no OTLP endpoint configured that would discard all logs, so dumpstore warns at startup.
+
+See [[Architecture]] → Observability for how the pipeline is built.
 
 ---
 

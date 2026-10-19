@@ -19,20 +19,26 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk |
 | GET    | `/api/events`               | Server-Sent Events stream |
 | GET    | `/metrics`                  | Prometheus text exposition |
+| GET    | `/api/schema`               | Dataset property definitions and system metadata for the current OS |
 | POST   | `/api/datasets`             | Create a dataset or volume |
 | PATCH  | `/api/datasets/{name}`      | Update dataset properties |
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume |
+| POST   | `/api/datasets/rename`      | Rename a dataset or volume (`{"name","new_name"}`, same parent) |
 | POST   | `/api/rewrite/{name}`       | Rewrite existing blocks (`zfs rewrite`, background job) |
 | GET    | `/api/userspace/{name}`     | Per-user/group space usage (`?kind=user\|group`) |
 | POST   | `/api/userquota/{name}`     | Set or remove a per-user/group quota |
 | POST   | `/api/snapshots`            | Create a snapshot |
 | POST   | `/api/snapshots/clone`      | Clone a snapshot to a new dataset |
 | POST   | `/api/snapshots/send`       | Send a snapshot to a target dataset (local or remote SSH) |
+| POST   | `/api/snapshots/delete-batch` | Destroy several snapshots (`{"snapshots":[...]}`) |
 | DELETE | `/api/snapshots/{name}`     | Destroy a snapshot |
 | GET    | `/api/users`                | List local users |
 | POST   | `/api/users`                | Create a local user |
 | PUT    | `/api/users/{name}`         | Edit user (shell, groups, password) |
 | DELETE | `/api/users/{name}`         | Delete user and home directory |
+| GET    | `/api/users/{name}/sshkeys` | List a user's SSH authorized keys |
+| POST   | `/api/users/{name}/sshkeys` | Add an SSH authorized key |
+| DELETE | `/api/users/{name}/sshkeys` | Remove an SSH authorized key (`{"key":"ssh-ed25519 …"}`) |
 | GET    | `/api/groups`               | List local groups |
 | POST   | `/api/groups`               | Create a local group |
 | PUT    | `/api/groups/{name}`        | Edit group (name, GID, members) |
@@ -49,7 +55,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/smb-users`            | List users registered in smbpasswd |
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd |
-| POST   | `/api/smb-config/pam`       | Run Samba setup playbook |
+| GET    | `/api/smb/status`           | Samba init state, conf path, OS, wsdd status |
+| POST   | `/api/smb/init`             | Initialise Samba (back up existing config, render smb.conf) |
 | POST   | `/api/smb/wsdd`             | Render wsdd options from smb.conf (take over wsdd) |
 | GET    | `/api/smb/homes`            | Get current SMB [homes] config |
 | POST   | `/api/smb/homes`            | Enable/update SMB [homes] section |
@@ -80,6 +87,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/auto-snapshot/status`    | Auto-snapshot ownership (OS daemon vs dumpstore) |
 | POST   | `/api/auto-snapshot/takeover`  | Disable the OS daemon and run snapshots from dumpstore |
 | POST   | `/api/auto-snapshot/release`   | Re-enable the OS daemon and stop dumpstore's scheduler |
+| GET    | `/api/auto-snapshot-schedules` | Auto-snapshot properties for all datasets |
 | GET    | `/api/iscsi-targets`           | List all iSCSI targets |
 | POST   | `/api/iscsi-targets`           | Create an iSCSI target for a zvol |
 | DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |
@@ -91,6 +99,22 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | DELETE | `/api/replication/{id}`        | Delete a replication task |
 | POST   | `/api/replication/{id}/run`    | Fire a replication task immediately (returns 202 + job_id) |
 | GET    | `/api/replication/{id}/history` | Recent run records for a task |
+| GET    | `/api/jobs`                    | List background jobs |
+| GET    | `/api/jobs/{id}`               | Single job status |
+| POST   | `/api/jobs/{id}/cancel`        | Cancel a running job (SIGTERM, then SIGKILL) |
+| DELETE | `/api/jobs/{id}`               | Remove a finished job record |
+| GET    | `/api/tls/status`              | TLS configuration and certificate metadata |
+| POST   | `/api/tls/gencert`             | Generate a self-signed certificate |
+| PATCH  | `/api/tls/config`              | Use an existing certificate + key from disk |
+| POST   | `/api/tls/acme/issue`          | Issue a certificate via ACME (`lego`) |
+| POST   | `/api/tls/acme/renew`          | Renew the ACME certificate |
+| GET    | `/login`                       | Login page |
+| POST   | `/auth/login`                  | Log in (form: `username`, `password`); sets the session cookie |
+| POST   | `/auth/logout`                 | Log out |
+| GET    | `/api/whoami`                  | Current identity (session or trusted-proxy `X-Remote-User`) |
+| GET    | `/api/auth/config`             | Configured username and session TTL |
+| POST   | `/api/auth/change-password`    | Change the login password |
+| POST   | `/api/auth/change-username`    | Change the login username |
 
 ---
 
@@ -826,16 +850,23 @@ Subscribe to live data updates. The server pushes named events whenever data cha
 
 **Available topics:**
 
-| Topic            | Data                              | Cadence                     |
-|------------------|-----------------------------------|-----------------------------|
-| `pool.query`     | Same JSON as `GET /api/pools`     | Every 10 s on change        |
-| `poolstatus`     | Same JSON as `GET /api/poolstatus`| Every 10 s on change        |
-| `dataset.query`  | Same JSON as `GET /api/datasets`  | Every 10 s on change        |
-| `snapshot.query` | Same JSON as `GET /api/snapshots` | Every 10 s on change        |
-| `iostat`         | Same JSON as `GET /api/iostat`    | Every 10 s                  |
-| `user.query`     | Same JSON as `GET /api/users`     | Every 10 s on change + after writes |
-| `group.query`    | Same JSON as `GET /api/groups`    | Every 10 s on change + after writes |
-| `ansible.progress` | Single `TaskStep` object        | Streamed during playbook run |
+| Topic                | Data                                            | Cadence |
+|----------------------|-------------------------------------------------|---------|
+| `pool.query`         | Same JSON as `GET /api/pools`                   | Every 10 s on change |
+| `poolstatus`         | Same JSON as `GET /api/poolstatus`              | Every 10 s on change |
+| `dataset.query`      | Same JSON as `GET /api/datasets`                | Every 10 s on change |
+| `snapshot.query`     | Same JSON as `GET /api/snapshots`               | Every 10 s on change |
+| `autosnapshot.query` | Same JSON as `GET /api/auto-snapshot-schedules` | Every 10 s on change |
+| `iostat`             | Same JSON as `GET /api/iostat`                  | Every 10 s |
+| `user.query`         | Same JSON as `GET /api/users`                   | Every 10 s on change + after writes |
+| `group.query`        | Same JSON as `GET /api/groups`                  | Every 10 s on change + after writes |
+| `service.query`      | Same JSON as `GET /api/services`                | Every 10 s on change |
+| `jobs.update`        | Single job object (as `GET /api/jobs/{id}`)     | On every job state change |
+| `replication.update` | Same JSON as `GET /api/replication`             | On task create/update/delete + after each scheduled run |
+| `autosnap.status`    | Same JSON as `GET /api/auto-snapshot/status`    | After takeover / release |
+| `ansible.progress`   | Single `TaskStep` object                        | Streamed during every write (Ansible and ops lanes) |
+
+Unknown topic names are ignored. The browser UI subscribes to all of them and falls back to 30 s REST polling (retrying SSE after 5 s) if the stream drops.
 
 ```
 event: pool.query

@@ -4,48 +4,45 @@ A lightweight NAS management UI written in Go — built for Linux and FreeBSD, d
 
 No container runtime, no database, no Node.js. Just a single compiled binary, some Ansible playbooks, and a handful of static files.
 
+dumpstore **manages** ZFS and sharing (SMB, NFS, iSCSI, wsdd, and the local users and permissions they need) and owns the config of every service it manages. Everything else — identity, monitoring, UPS, notifications — it only **integrates** with.
+
 ## Features
 
-- **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats; the Installed Software card distinguishes required tools (ZFS, Ansible, Python) from optional ones, names the feature each optional tool unlocks, and flags a missing required tool with a red badge; platform warnings surface common misconfigurations (e.g. FreeBSD: ZFS kernel module not loaded); software probes and warnings are cached for 5 minutes
-- **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
-- **Pool scrub management** — trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
-- **I/O statistics** — live read/write IOPS and bandwidth per pool
-- **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
-- **Dataset browser** — per-pool sections with pool health and capacity on the header row, depth-indented collapsible tree, per-row usage bars and status chips, quick actions on hover
-- **Dataset detail drawer** — slide-in panel per dataset: inline property editing (set or inherit), sharing (NFS/SMB/iSCSI), permissions (ACL/chown), snapshots, danger zone (rename/delete)
-- **Dataset creation** — create filesystems and volumes with any combination of ZFS properties
-- **Dataset editing** — update properties in place (set or inherit)
-- **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
-- **Snapshot management** — grouped by dataset into collapsible sections with count/size/age summaries; relative ages, per-group bulk select, batch delete; create (recursive) and delete
-- **Dataset rename** — rename a dataset or volume in place
-- **Snapshot clone** — create a new writable dataset from an existing snapshot
-- **Snapshot send/receive** — replicate a snapshot to another local pool or to a remote host over SSH; runs as a background job tracked in the Jobs tab; optional incremental and `--raw`
-- **Scheduled replication** — cron-scheduled `zfs send` → `zfs recv` tasks for local and remote-over-SSH targets; per-run snapshot + hold + incremental selection + dispatch via the jobs runner + destination pruning; manual "Run now"; orphaned holds reclaimed at startup
-- **Background jobs** — long-running operations run outside Ansible via the jobs manager; cancel, runtime, output tails, durable status across restarts
-- **Auto-snapshot scheduling (native)** — dumpstore executes `com.sun:auto-snapshot:*` snapshots itself via the built-in scheduler; property inheritance honoured correctly on both Linux and FreeBSD; one-click takeover from / release back to the OS daemon (`zfs-auto-snapshot` cron or systemd-timer packaging / `zfstools`), with release restoring exactly what takeover disabled; no external dependency required after takeover
-- **User management** — list, create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default
-- **Group management** — list, create, edit, and delete local groups; system groups hidden by default
-- **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform
-- **SMB share management** — create and remove Samba usershares; manage Samba users; dumpstore owns `smb.conf` entirely (rendered from template on every write); all sub-features gated behind one-time initialisation; init status badge shows last-applied timestamp
-- **SMB home shares** — enable/configure the Samba `[homes]` section for automatic per-user home directory shares; configurable base path, browseable, read only, create/directory masks
-- **Time Machine shares** — create Samba shares configured as macOS Time Machine backup targets using `vfs_fruit`; multiple named shares each backed by a different ZFS dataset; configurable max size quota and valid users
-- **Windows discovery (wsdd)** — wsdd announces the host in the Windows Network view under Samba's workgroup; dumpstore treats it as part of the Samba config it owns: on Linux the unit's options file (`/etc/default/wsdd` on Debian/Ubuntu, located via systemd) is rendered from `smb.conf` on every Samba write, and a running wsdd is restarted only when the file changed; on FreeBSD the rc.d script reads the workgroup from `smb4.conf` itself. Status, install hint, and a take-over action live in the SMB section; start/stop/enable in the Services tab
-- **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN, portal IP/port, auth mode (None/CHAP), and initiator ACL list
-- **ACL management** — POSIX ACL and NFSv4 ACL entries per dataset (NFSv4 on FreeBSD via the base `getfacl`/`setfacl`); recursive apply supported
-- **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
-- **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
-- **OpenTelemetry export** — set `OTEL_EXPORTER_OTLP_ENDPOINT` and dumpstore pushes traces (per-request spans, Ansible/ops child spans, background job/replication/autosnap spans), logs (the journald stream with `trace_id` correlation), and Go runtime metrics to any OTLP collector; every OTEL code path is a no-op without the env var
-- **Request ID correlation** — every request gets a unique `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
-- **Authentication** — session-based login with bcrypt password stored in `/etc/dumpstore/dumpstore.conf` (Linux) / `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD); `--set-password` CLI; per-IP rate limiting; reverse proxy delegation via `X-Remote-User` from configured trusted CIDRs; logout button and username badge in the header
-- **Network interface overview** — read-only view of all interfaces: state badge, MAC, MTU, IPv4/IPv6 addresses, link speed, and RX/TX byte counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a`
-- **Service management** — start/stop/restart/enable/disable Samba, NFS, and iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations
-- **TLS / HTTPS** — `--tls` flag; self-signed ECDSA-P256 cert generation via the UI (openssl, Ansible); load existing cert from disk (Let's Encrypt, Certbot, acme.sh); ACME issuance/renewal via `lego`; HTTP→HTTPS redirect; cert status card with CN, SANs, and expiry countdown
+**Pools & disks**
+- Pool overview with health, usage, fragmentation, dedup ratio, vdev tree, live I/O statistics, and S.M.A.R.T. health per drive
+- Create, import, and export pools; add data vdevs, cache, log, and spare devices
+- Replace, offline, and online devices with resilver progress
+- Start/cancel scrubs and configure periodic scrub schedules
 
-## Planned
+**Datasets & snapshots**
+- Per-pool dataset browser with a detail drawer for inline property editing, sharing, permissions, and snapshots
+- Create, rename, and destroy datasets and volumes; per-user/group space usage and quotas; `zfs rewrite` as a background job
+- Snapshot create, clone, diff, and (batch) delete
+- Native auto-snapshot scheduling for `com.sun:auto-snapshot*`, with takeover from / release back to the OS daemon
 
-- **ZFS native encryption** — load/unload keys, encryption status per dataset, keyformat/keylocation support
-- **Pool import/export** — import available pools from attached devices; export pools safely
-- **Drive replacement** — replace faulted disks, monitor resilver progress, offline/online devices
+**Replication & jobs**
+- One-shot `zfs send | zfs recv` to a local pool or over SSH, incremental and `--raw`
+- Cron-scheduled replication with holds, incremental selection, and retention pruning
+- Long-running work runs as cancellable background jobs that survive restarts
+
+**Sharing**
+- NFS via the ZFS `sharenfs` property
+- SMB usershares, Samba users, `[homes]`, and Time Machine shares — dumpstore owns `smb.conf`
+- Windows network discovery via wsdd, kept in sync with Samba's workgroup
+- iSCSI targets for zvols (`targetcli`/LIO on Linux, `ctld` on FreeBSD) with CHAP and initiator ACLs
+- Start, stop, enable, and disable Samba, NFS, iSCSI, and wsdd from the Services tab
+
+**Users & permissions**
+- Local users (including SSH keys and Samba password sync) and groups
+- POSIX and NFSv4 ACLs (NFSv4 on FreeBSD), dataset owner/group
+
+**Operations**
+- Session login with argon2id, reverse-proxy delegation (`X-Remote-User`), TLS with self-signed, existing, or ACME certificates
+- Live UI updates over Server-Sent Events
+- Prometheus `/metrics` and optional OpenTelemetry export (traces, logs, metrics)
+- Per-request `req_id` log correlation and an audit line for every mutating operation
+
+The full list with versions, and what is planned, is in [FEATURES.md](https://github.com/langerma/dumpstore/blob/main/FEATURES.md).
 
 ## Quick start
 
@@ -55,15 +52,11 @@ cd dumpstore
 sudo ./install.sh
 ```
 
-The service starts automatically and listens on `http://localhost:8080`.
-
-See [[Installation]] for detailed instructions, requirements, and configuration.
+The installer prompts for the admin password, and the service listens on `http://<host>:8080`. See [[Installation]] for requirements, options, and configuration.
 
 ## Security
 
-dumpstore has built-in session-based authentication. Set a password during install (the script prompts automatically) or at any time with `--set-password`. If no password is configured the service binds to `127.0.0.1` only.
-
-dumpstore runs as root (required for ZFS). See [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for notes on TLS and the recommended deployment topology.
+dumpstore has built-in session-based authentication (argon2id). If no password is configured the service binds to `127.0.0.1` only. It runs as root (required for ZFS) — see [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for TLS and the recommended deployment topology.
 
 ## Contributing
 
@@ -71,6 +64,6 @@ Contributions are welcome. See [CONTRIBUTING.md](https://github.com/langerma/dum
 
 ## Pages
 
-- [[Installation]] — requirements, install script, make, manual build, service configuration
-- [[API Reference]] — full REST API documentation with request/response examples
-- [[Architecture]] — design overview, read/write split, SSE stream, request flow
+- [[Installation]] — requirements, install options, authentication, service configuration, observability, versioning
+- [[Architecture]] — execution lanes, service ownership, frontend, observability internals, project layout, testing
+- [[API Reference]] — every endpoint with request/response examples, and the SSE event stream

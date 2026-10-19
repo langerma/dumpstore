@@ -32,6 +32,7 @@
 | Time Machine shares      | v0.1.6 | Samba `vfs_fruit` Time Machine backup targets; named shares backed by ZFS datasets; configurable max size and valid users         |
 | User mgmt extensions     | v0.1.7 | SSH authorized key add/remove, home directory change with optional file migration, Samba password sync on edit                    |
 | Request ID correlation   | v0.1.8 | Per-request `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on response |
+| Audit logging            | v0.1.9 | Every mutating API operation emits a structured audit line with `remote_ip`, `action`, `target`, `outcome`, and `req_id`; closes #48 |
 | Authentication           | v0.1.9 | Session-based login, bcrypt password, `--set-password` CLI, trusted proxy delegation (`X-Remote-User`), per-IP rate limiting   |
 | Network interface overview | v0.1.10 | Read-only view of all interfaces: state badge, MAC, MTU, IPs, link speed, RX/TX counters; Linux via `/sys/class/net`, FreeBSD via `ifconfig -a` |
 | Service management         | v0.1.10 | Start/stop/restart/enable/disable Samba, NFS, iSCSI from the Services tab; live status via SSE; systemd on Linux, rc.d on FreeBSD; op-log for all mutations |
