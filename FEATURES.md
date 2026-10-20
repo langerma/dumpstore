@@ -92,6 +92,7 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
 | OTEL ZFS read-path spans           | Low      | integrate | [#167](https://github.com/langerma/dumpstore/issues/167) | Child spans for `internal/zfs` read commands; needs ctx threaded through read helpers. Split out of #49 |
 | OTEL meter migration (phase 3)     | Low      | integrate | [#168](https://github.com/langerma/dumpstore/issues/168) | Move the Prometheus registry onto the OTEL meter + Prometheus exporter, keeping `/metrics` names stable. Split out of #49 |
+| Samba ZFS VFS in software card     | Low      | manage | [#177](https://github.com/langerma/dumpstore/issues/177) | Show Samba's ZFS ACL module (`samba-vfs-modules` / `samba-vfs`) in the Installed Software card so missing ACL passthrough over SMB is visible |
 
 ---
 
