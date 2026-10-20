@@ -50,3 +50,13 @@ A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/a
 1. `make vm-linux-start && make vm-linux-deploy` (creates the VM on first run) and `make vm-freebsd-start && make vm-freebsd-deploy`.
 2. Run `make test-integration` against each (FreeBSD env vars in `tests/integration/README.md`).
 3. Exercise the changed endpoint directly with curl (form login: `-d 'username=admin&password=admin' /auth/login`) and confirm the behavior the change claims.
+
+## 6. Package and dependency claims must be checked on a real system, not carried over
+
+**Mistake:** Opened #177 ("show the Samba ZFS ACL module, `samba-vfs-modules` / `samba-vfs`") and wrote the same claim into the wiki, copying package names from an old README line and a dropped WIP stash. Checked afterwards: Ubuntu doesn't build `vfs_zfsacl` at all (ZFS on Linux uses POSIX ACLs), `zfs_core.so` was `libzfs_core`, not a Samba module, and Fedora has no `samba-vfs` package. The real dependency was different: Time Machine's `fruit`/`catia`/`streams_xattr` live in `samba-vfs-modules` on Debian/Ubuntu.
+
+**Rule:** Before writing a package name, file path, or "X requires Y" into docs, an issue, or code:
+
+1. Verify on the Linux VM (`dpkg -S <file>`, `apt-cache show/depends <pkg>`, the daemon's own paths, e.g. `smbd -b`).
+2. For other platforms, check the packaging source (Fedora spec `%files`, FreeBSD port `Makefile`/`pkg-plist`) — and if it can't be confirmed, word the claim only as strongly as what was verified.
+3. Text already in the repo (README, stashes, old commits) is a lead, not evidence.

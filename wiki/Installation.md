@@ -11,7 +11,7 @@
 | POSIX ACLs (optional)  | `acl` (`getfacl`/`setfacl`)                               | n/a — ZFS on FreeBSD uses NFSv4 ACLs         |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` (`nfs4_getfacl`/`nfs4_setfacl`)          | base system (`getfacl`/`setfacl`)            |
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | base system                                  |
-| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
+| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); Time Machine shares need the `fruit`/`catia`/`streams_xattr` VFS modules — `samba-vfs-modules` on Debian/Ubuntu (installed by default as a recommendation of `samba`, missing with `--no-install-recommends`), part of `samba` on RHEL/Fedora | `samba` pkg (the port builds its VFS modules in; no separate package) |
 | Windows discovery (optional) | `wsdd-server` (Debian/Ubuntu — the `wsdd` package alone has no service), `wsdd` elsewhere | `py3*-wsdd` pkg |
 | iSCSI (optional)       | `targetcli-fb` (`targetcli`)                              | built-in `ctld`                              |
 | TLS / ACME (optional)  | `openssl` (usually pre-installed); `lego` for ACME        | same                                         |
