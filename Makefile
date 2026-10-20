@@ -1,7 +1,7 @@
 BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
-        test-integration release \
+        test-integration screenshots release \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -198,6 +198,16 @@ vm-linux-destroy:
 # See tests/integration/README.md for env overrides (FreeBSD VM, disks, …).
 test-integration:
 	go test -tags integration -count=1 -timeout 30m -v ./tests/integration/...
+
+# Regenerate screenshots/ from the deployed Linux VM (make vm-linux-deploy first).
+# Seeds demo data, captures with headless Chrome (puppeteer-core), and always
+# removes the demo data again. CHROME_PATH overrides the browser location.
+screenshots:
+	cd dev/screenshots && npm install --no-audit --no-fund --silent
+	limactl shell dumpstore-linux -- sudo sh -s up < dev/screenshots/seed.sh
+	node dev/screenshots/capture.mjs; status=$$?; \
+	  limactl shell dumpstore-linux -- sudo sh -s down < dev/screenshots/seed.sh; \
+	  exit $$status
 
 vm-freebsd-start:
 	@command -v limactl >/dev/null 2>&1 || { \
