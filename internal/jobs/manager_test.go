@@ -84,12 +84,24 @@ func TestCancel(t *testing.T) {
 
 func TestPersistence_Reload(t *testing.T) {
 	dir := t.TempDir()
-	m1, err := NewManager(dir, nil)
+	// finish() publishes the terminal status in memory before persisting it,
+	// and notifies only after the record is written — so wait for the
+	// notification, not waitTerminal, before reading the record back.
+	persisted := make(chan Job, 8)
+	m1, err := NewManager(dir, func(j Job) {
+		if j.Status.terminal() {
+			persisted <- j
+		}
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	j, _ := m1.Run(context.Background(), "test", []string{"sh", "-c", "exit 0"})
-	waitTerminal(t, m1, j.ID)
+	select {
+	case <-persisted:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("job %s did not finish in time", j.ID)
+	}
 
 	// New manager over the same dir loads the record.
 	m2, err := NewManager(dir, nil)
