@@ -92,6 +92,8 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
 | OTEL ZFS read-path spans           | Low      | integrate | [#167](https://github.com/langerma/dumpstore/issues/167) | Child spans for `internal/zfs` read commands; needs ctx threaded through read helpers. Split out of #49 |
 | OTEL meter migration (phase 3)     | Low      | integrate | [#168](https://github.com/langerma/dumpstore/issues/168) | Move the Prometheus registry onto the OTEL meter + Prometheus exporter, keeping `/metrics` names stable. Split out of #49 |
+| Special / dedup vdevs              | Medium   | manage | [#180](https://github.com/langerma/dumpstore/issues/180) | Add special (metadata/small blocks) and dedup vdevs via Expand (mirrored by default, type-to-confirm); Replace/Offline/Online for their disks; `special_small_blocks` in the dataset drawer |
+| OpenAPI 3.x spec + `/api/v1`       | Medium   | internal | [#181](https://github.com/langerma/dumpstore/issues/181) | Spec generated from Go route registry and typed handlers (served at `/api/v1/openapi.json`, committed as `api/openapi.json`); API path cleanup under `/api/v1`; Forge-ready (`operationId`, `x-fern-sdk-*`) |
 
 ---
 
