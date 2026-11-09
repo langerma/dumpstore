@@ -44,6 +44,7 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestReadEndpoints` | 200 + top-level shape of every read endpoint (sysinfo incl. `otel`, network, version, schema, smart, iostat, poolstatus, devices, dataset-props, whoami, auth/config, tls/status, acl-status, importable pools, scrub/auto-snapshot schedules, jobs, services, users, groups, smb/status, iscsi-targets, replication) + unauthenticated `/metrics` |
 | `TestReadNegatives` | invalid dataset name 400, unknown job 404, SSE with no valid topic 400 |
 | `TestSSEEvents` | `/api/events` stream headers + cached `user.query` replay on connect |
+| `TestOperations` | #184: two clients create snapshots concurrently while one watches `ansible.progress` — each operation's live steps carry its ID with contiguous `seq` and match its HTTP response; `GET /api/operations/{id}` returns the same steps/result, `?after=1` the tail; duplicate ID → 409 (not executed), invalid → 400, no header → generated ID; unknown → 404 |
 | `TestUserLifecycle` / `TestUserNegatives` | user create/modify/delete, SSH key add/list/remove, `id` in the VM; invalid names 400, system user 403, unknown user 404 |
 | `TestGroupLifecycle` | group create, members + rename, unknown member 400, delete; system group 403 |
 | `TestSMBSurface` | init (409 gate when smb.conf is absent), usershare set/list/unset, Samba user add/remove, `[homes]`, Time Machine shares |

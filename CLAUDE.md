@@ -160,7 +160,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 - **Event wiring uses delegation.** Render functions emit `data-action` plus payload `data-*` attributes; each stable container gets one `delegate(container, handlers, type?)` call (helper in `utils.js`), bound **once at module init** — never inside a render function. Handlers receive `(dataset, element, event)` and destructure the payload: `edit: ({ ds, type }) => …`. Do not re-bind listeners after `innerHTML` renders, do not use inline `onclick=`, do not export handlers via `window.*`. Singleton elements (dialog buttons, filters) keep plain `addEventListener`.
 - Always escape user-controlled strings through `esc()` before inserting into HTML.
 - The `api()` helper throws on non-2xx responses with the server's `error` field.
-- **Always show the Ansible op-log dialog** (`showOpLog`) after every write operation, success or failure. Never use `toast()` alone for Ansible-backed actions.
+- **Every write runs in an op-log session** (#184): `const op = startOp(title)` opens the op-log; send each write with `op.api(method, path, body)` (tags it with a fresh `X-Operation-ID` so only this operation's live steps are shown, and recovers the result if the connection drops); finish with `op.done(title, tasks, errorMsg, conflicts)` on success **and** failure. Never call plain `api()` for a write, and never use `toast()` alone for write actions.
 
 #### UI consistency
 
@@ -189,6 +189,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
 | `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
+| `internal/operations/operations.go` | Write-operation registry (#184): `Begin`/`Step`/`Finish`/`Get`, per-op `seq`, tagged `ansible.progress` publish, bounded in-memory retention; `api/operations.go` holds the `Operations` middleware (`X-Operation-ID`) and `GET /api/operations/{id}` |
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
 | `internal/logging/handler.go` | `NewJournalHandler` — legacy slog handler with systemd journal priority prefixes (fallback path only) |

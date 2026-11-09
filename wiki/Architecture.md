@@ -85,13 +85,14 @@ Reads call ZFS/system CLI tools directly. Writes are split across three lanes by
 | **Config-file / OS-resource writes** | `exec.Command(ansible-playbook)` + ndjson callback | smb.conf rendering, users/groups, TLS, ACLs, dataset property playbooks, scrub schedules, service control |
 | **Long-running data-plane** | `internal/jobs` — background process groups | `zfs send \| recv`, `zfs rewrite` |
 
-Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) and stream live progress on the `ansible.progress` SSE topic — the frontend op-log cannot tell them apart. Input validation for ops-lane writes lives solely in the Go handlers. Ansible (and Python) remains a dependency only for the config-file / OS-resource features.
+Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) and stream live progress on the `ansible.progress` SSE topic — the frontend op-log cannot tell them apart. Each write request is an *operation* (`internal/operations`, #184): the `Handler.Operations` middleware registers it under the client's `X-Operation-ID` (or a generated ID) and records the final status and body; `runOp`/`runLocal` record every step with a per-operation `seq` and publish it tagged with the ID. The frontend shows only its own operation's steps and fills gaps or recovers a lost response from `GET /api/operations/{id}`. Records are in memory and bounded (running always kept; finished: 200 / 1 h). Input validation for ops-lane writes lives solely in the Go handlers. Ansible (and Python) remains a dependency only for the config-file / OS-resource features.
 
 ## Write operation request flow
 
 ```
 Browser
   │  POST /api/snapshots  {"dataset":"tank/data","snapname":"bkp"}
+  │  X-Operation-ID: 3f9c0a…   (startOp() session, one ID per request)
   ▼
 zfs_handlers.go: createSnapshot()
   │  validate input (names, labels — Go is the single validation point)
@@ -100,11 +101,13 @@ zfs_handlers.go: createSnapshot()
 internal/ops: Run(steps)          ← in-process, no shell, no Python
   │  exec zfs snapshot tank/data@bkp
   │  step result → ansible.TaskStep{name, status, msg}
-  │  each step → ansible.progress SSE topic (live op-log)
+  │  each step → operations registry: seq++, record,
+  │  publish {op, seq, …} on ansible.progress (live op-log)
   ▼
 handlers.go: return 201 {"snapshot":"tank/data@bkp","tasks":[...]}
+  │  Operations middleware records status + body under the op ID
   ▼
-Browser: showOpLog() renders task steps in modal
+Browser: op.done() renders task steps in modal
 
 Config-file writes (e.g. SMB shares, user creation) take the same shape
 but execute via ansible-playbook with the ndjson callback.
@@ -121,6 +124,8 @@ On boot:
 2. `loadSlowMetrics()` fires in parallel for `/api/iostat` (~1 s) and `/api/smart` (drive scans), updating the I/O and disk health sections when ready
 3. `startSSE()` opens a persistent `EventSource` connection; on each message `storeSet(key, data)` auto-dispatches the subscribed renderers
 4. If SSE drops, the client falls back to `setInterval(loadAll, 30_000)` and retries SSE after 5 s
+
+Writes run inside an op-log session: `const op = startOp(title)` opens the op-log, `op.api(...)` sends each write with a fresh `X-Operation-ID`, and `op.done(title, tasks, err)` renders the result. Live `ansible.progress` steps are appended only for the active session's IDs, in `seq` order; on SSE reconnect or a `seq` gap the missing steps are fetched from `GET /api/operations/{id}?after=<seq>`, and a write whose response was lost is resolved by polling that endpoint.
 
 UI-local state (`collapsedDatasets`, `selectedSnaps`, `hideSystemUsers`, `hideSystemGroups`) is mutated directly on `state` with explicit render calls — it is not managed by the store.
 
@@ -160,6 +165,7 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 | `internal/system` | Host info, users/groups, services (systemd / rc.d), installed software |
 | `internal/smart`, `internal/blockdev` | S.M.A.R.T. data; physical devices and vdev matching |
 | `internal/broker` | SSE pub/sub and the background poller |
+| `internal/operations` | Write-operation registry: IDs, seq-numbered steps, final result, bounded in-memory retention (#184) |
 | `internal/auth` | Config file, sessions, login, rate limiting, trusted-proxy identity |
 | `internal/logging`, `internal/otel` | slog pipeline (journald exporter), request logging, OTEL setup |
 | `internal/schema`, `internal/platform` | Dataset property metadata; OS-specific paths |

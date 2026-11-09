@@ -651,6 +651,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">Per-operation progress</span>
+          <span class="health-badge badge-blue">X-Operation-ID</span>
+        </div>
+        <p>Every write gets an operation ID. Live op-log steps are tagged with it, so each tab and client sees only its own operation's progress, even when several run at once. If the connection drops mid-write, the UI fetches the missing steps and the final result from <code>GET /api/operations/{id}</code>, and a write the browser retransmits is refused instead of running twice.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">TLS / HTTPS</span>
           <span class="health-badge badge-blue">--tls</span>
         </div>

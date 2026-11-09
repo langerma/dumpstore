@@ -9,7 +9,7 @@ import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
 import { renderReplications } from './js/replication.js';
 import { renderAutoSnapStatus } from './js/autosnap.js';
-import { api, esc, toast, showOpLog, showOpLogRunning } from './js/utils.js';
+import { api, esc, toast, startOp } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
 subscribe(['sysinfo', 'version', 'schema'],                     renderSysInfo);
@@ -103,12 +103,12 @@ document.getElementById('changePasswordForm').addEventListener('submit', async e
   if (np !== cnf) { toast('New passwords do not match.', 'err'); return; }
   if (!np)        { toast('New password must not be empty.', 'err'); return; }
   changePasswordDialog.close();
-  showOpLogRunning('Change Password');
+  const op = startOp('Change Password');
   try {
-    const result = await api('POST', '/api/auth/change-password', { current_password: cur, new_password: np });
-    showOpLog('Change Password', result?.tasks);
+    const result = await op.api('POST', '/api/auth/change-password', { current_password: cur, new_password: np });
+    op.done('Change Password', result?.tasks);
     toast('Password updated.', 'ok');
-  } catch (err) { showOpLog('Change Password', err.tasks, err.message); }
+  } catch (err) { op.done('Change Password', err.tasks, err.message); }
 });
 
 // Change Username dialog
@@ -120,13 +120,13 @@ document.getElementById('changeUsernameForm').addEventListener('submit', async e
   const username = document.getElementById('auth-new-username').value.trim();
   if (!username) { toast('Username must not be empty.', 'err'); return; }
   changeUsernameDialog.close();
-  showOpLogRunning('Change Username');
+  const op = startOp('Change Username');
   try {
-    const result = await api('POST', '/api/auth/change-username', { username });
-    showOpLog('Change Username', result?.tasks);
+    const result = await op.api('POST', '/api/auth/change-username', { username });
+    op.done('Change Username', result?.tasks);
     // Server invalidated all sessions — redirect after user closes the op-log.
     document.getElementById('opLogClose').addEventListener('click', () => { window.location.href = '/login'; }, { once: true });
-  } catch (err) { showOpLog('Change Username', err.tasks, err.message); }
+  } catch (err) { op.done('Change Username', err.tasks, err.message); }
 });
 
 // ── TLS / HTTPS ───────────────────────────────────────────────────────────────
@@ -171,13 +171,13 @@ document.getElementById('tlsGencertForm').addEventListener('submit', async e => 
   const certDir  = document.getElementById('tls-gencert-certdir').value.trim();
   if (!hostname) { toast('Hostname is required.', 'err'); return; }
   tlsGencertDialog.close();
-  showOpLogRunning('Generate TLS Certificate');
+  const op = startOp('Generate TLS Certificate');
   try {
-    const result = await api('POST', '/api/tls/gencert', { hostname, cert_dir: certDir });
-    showOpLog('Generate TLS Certificate', result?.tasks);
+    const result = await op.api('POST', '/api/tls/gencert', { hostname, cert_dir: certDir });
+    op.done('Generate TLS Certificate', result?.tasks);
     toast('Certificate generated. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
-  } catch (err) { showOpLog('Generate TLS Certificate', err.tasks, err.message); }
+  } catch (err) { op.done('Generate TLS Certificate', err.tasks, err.message); }
 });
 
 // Load existing cert dialog
@@ -190,13 +190,13 @@ document.getElementById('tlsPathForm').addEventListener('submit', async e => {
   const keyPath  = document.getElementById('tls-path-key').value.trim();
   if (!certPath || !keyPath) { toast('Both cert and key paths are required.', 'err'); return; }
   tlsPathDialog.close();
-  showOpLogRunning('Load TLS Certificate');
+  const op = startOp('Load TLS Certificate');
   try {
-    const result = await api('PATCH', '/api/tls/config', { cert_path: certPath, key_path: keyPath });
-    showOpLog('Load TLS Certificate', result?.tasks);
+    const result = await op.api('PATCH', '/api/tls/config', { cert_path: certPath, key_path: keyPath });
+    op.done('Load TLS Certificate', result?.tasks);
     toast('Certificate loaded. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
-  } catch (err) { showOpLog('Load TLS Certificate', err.tasks, err.message); }
+  } catch (err) { op.done('Load TLS Certificate', err.tasks, err.message); }
 });
 
 // ACME / Let's Encrypt dialog
@@ -210,23 +210,23 @@ document.getElementById('tlsAcmeForm').addEventListener('submit', async e => {
   const certDir = document.getElementById('tls-acme-certdir').value.trim();
   if (!email || !domain) { toast('Email and domain are required.', 'err'); return; }
   tlsAcmeDialog.close();
-  showOpLogRunning('Issue ACME Certificate');
+  const op = startOp('Issue ACME Certificate');
   try {
-    const result = await api('POST', '/api/tls/acme/issue', { email, domain, cert_dir: certDir });
-    showOpLog('Issue ACME Certificate', result?.tasks);
+    const result = await op.api('POST', '/api/tls/acme/issue', { email, domain, cert_dir: certDir });
+    op.done('Issue ACME Certificate', result?.tasks);
     toast('Certificate issued. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
-  } catch (err) { showOpLog('Issue ACME Certificate', err.tasks, err.message); }
+  } catch (err) { op.done('Issue ACME Certificate', err.tasks, err.message); }
 });
 
 async function tlsAcmeRenew() {
-  showOpLogRunning('Renew ACME Certificate');
+  const op = startOp('Renew ACME Certificate');
   try {
-    const result = await api('POST', '/api/tls/acme/renew');
-    showOpLog('Renew ACME Certificate', result?.tasks);
+    const result = await op.api('POST', '/api/tls/acme/renew');
+    op.done('Renew ACME Certificate', result?.tasks);
     toast('Certificate renewed. Restart dumpstore to load the new cert.', 'ok');
     loadTLSStatus();
-  } catch (err) { showOpLog('Renew ACME Certificate', err.tasks, err.message); }
+  } catch (err) { op.done('Renew ACME Certificate', err.tasks, err.message); }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

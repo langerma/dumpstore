@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, delegate, esc, fmtBytes, startOp, toast } from './utils.js';
 import {
   openDeleteDatasetDialog, openRenameDatasetDialog, openRewriteDialog,
   openUserSpaceDialog, openACLDialog, openChownDialog,
@@ -211,17 +211,17 @@ async function applyProps() {
     renderProps();
     return;
   }
-  showOpLogRunning('Updating properties…');
+  const op = startOp('Updating properties…');
   try {
     const encodedName = name.split('/').map(encodeURIComponent).join('/');
-    const result = await api('PATCH', '/api/datasets/' + encodedName, body);
-    showOpLog(`Properties updated: ${name}`, result.tasks, null);
+    const result = await op.api('PATCH', '/api/datasets/' + encodedName, body);
+    op.done(`Properties updated: ${name}`, result.tasks, null);
     _propsDirty = false;
     const datasets = await api('GET', '/api/datasets');
     storeSet('datasets', datasets || []);
     if (state.selectedDataset === name) await loadProps(name);
   } catch (e) {
-    showOpLog(`Failed to update ${name}`, e.tasks, e.message, e.conflicts);
+    op.done(`Failed to update ${name}`, e.tasks, e.message, e.conflicts);
   }
 }
 

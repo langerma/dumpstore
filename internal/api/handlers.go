@@ -18,6 +18,7 @@ import (
 	"dumpstore/internal/autosnap"
 	"dumpstore/internal/broker"
 	"dumpstore/internal/jobs"
+	"dumpstore/internal/operations"
 	"dumpstore/internal/ops"
 	"dumpstore/internal/replication"
 	"dumpstore/internal/schema"
@@ -193,6 +194,7 @@ type apiError struct {
 type Handler struct {
 	runner     *ansible.Runner
 	ops        *ops.Runner
+	operations *operations.Registry // write-operation records + tagged progress (#184)
 	version    string
 	broker     *broker.Broker
 	jobs       *jobs.Manager
@@ -213,6 +215,7 @@ func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jo
 	return &Handler{
 		runner:     runner,
 		ops:        ops.NewRunner(),
+		operations: operations.New(b.PublishNoCache),
 		version:    version,
 		broker:     b,
 		jobs:       jm,
@@ -250,21 +253,25 @@ func auditLog(ctx context.Context, r *http.Request, action, target string, err e
 	slog.InfoContext(ctx, "audit", args...)
 }
 
-// runOp executes a playbook and publishes each task step to the ansible.progress
-// SSE topic as it completes, so the frontend can show live progress. ctx is
-// used for trace-span parenting only; the runner drops its cancellation.
+// runOp executes a playbook and records each task step under the request's
+// operation (#184), which publishes it to the ansible.progress SSE topic
+// tagged with the operation ID and seq so the frontend can show live
+// progress. ctx is used for trace-span parenting and the operation ID only;
+// the runner drops its cancellation.
 func (h *Handler) runOp(ctx context.Context, playbook string, vars map[string]string) (*ansible.PlaybookOutput, error) {
+	id := operations.IDFromContext(ctx)
 	return h.runner.RunStreaming(ctx, playbook, vars, func(step ansible.TaskStep) {
-		h.broker.PublishNoCache("ansible.progress", step)
+		h.operations.Step(id, step)
 	})
 }
 
 // runLocal executes argv steps through the in-process ops layer (#115),
-// publishing each step to the same ansible.progress SSE topic so the
-// frontend's live op-log works identically to playbook-backed writes.
+// recording/publishing each step exactly like runOp so the frontend's live
+// op-log works identically to playbook-backed writes.
 func (h *Handler) runLocal(ctx context.Context, steps ...ops.Step) (*ops.Result, error) {
+	id := operations.IDFromContext(ctx)
 	return h.ops.Run(ctx, steps, func(step ansible.TaskStep) {
-		h.broker.PublishNoCache("ansible.progress", step)
+		h.operations.Step(id, step)
 	})
 }
 
@@ -273,6 +280,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sysinfo", h.getSysInfo)
 	mux.HandleFunc("GET /api/network", h.getNetwork)
 	mux.HandleFunc("GET /api/version", h.getVersion)
+	mux.HandleFunc("GET /api/operations/{id}", h.getOperation)
 	mux.HandleFunc("GET /api/poolstatus", h.getPoolStatuses)
 	mux.HandleFunc("GET /api/pools", h.getPools)
 	mux.HandleFunc("POST /api/pools", h.createPool)

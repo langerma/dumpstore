@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
+import { api, delegate, esc, fmtBytes, startOp, toast, reZFSName } from './utils.js';
 
 // Dataset-scoped dialogs: delete, rename, rewrite, per-user quotas, ACL,
 // chown, NFS, SMB, iSCSI. Moved out of datasets.js so both the table and the
@@ -57,17 +57,17 @@ deleteDatasetBtn.addEventListener('click', async () => {
   const name = _deleteDatasetTarget;
   const recursive = deleteDatasetRecursive.checked;
   deleteDatasetDialog.close();
-  showOpLogRunning(`Deleting dataset…`);
+  const op = startOp(`Deleting dataset…`);
   try {
     const encodedName = name.split('/').map(encodeURIComponent).join('/');
     const url = '/api/datasets/' + encodedName + (recursive ? '?recursive=true' : '');
-    const result = await api('DELETE', url);
-    showOpLog(`Deleted dataset: ${name}`, result.tasks, null);
+    const result = await op.api('DELETE', url);
+    op.done(`Deleted dataset: ${name}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
     state.collapsedDatasets.delete(name);
     storeSet('datasets', datasets || []);
   } catch (e) {
-    showOpLog(`Failed to delete ${name}`, e.tasks, e.message, e.conflicts);
+    op.done(`Failed to delete ${name}`, e.tasks, e.message, e.conflicts);
   }
 });
 
@@ -100,14 +100,14 @@ document.getElementById('renameDatasetForm').addEventListener('submit', async e 
     return;
   }
   renameDatasetDialog.close();
-  showOpLogRunning('Renaming dataset…');
+  const op = startOp('Renaming dataset…');
   try {
-    const result = await api('POST', '/api/datasets/rename', { name, new_name: newName });
-    showOpLog(`Renamed: ${name} → ${newName}`, result.tasks, null);
+    const result = await op.api('POST', '/api/datasets/rename', { name, new_name: newName });
+    op.done(`Renamed: ${name} → ${newName}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
     storeSet('datasets', datasets || []);
   } catch (err) {
-    showOpLog('Rename failed', err.tasks, err.message, err.conflicts);
+    op.done('Rename failed', err.tasks, err.message, err.conflicts);
   }
 });
 
@@ -218,14 +218,14 @@ async function setUserQuota(principal, quota) {
   const title = quota === 'none'
     ? `Remove ${kind} quota for ${principal}`
     : `Set ${kind} quota: ${principal} = ${quota}`;
-  showOpLogRunning(title);
+  const op = startOp(title);
   try {
     const encodedName = _userSpaceDataset.split('/').map(encodeURIComponent).join('/');
-    const result = await api('POST', `/api/userquota/${encodedName}`, { kind, principal, quota });
-    showOpLog(title, result.tasks, null);
+    const result = await op.api('POST', `/api/userquota/${encodedName}`, { kind, principal, quota });
+    op.done(title, result.tasks, null);
     await loadUserSpace();
   } catch (e) {
-    showOpLog(title, e.tasks, e.message);
+    op.done(title, e.tasks, e.message);
   }
 }
 
@@ -507,45 +507,45 @@ export async function refreshACLStatus() {
 
 async function addACLEntry(ace, recursive) {
   const dataset = state.aclDataset;
-  showOpLogRunning('Applying ACL entry…');
+  const op = startOp('Applying ACL entry…');
   try {
-    const res = await api('POST', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+    const res = await op.api('POST', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { ace, recursive });
-    showOpLog(`ACL entry added — ${dataset}`, res.tasks, null);
+    op.done(`ACL entry added — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
     refreshACLStatus();
   } catch (err) {
-    showOpLog(`Failed to add ACL entry`, err.tasks, err.message);
+    op.done(`Failed to add ACL entry`, err.tasks, err.message);
   }
 }
 
 async function removeACLEntry(entry, recursive) {
   const dataset = state.aclDataset;
-  showOpLogRunning('Removing ACL entry…');
+  const op = startOp('Removing ACL entry…');
   try {
     const qs = `entry=${encodeURIComponent(entry)}${recursive ? '&recursive=true' : ''}`;
-    const res = await api('DELETE', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}?${qs}`);
-    showOpLog(`ACL entry removed — ${dataset}`, res.tasks, null);
+    const res = await op.api('DELETE', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}?${qs}`);
+    op.done(`ACL entry removed — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
     refreshACLStatus();
   } catch (err) {
-    showOpLog(`Failed to remove ACL entry`, err.tasks, err.message);
+    op.done(`Failed to remove ACL entry`, err.tasks, err.message);
   }
 }
 
 async function enableACLs(dataset, acltype) {
-  showOpLogRunning('Enabling ACLs…');
+  const op = startOp('Enabling ACLs…');
   try {
-    const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+    const res = await op.api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { acltype });
-    showOpLog(`Enabled ${acltype} ACLs — ${dataset}`, res.tasks, null);
+    op.done(`Enabled ${acltype} ACLs — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
     refreshACLStatus();
   } catch (err) {
-    showOpLog(`Failed to enable ACLs`, err.tasks, err.message);
+    op.done(`Failed to enable ACLs`, err.tasks, err.message);
   }
 }
 
@@ -554,16 +554,16 @@ document.getElementById('disableACLCancelBtn').addEventListener('click', () => d
 document.getElementById('disableACLConfirmBtn').addEventListener('click', async () => {
   const dataset = state.aclDataset;
   disableACLDialog.close();
-  showOpLogRunning('Disabling ACLs…');
+  const op = startOp('Disabling ACLs…');
   try {
-    const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+    const res = await op.api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { acltype: 'off' });
-    showOpLog(`Disabled ACLs — ${dataset}`, res.tasks, null);
+    op.done(`Disabled ACLs — ${dataset}`, res.tasks, null);
     state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
     renderACLDialog();
     refreshACLStatus();
   } catch (err) {
-    showOpLog(`Failed to disable ACLs`, err.tasks, err.message);
+    op.done(`Failed to disable ACLs`, err.tasks, err.message);
   }
 });
 
@@ -608,13 +608,13 @@ document.getElementById('chownForm').addEventListener('submit', async e => {
   const group = document.getElementById('chown-group').value;
   const recursive = document.getElementById('chown-recursive').checked;
   chownDialog.close();
-  showOpLogRunning('Changing ownership…');
+  const op = startOp('Changing ownership…');
   try {
-    const result = await api('POST', `/api/chown/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+    const result = await op.api('POST', `/api/chown/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
       { owner, group, recursive });
-    showOpLog(`Ownership changed: ${dataset}`, result.tasks, null);
+    op.done(`Ownership changed: ${dataset}`, result.tasks, null);
   } catch (err) {
-    showOpLog(`Failed to change ownership of ${dataset}`, err.tasks, err.message);
+    op.done(`Failed to change ownership of ${dataset}`, err.tasks, err.message);
   }
 });
 
@@ -655,26 +655,26 @@ document.getElementById('nfsAddBtn').addEventListener('click', async () => {
   const options = document.getElementById('nfs-clients').value.trim() || 'on';
   const dataset = _nfsDataset;
   nfsDialog.close();
-  showOpLogRunning('Enabling NFS share…');
+  const op = startOp('Enabling NFS share…');
   try {
-    const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+    const result = await op.api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharenfs: options });
-    showOpLog('NFS share enabled: ' + dataset, result.tasks, null);
+    op.done('NFS share enabled: ' + dataset, result.tasks, null);
   } catch (e) {
-    showOpLog('Failed to set sharenfs', e.tasks, e.message);
+    op.done('Failed to set sharenfs', e.tasks, e.message);
   }
 });
 
 document.getElementById('nfsDisableBtn').addEventListener('click', async () => {
   const dataset = _nfsDataset;
   nfsDialog.close();
-  showOpLogRunning('Disabling NFS share…');
+  const op = startOp('Disabling NFS share…');
   try {
-    const result = await api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+    const result = await op.api('PATCH', '/api/datasets/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharenfs: 'off' });
-    showOpLog('NFS share disabled: ' + dataset, result.tasks, null);
+    op.done('NFS share disabled: ' + dataset, result.tasks, null);
   } catch (e) {
-    showOpLog('Failed to disable sharenfs', e.tasks, e.message);
+    op.done('Failed to disable sharenfs', e.tasks, e.message);
   }
 });
 
@@ -742,14 +742,14 @@ document.getElementById('smbAddBtn').addEventListener('click', async () => {
   const sharename = document.getElementById('smb-sharename').value.trim() || _smbDataset.replace(/\//g, '-');
   const dataset = _smbDataset;
   smbDialog.close();
-  showOpLogRunning('Enabling SMB share…');
+  const op = startOp('Enabling SMB share…');
   try {
-    const result = await api('POST', '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
+    const result = await op.api('POST', '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/'),
       { sharename });
-    showOpLog('SMB share enabled: ' + dataset, result.tasks, null);
+    op.done('SMB share enabled: ' + dataset, result.tasks, null);
     await _refreshSMBShares();
   } catch (e) {
-    showOpLog('Failed to enable SMB share', e.tasks, e.message);
+    op.done('Failed to enable SMB share', e.tasks, e.message);
   }
 });
 
@@ -758,14 +758,14 @@ document.getElementById('smbDisableBtn').addEventListener('click', async () => {
   const sharename = _smbCurrentSharename;
   if (!sharename) { smbDialog.close(); return; }
   smbDialog.close();
-  showOpLogRunning('Disabling SMB share…');
+  const op = startOp('Disabling SMB share…');
   try {
-    const result = await api('DELETE',
+    const result = await op.api('DELETE',
       '/api/smb-share/' + encodeURIComponent(dataset).replace(/%2F/g, '/') + '?name=' + encodeURIComponent(sharename));
-    showOpLog('SMB share disabled: ' + dataset, result.tasks, null);
+    op.done('SMB share disabled: ' + dataset, result.tasks, null);
     await _refreshSMBShares();
   } catch (e) {
-    showOpLog('Failed to disable SMB share', e.tasks, e.message);
+    op.done('Failed to disable SMB share', e.tasks, e.message);
   }
 });
 
@@ -859,9 +859,9 @@ document.getElementById('iscsiExposeBtn').addEventListener('click', async () => 
   if (!iqn) { toast('IQN is required', 'err'); return; }
 
   iscsiDialog.close();
-  showOpLogRunning('Creating iSCSI target…');
+  const op = startOp('Creating iSCSI target…');
   try {
-    const result = await api('POST', '/api/iscsi-targets', {
+    const result = await op.api('POST', '/api/iscsi-targets', {
       zvol,
       iqn,
       portal_ip: portalIP,
@@ -871,10 +871,10 @@ document.getElementById('iscsiExposeBtn').addEventListener('click', async () => 
       chap_password: chapPass,
       initiators,
     });
-    showOpLog('iSCSI target created: ' + iqn, result.tasks, null);
+    op.done('iSCSI target created: ' + iqn, result.tasks, null);
     await _refreshISCSITargets();
   } catch (e) {
-    showOpLog('Failed to create iSCSI target', e.tasks, e.message);
+    op.done('Failed to create iSCSI target', e.tasks, e.message);
   }
 });
 
@@ -882,12 +882,12 @@ document.getElementById('iscsiRemoveBtn').addEventListener('click', async () => 
   const zvol = _iscsiDataset;
   const iqn = _iscsiCurrentIQN;
   iscsiDialog.close();
-  showOpLogRunning('Removing iSCSI target…');
+  const op = startOp('Removing iSCSI target…');
   try {
-    const result = await api('DELETE', `/api/iscsi-targets?iqn=${encodeURIComponent(iqn)}&zvol=${encodeURIComponent(zvol)}`);
-    showOpLog('iSCSI target removed: ' + iqn, result.tasks, null);
+    const result = await op.api('DELETE', `/api/iscsi-targets?iqn=${encodeURIComponent(iqn)}&zvol=${encodeURIComponent(zvol)}`);
+    op.done('iSCSI target removed: ' + iqn, result.tasks, null);
     await _refreshISCSITargets();
   } catch (e) {
-    showOpLog('Failed to remove iSCSI target', e.tasks, e.message);
+    op.done('Failed to remove iSCSI target', e.tasks, e.message);
   }
 });
