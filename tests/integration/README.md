@@ -21,8 +21,10 @@ datasets, pre-cleaning stale state) and to verify results on the host
 (`id`, `getfacl`, `stat`, `zfs holds`).
 
 The Linux VM is provisioned with the share/ACL tooling the suite exercises
-(`acl samba nfs-kernel-server targetcli-fb zfs-auto-snapshot`). A dev VM
-created before those were added needs a rebuild — tests that depend on a
+(`acl samba nfs-kernel-server targetcli-fb zfs-auto-snapshot`); the FreeBSD
+VM gets `samba416` (iSCSI uses `ctld` from base). A dev VM created before
+those were added needs a rebuild (or a manual `pkg install samba416` /
+`apt-get install …`) — tests that depend on a
 missing tool skip with a hint rather than fail:
 
 ```sh
@@ -48,8 +50,8 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestPosixACL` | acltype gate, POSIX ACE set/get/remove (+ `getfacl` check), 404 on re-delete — Linux only |
 | `TestNFSv4ACL` | NFSv4 ACE add/list/remove in the nfs4-acl-tools form (+ `getfacl` check), 404 on re-delete, bad permission 400 — FreeBSD only (Linux ZFS cannot apply NFSv4 ACLs locally) |
 | `TestChown` | mountpoint owner/group read + change, verified with `stat` |
-| `TestDatasetRefGuard` | #183 reference guard: destroy (incl. recursive parent), rename, and mountpoint change of a usershare'd dataset → 409 with conflict list; replication source/target and iSCSI zvol → 409; stale usershare listed with `path_missing`, removed, and not resurrected by a new dataset at the same path; unreadable `smb.conf`/`smb4.conf` → 500 fail-closed with nothing destroyed. |
-| `TestISCSITarget` | zvol → targetcli target create/list/delete; CHAP-without-password and bad IQN 400 — Linux only |
+| `TestDatasetRefGuard` | #183 reference guard: destroy (incl. recursive parent), rename, and mountpoint change of a usershare'd dataset → 409 with conflict list; replication source/target and iSCSI zvol → 409; stale usershare listed with `path_missing`, removed, and not resurrected by a new dataset at the same path; unreadable `smb.conf`/`smb4.conf` → 500 fail-closed with nothing destroyed. Runs on Linux and FreeBSD |
+| `TestISCSITarget` | zvol → iSCSI target create/list/delete (targetcli on Linux, ctld on FreeBSD — `/etc/ctl.conf` and ctld state restored afterwards); CHAP-without-password and bad IQN 400 |
 | `TestReplicationTask` | task CRUD, invalid schedule/target 400, manual run → job → received snapshot → history record, hold released |
 | `TestAutoSnapshotProperties` | per-dataset auto-snapshot properties set/read/inherit, value validation |
 | `TestScrubSchedule` | scrub schedule add/remove (`/etc/default/zfs` backed up and restored) |

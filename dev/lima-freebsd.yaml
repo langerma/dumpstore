@@ -47,6 +47,9 @@ provision:
       export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 
       echo "==> Installing pkg dependencies..."
+      # The quarterly repo is built on the newest 15.x point release; pkg
+      # refuses it on an older 15.0 image without this.
+      export IGNORE_OSVERSION=yes
       # Bootstrap pkg if not already present
       ASSUME_ALWAYS_YES=yes pkg bootstrap -f 2>/dev/null || true
       pkg update -q
@@ -59,6 +62,9 @@ provision:
 
       echo "==> Installing optional tools..."
       pkg install -y smartmontools rsync
+      # Share tooling the integration suite exercises. samba416 is the ports
+      # tree's SAMBA_DEFAULT (Mk/bsd.default-versions.mk); ctld is in base.
+      pkg install -y samba416
 
       echo "==> Enabling ZFS in rc.conf..."
       sysrc zfs_enable="YES"
