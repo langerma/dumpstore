@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, showOpLog, showOpLogRunning, toast, reZFSName, reSnapLabel } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, startOp, toast, reZFSName, reSnapLabel } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -156,13 +156,13 @@ let _deleteSnapName = '';
 document.getElementById('deleteSnapConfirmBtn').addEventListener('click', async () => {
   const name = _deleteSnapName;
   deleteSnapDialog.close();
-  showOpLogRunning(`Deleting snapshot…`);
+  const op = startOp(`Deleting snapshot…`);
   try {
-    const result = await api('DELETE', '/api/snapshots/' + encodeURIComponent(name));
+    const result = await op.api('DELETE', '/api/snapshots/' + encodeURIComponent(name));
     storeSet('snapshots', state.snapshots.filter(s => s.name !== name));
-    showOpLog(`Deleted snapshot: ${name}`, result.tasks, null);
+    op.done(`Deleted snapshot: ${name}`, result.tasks, null);
   } catch (e) {
-    showOpLog('Snapshot deletion failed', e.tasks, e.message);
+    op.done('Snapshot deletion failed', e.tasks, e.message);
   }
 });
 
@@ -186,14 +186,14 @@ document.getElementById('deleteMultiSnapCancelBtn').addEventListener('click', ()
 document.getElementById('deleteMultiSnapConfirmBtn').addEventListener('click', async () => {
   const snapshots = [...state.selectedSnaps];
   document.getElementById('deleteMultiSnapDialog').close();
-  showOpLogRunning(`Deleting ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}…`);
+  const op = startOp(`Deleting ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}…`);
   try {
-    const result = await api('POST', '/api/snapshots/delete-batch', { snapshots });
+    const result = await op.api('POST', '/api/snapshots/delete-batch', { snapshots });
     state.selectedSnaps.clear();
     storeSet('snapshots', state.snapshots.filter(s => !snapshots.includes(s.name)));
-    showOpLog(`Deleted ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`, result.tasks, null);
+    op.done(`Deleted ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`, result.tasks, null);
   } catch (e) {
-    showOpLog('Batch snapshot deletion failed', e.tasks, e.message);
+    op.done('Batch snapshot deletion failed', e.tasks, e.message);
   }
 });
 
@@ -228,14 +228,14 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
     return;
   }
   dialog.close();
-  showOpLogRunning(`Creating snapshot…`);
+  const op = startOp(`Creating snapshot…`);
   try {
-    const result = await api('POST', '/api/snapshots', { dataset, snapname, recursive });
-    showOpLog(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
+    const result = await op.api('POST', '/api/snapshots', { dataset, snapname, recursive });
+    op.done(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
     const snaps = await api('GET', '/api/snapshots');
     storeSet('snapshots', snaps || []);
   } catch (e) {
-    showOpLog('Snapshot creation failed', e.tasks, e.message);
+    op.done('Snapshot creation failed', e.tasks, e.message);
   }
 });
 
@@ -264,14 +264,14 @@ document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
     return;
   }
   cloneSnapDialog.close();
-  showOpLogRunning('Cloning snapshot…');
+  const op = startOp('Cloning snapshot…');
   try {
-    const result = await api('POST', '/api/snapshots/clone', { snapshot, target });
-    showOpLog(`Cloned: ${snapshot} → ${target}`, result.tasks, null);
+    const result = await op.api('POST', '/api/snapshots/clone', { snapshot, target });
+    op.done(`Cloned: ${snapshot} → ${target}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
     storeSet('datasets', datasets || []);
   } catch (err) {
-    showOpLog('Clone failed', err.tasks, err.message);
+    op.done('Clone failed', err.tasks, err.message);
   }
 });
 

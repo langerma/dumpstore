@@ -18,6 +18,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk |
 | GET    | `/api/events`               | Server-Sent Events stream |
+| GET    | `/api/operations/{id}`      | Write operation record: state, steps (`?after=<seq>`), final status + result |
 | GET    | `/metrics`                  | Prometheus text exposition |
 | GET    | `/api/schema`               | Dataset property definitions and system metadata for the current OS |
 | POST   | `/api/datasets`             | Create a dataset or volume |
@@ -301,6 +302,43 @@ Query parameters:
 ```
 
 Entries are capped at 10 000 (`truncated: true` when more changed). The dataset must be mounted for `zfs diff` to work.
+
+---
+
+## Operations
+
+Every write request (`POST`, `PUT`, `PATCH`, `DELETE` under `/api/`) is tracked as an **operation** (#184). This is what lets several tabs or clients run writes at the same time without seeing each other's progress, and lets a client recover the outcome of a write whose connection dropped.
+
+**Request header `X-Operation-ID`** (optional) — the client's ID for this write: 8–64 characters of `[A-Za-z0-9-]`, unique per request. Choosing it client-side lets the client filter live progress before the response arrives. Without the header the server generates one. The ID is always returned in the `X-Operation-ID` response header.
+
+| Case | Response |
+|------|----------|
+| Invalid ID | `400` |
+| ID already used (running or retained) | `409 {"error":"operation ID already in use","duplicate_operation":true}` — the request is **not** executed. Browsers may retransmit a write after a connection reset; treat this as "the original request arrived" and fetch its result. |
+
+Live steps of the operation are published on the `ansible.progress` SSE topic as `{"op":"<id>","seq":N,"name":…,"status":…,"msg":…}` with `seq` counting 1, 2, 3, … per operation. A gap in `seq` means events were missed (SSE reconnect, slow subscriber); fetch them with `?after=`.
+
+### GET /api/operations/{id}
+
+```json
+{
+  "id": "3f9c0a…",
+  "state": "succeeded",
+  "started": "2026-11-09T19:02:11Z",
+  "finished": "2026-11-09T19:02:12Z",
+  "http_status": 201,
+  "steps": [{"op":"3f9c0a…","seq":1,"name":"Create snapshot tank@bkp","status":"changed"}],
+  "result": {"snapshot":"tank@bkp","tasks":[…]}
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `state` | `running`, `succeeded` (final status < 400), or `failed` |
+| `steps` | Steps with `seq` greater than the `after` query parameter (default `0` = all) |
+| `http_status`, `result` | The final HTTP status and JSON response body, exactly as the original request returned them; absent while running. `result` is omitted (`result_truncated: true`) when the body exceeded 256 KiB. |
+
+Returns `404 operation not found or expired` for unknown IDs. Records are held in memory only (lost on restart): running operations always, finished ones for up to 1 hour and at most 200.
 
 ---
 
@@ -893,7 +931,7 @@ Subscribe to live data updates. The server pushes named events whenever data cha
 | `jobs.update`        | Single job object (as `GET /api/jobs/{id}`)     | On every job state change |
 | `replication.update` | Same JSON as `GET /api/replication`             | On task create/update/delete + after each scheduled run |
 | `autosnap.status`    | Same JSON as `GET /api/auto-snapshot/status`    | After takeover / release |
-| `ansible.progress`   | Single `TaskStep` object                        | Streamed during every write (Ansible and ops lanes) |
+| `ansible.progress`   | Single step `{op, seq, name, status, msg}` (see [Operations](#operations)) | Streamed during every write (Ansible and ops lanes); not cached |
 
 Unknown topic names are ignored. The browser UI subscribes to all of them and falls back to 30 s REST polling (retrying SSE after 5 s) if the stream drops.
 

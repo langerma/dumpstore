@@ -8,20 +8,34 @@ export function esc(s) {
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────────
-export async function api(method, path, body) {
+// opId, when given, is sent as X-Operation-ID so the write's progress steps
+// can be attributed to it (#184). A fetch-level failure (connection lost)
+// is rethrown with err.network = true so callers can recover the result.
+export async function api(method, path, body, { opId } = {}) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (opId) opts.headers['X-Operation-ID'] = opId;
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (e) {
+    e.network = true;
+    throw e;
+  }
   if (res.status === 401) { window.location.href = '/login'; throw new Error('unauthorized'); }
   if (res.status === 204) return null;
   const data = await res.json();
-  if (!res.ok) {
-    const err = new Error(data.error || `HTTP ${res.status}`);
-    err.tasks = data.tasks || null;
-    err.conflicts = data.conflicts || null;
-    throw err;
-  }
+  if (!res.ok) throw apiErrorFrom(res.status, data);
   return data;
+}
+
+function apiErrorFrom(status, data) {
+  const err = new Error(data?.error || `HTTP ${status}`);
+  err.tasks = data?.tasks || null;
+  err.conflicts = data?.conflicts || null;
+  err.status = status;
+  err.duplicateOp = !!data?.duplicate_operation;
+  return err;
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -90,7 +104,7 @@ document.getElementById('opLogClose').addEventListener('click', () => opLogDialo
 
 const stepIcons = { ok: '✓', changed: '●', failed: '✗', skipped: '–' };
 
-export function showOpLogRunning(title) {
+function showOpLogRunning(title) {
   document.getElementById('opLogTitle').textContent = title;
   document.getElementById('opLogSteps').innerHTML = `
     <div class="op-step running">
@@ -100,6 +114,142 @@ export function showOpLogRunning(title) {
   document.getElementById('opLogError').style.display = 'none';
   document.getElementById('opLogClose').disabled = true;
   if (!opLogDialog.open) opLogDialog.showModal();
+}
+
+// ── Operation sessions (#184) ─────────────────────────────────────────────────
+// A session is one op-log dialog run. Every write inside it goes through
+// session.api(), which tags the request with a fresh operation ID; live
+// ansible.progress steps are shown only for the active session's IDs, in seq
+// order. Gaps (dropped SSE events, reconnects) are filled from
+// GET /api/operations/{id}?after=<seq>, and a lost HTTP response is recovered
+// by polling the same endpoint for the final result.
+
+let activeSession = null;
+
+export function newOpId() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b); // randomUUID needs a secure context; plain-http LAN UIs don't have one
+  return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+}
+
+// Called by the SSE client for every ansible.progress event.
+export function opSessionStep(step) {
+  activeSession?.onStep(step);
+}
+
+// Called by the SSE client on every (re)connect.
+export function opSessionResync() {
+  activeSession?.resync();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const RECOVER_TIMEOUT_MS = 5 * 60_000;
+
+export function startOp(title) {
+  const session = {
+    ids: new Set(),
+    lastSeq: new Map(),
+    running: true,
+    syncing: new Set(),
+
+    live() { return this.running && activeSession === this; },
+
+    append(step) {
+      const last = this.lastSeq.get(step.op) || 0;
+      if (step.seq <= last) return true;      // duplicate
+      if (step.seq !== last + 1) return false; // gap
+      this.lastSeq.set(step.op, step.seq);
+      appendOpLogStep(step);
+      return true;
+    },
+
+    onStep(step) {
+      if (!this.live() || !this.ids.has(step.op)) return;
+      if (!this.append(step)) this.sync(step.op);
+    },
+
+    async sync(id) {
+      if (this.syncing.has(id)) return;
+      this.syncing.add(id);
+      try {
+        const op = await fetchOp(id, this.lastSeq.get(id) || 0);
+        if (op && this.live()) for (const s of op.steps) this.append(s);
+        return op;
+      } finally {
+        this.syncing.delete(id);
+      }
+    },
+
+    resync() {
+      if (!this.live()) return;
+      for (const id of this.ids) this.sync(id).catch(() => {});
+    },
+
+    async api(method, path, body) {
+      const id = newOpId();
+      this.ids.add(id);
+      try {
+        return await api(method, path, body, { opId: id });
+      } catch (e) {
+        // network: the response was lost. duplicateOp: the browser
+        // retransmitted the request after a connection reset and the server
+        // refused to run it twice. Either way the original outcome is in
+        // the operation record.
+        if (!e.network && !e.duplicateOp) throw e;
+        return await this.recover(id);
+      }
+    },
+
+    // The HTTP response was lost: poll the operation record until it has
+    // finished, then return/throw exactly as api() would have.
+    async recover(id) {
+      const deadline = Date.now() + RECOVER_TIMEOUT_MS;
+      let delay = 1000;
+      while (Date.now() < deadline) {
+        await sleep(delay);
+        delay = Math.min(delay * 2, 5000);
+        let op;
+        try {
+          op = await fetchOp(id, this.lastSeq.get(id) || 0);
+        } catch (e) {
+          if (e.network) continue; // still offline
+          throw e;
+        }
+        if (!op) throw new Error('Connection lost before the server recorded the operation — check its state and retry.');
+        if (this.live()) for (const s of op.steps) this.append(s);
+        if (op.state === 'running') continue;
+        if (op.result_truncated) throw new Error(`Connection lost; the operation finished (${op.state}) but its result is too large to recover.`);
+        if (op.http_status === 204) return null;
+        if (op.http_status >= 400) throw apiErrorFrom(op.http_status, op.result);
+        return op.result ?? null;
+      }
+      throw new Error('Connection lost; the operation did not report a result within 5 minutes.');
+    },
+
+    done(title, tasks, errorMsg, conflicts) {
+      const wasActive = activeSession === this;
+      this.running = false;
+      if (wasActive) {
+        activeSession = null;
+        showOpLog(title, tasks, errorMsg, conflicts);
+      } else {
+        toast(errorMsg ? `${title}: ${errorMsg}` : title, errorMsg ? 'err' : 'ok');
+      }
+    },
+  };
+  activeSession = session;
+  showOpLogRunning(title);
+  return session;
+}
+
+// Returns the operation record (steps after `after`), or null if unknown/expired.
+async function fetchOp(id, after) {
+  try {
+    return await api('GET', `/api/operations/${encodeURIComponent(id)}?after=${after}`);
+  } catch (e) {
+    if (e.status === 404) return null;
+    throw e;
+  }
 }
 
 export function showOpLog(title, tasks, errorMsg, conflicts) {
@@ -136,7 +286,7 @@ export function showOpLog(title, tasks, errorMsg, conflicts) {
 
 // Append a single task step to the op-log while it is in running state.
 // Removes the "Running…" placeholder on the first call.
-export function appendOpLogStep(step) {
+function appendOpLogStep(step) {
   const stepsEl = document.getElementById('opLogSteps');
   // Remove the "Running…" placeholder if present
   const running = stepsEl.querySelector('.op-step.running');

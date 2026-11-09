@@ -185,7 +185,7 @@ func main() {
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
 	authMW := auth.NewMiddleware(cfg, store)
-	handler := logging.RequestLogger(authMW.Wrap(mux))
+	handler := logging.RequestLogger(authMW.Wrap(apiHandler.Operations(mux)))
 	if otelx.Enabled() {
 		// Outermost so RequestLogger's context carries the span. Static assets
 		// and the hours-long SSE stream are not worth a span each.

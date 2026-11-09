@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { esc, api, delegate, toast, showOpLogRunning, showOpLog } from './utils.js';
+import { esc, api, delegate, toast, startOp } from './utils.js';
 
 export function renderServices() {
   const wrap = document.getElementById('services-wrap');
@@ -60,13 +60,13 @@ async function serviceAction(svc, action) {
     if (!confirm('Stopping NFS will disconnect all mounted clients. Continue?')) return;
   }
 
-  showOpLogRunning(`${action} ${svc}`);
+  const op = startOp(`${action} ${svc}`);
   try {
-    const res = await api('POST', `/api/services/${svc}/${action}`);
-    showOpLog(`${action} ${svc}`, res?.tasks);
+    const res = await op.api('POST', `/api/services/${svc}/${action}`);
+    op.done(`${action} ${svc}`, res?.tasks);
     toast(`${svc} ${action} OK`, 'ok');
   } catch (err) {
-    showOpLog(`${action} ${svc}`, err.tasks, err.message);
+    op.done(`${action} ${svc}`, err.tasks, err.message);
   }
 }
 

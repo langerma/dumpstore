@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, showOpLog, showOpLogRunning, toast, reZFSName } from './utils.js';
+import { api, delegate, esc, fmtBytes, startOp, toast, reZFSName } from './utils.js';
 import { openDatasetDrawer } from './dataset-drawer.js';
 import {
   openDeleteDatasetDialog, openRenameDatasetDialog,
@@ -230,13 +230,13 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
     body[p.name] = p.input_type === 'text' ? el.value.trim() : el.value;
   }
   datasetDialog.close();
-  showOpLogRunning('Creating dataset…');
+  const op = startOp('Creating dataset…');
   try {
-    const result = await api('POST', '/api/datasets', body);
-    showOpLog(`Dataset created: ${body.name}`, result.tasks, null);
+    const result = await op.api('POST', '/api/datasets', body);
+    op.done(`Dataset created: ${body.name}`, result.tasks, null);
     const datasets = await api('GET', '/api/datasets');
     storeSet('datasets', datasets || []);
   } catch (e) {
-    showOpLog('Dataset creation failed', e.tasks, e.message);
+    op.done('Dataset creation failed', e.tasks, e.message);
   }
 });

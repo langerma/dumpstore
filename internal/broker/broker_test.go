@@ -3,6 +3,7 @@ package broker
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -457,4 +458,58 @@ func TestPayloadJSONIntegrity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPublishNoCacheBurstNotDropped guards the #184 transport choice: a
+// subscriber that keeps up must receive a long stream of transient events
+// (e.g. operation steps) without being dropped, while a stalled one is
+// disconnected once its buffer fills. "Keeps up" is made deterministic: the
+// publisher never runs more than half a buffer ahead of the reader.
+func TestPublishNoCacheBurstNotDropped(t *testing.T) {
+	const n, lead = 1500, 32
+	b := New()
+	reader := b.Subscribe("ansible.progress")
+	stalled := b.Subscribe("ansible.progress")
+
+	var received atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range reader {
+			if received.Add(1) == n {
+				return
+			}
+		}
+	}()
+
+	for i := range n {
+		for int64(i)-received.Load() >= lead {
+			select {
+			case <-done:
+				t.Fatalf("reader dropped after %d of %d", received.Load(), n)
+			default:
+				time.Sleep(100 * time.Microsecond)
+			}
+		}
+		b.PublishNoCache("ansible.progress", map[string]int{"seq": i})
+	}
+
+	select {
+	case <-done:
+		if c := received.Load(); c != n {
+			t.Fatalf("reader received %d of %d", c, n)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("reader stuck at %d of %d", received.Load(), n)
+	}
+
+	// The stalled subscriber must have been closed after its buffer filled.
+	drained := 0
+	for range stalled {
+		drained++
+	}
+	if drained != 64 {
+		t.Errorf("stalled subscriber received %d before close, want 64", drained)
+	}
+	b.Unsubscribe("ansible.progress", reader)
 }

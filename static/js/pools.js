@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, startOp, toast } from './utils.js';
 import { loadAll } from './loader.js';
 
 // ── Render: System info ────────────────────────────────────────────────────────
@@ -357,15 +357,15 @@ async function confirmReplaceDevice() {
   if (!newDev) { toast('Choose a replacement device', 'err'); return; }
   const { pool, old } = _replaceCtx;
   document.getElementById('replaceDeviceDialog').close();
-  showOpLogRunning(`Replace ${old} in ${pool}`);
+  const op = startOp(`Replace ${old} in ${pool}`);
   try {
-    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/replace`,
+    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/replace`,
       { old_device: old, new_device: newDev });
-    showOpLog(`Replace ${old} in ${pool}`, data.tasks, null);
+    op.done(`Replace ${old} in ${pool}`, data.tasks, null);
     toast(`Replace started on ${pool} — resilver running`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Replace ${old} in ${pool}`, err.tasks, err.message);
+    op.done(`Replace ${old} in ${pool}`, err.tasks, err.message);
   }
 }
 
@@ -378,16 +378,16 @@ async function onlineDevice(pool, device) {
   await _deviceStateOp(pool, device, 'online');
 }
 
-async function _deviceStateOp(pool, device, op) {
-  const title = `${op === 'offline' ? 'Offline' : 'Online'} ${device} (${pool})`;
-  showOpLogRunning(title);
+async function _deviceStateOp(pool, device, action) {
+  const title = `${action === 'offline' ? 'Offline' : 'Online'} ${device} (${pool})`;
+  const op = startOp(title);
   try {
-    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/${op}`, { device });
-    showOpLog(title, data.tasks, null);
-    toast(`${device} is now ${op}`, 'ok');
+    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/${action}`, { device });
+    op.done(title, data.tasks, null);
+    toast(`${device} is now ${action}`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(title, err.tasks, err.message);
+    op.done(title, err.tasks, err.message);
   }
 }
 
@@ -443,20 +443,20 @@ async function confirmCreatePool() {
   const min = _vdevMinDevices[vdevType] || 1;
   if (devices.length < min) { toast(`${vdevType} needs at least ${min} device${min === 1 ? '' : 's'}`, 'err'); return; }
   document.getElementById('createPoolDialog').close();
-  showOpLogRunning(`Create pool: ${name}`);
+  const op = startOp(`Create pool: ${name}`);
   try {
-    const data = await api('POST', '/api/pools', {
+    const data = await op.api('POST', '/api/pools', {
       name,
       vdev_type: vdevType,
       devices,
       ashift: document.getElementById('createPoolAshift').value,
       compression: document.getElementById('createPoolCompression').value,
     });
-    showOpLog(`Create pool: ${name}`, data.tasks, null);
+    op.done(`Create pool: ${name}`, data.tasks, null);
     toast(`Pool ${name} created`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Create pool: ${name}`, err.tasks, err.message);
+    op.done(`Create pool: ${name}`, err.tasks, err.message);
   }
 }
 
@@ -507,14 +507,14 @@ async function confirmImportPool() {
   if (!pool) return;
   const force = document.getElementById('importPoolForce').checked;
   document.getElementById('importPoolDialog').close();
-  showOpLogRunning(`Import pool: ${pool}`);
+  const op = startOp(`Import pool: ${pool}`);
   try {
-    const data = await api('POST', '/api/pools/import', { pool, force });
-    showOpLog(`Import pool: ${pool}`, data.tasks, null);
+    const data = await op.api('POST', '/api/pools/import', { pool, force });
+    op.done(`Import pool: ${pool}`, data.tasks, null);
     toast(`Pool ${pool} imported`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Import pool: ${pool}`, err.tasks, err.message);
+    op.done(`Import pool: ${pool}`, err.tasks, err.message);
   }
 }
 
@@ -524,14 +524,14 @@ document.getElementById('importPoolCancelBtn').addEventListener('click', () => d
 
 async function exportPool(pool) {
   if (!confirm(`Export pool ${pool}?\n\nAll datasets are unmounted and the pool disappears from this host until it is re-imported. The export fails if the pool is busy (open files, active shares, running jobs).`)) return;
-  showOpLogRunning(`Export pool: ${pool}`);
+  const op = startOp(`Export pool: ${pool}`);
   try {
-    const data = await api('POST', `/api/pools/${encodeURIComponent(pool)}/export`);
-    showOpLog(`Export pool: ${pool}`, data.tasks, null);
+    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/export`);
+    op.done(`Export pool: ${pool}`, data.tasks, null);
     toast(`Pool ${pool} exported`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Export pool: ${pool}`, err.tasks, err.message);
+    op.done(`Export pool: ${pool}`, err.tasks, err.message);
   }
 }
 
@@ -608,14 +608,14 @@ async function confirmExpandPool() {
 
   document.getElementById('expandPoolDialog').close();
   const title = `Add ${kind} to ${_expandPool}`;
-  showOpLogRunning(title);
+  const op = startOp(title);
   try {
-    const data = await api('POST', `/api/pools/${encodeURIComponent(_expandPool)}/${path}`, body);
-    showOpLog(title, data.tasks, null);
+    const data = await op.api('POST', `/api/pools/${encodeURIComponent(_expandPool)}/${path}`, body);
+    op.done(title, data.tasks, null);
     toast(`Devices added to ${_expandPool}`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(title, err.tasks, err.message);
+    op.done(title, err.tasks, err.message);
   }
 }
 
@@ -625,15 +625,15 @@ document.getElementById('expandPoolCancelBtn').addEventListener('click', () => d
 async function removePoolDevice(pool, device) {
   if (!confirm(`Remove ${device} from pool ${pool}?`)) return;
   const title = `Remove ${device} from ${pool}`;
-  showOpLogRunning(title);
+  const op = startOp(title);
   try {
     const encDev = device.split('/').map(encodeURIComponent).join('/');
-    const data = await api('DELETE', `/api/pools/${encodeURIComponent(pool)}/devices/${encDev}`);
-    showOpLog(title, data.tasks, null);
+    const data = await op.api('DELETE', `/api/pools/${encodeURIComponent(pool)}/devices/${encDev}`);
+    op.done(title, data.tasks, null);
     toast(`${device} removed from ${pool}`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(title, err.tasks, err.message);
+    op.done(title, err.tasks, err.message);
   }
 }
 
@@ -647,26 +647,26 @@ function scrubStateOf(scan) {
 }
 
 async function startScrub(pool) {
-  showOpLogRunning(`Start scrub: ${pool}`);
+  const op = startOp(`Start scrub: ${pool}`);
   try {
-    const data = await api('POST', `/api/scrub/${encodeURIComponent(pool)}`);
-    showOpLog(`Start scrub: ${pool}`, data.tasks, null);
+    const data = await op.api('POST', `/api/scrub/${encodeURIComponent(pool)}`);
+    op.done(`Start scrub: ${pool}`, data.tasks, null);
     toast(`Scrub started on ${pool}`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Start scrub: ${pool}`, err.tasks, err.message);
+    op.done(`Start scrub: ${pool}`, err.tasks, err.message);
   }
 }
 
 async function cancelScrub(pool) {
-  showOpLogRunning(`Cancel scrub: ${pool}`);
+  const op = startOp(`Cancel scrub: ${pool}`);
   try {
-    const data = await api('DELETE', `/api/scrub/${encodeURIComponent(pool)}`);
-    showOpLog(`Cancel scrub: ${pool}`, data.tasks, null);
+    const data = await op.api('DELETE', `/api/scrub/${encodeURIComponent(pool)}`);
+    op.done(`Cancel scrub: ${pool}`, data.tasks, null);
     toast(`Scrub cancelled on ${pool}`, 'ok');
     await loadAll();
   } catch (err) {
-    showOpLog(`Cancel scrub: ${pool}`, err.tasks, err.message);
+    op.done(`Cancel scrub: ${pool}`, err.tasks, err.message);
   }
 }
 
@@ -726,27 +726,27 @@ async function saveScrubSchedule() {
     ? { threshold_days: parseInt(document.getElementById('scrubScheduleThreshold').value, 10) || 35 }
     : {};
   document.getElementById('scrubScheduleDialog').close();
-  showOpLogRunning(`Enable scrub: ${_scrubSchedulePool}`);
+  const op = startOp(`Enable scrub: ${_scrubSchedulePool}`);
   try {
-    const data = await api('PUT', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`, body);
-    showOpLog(`Enable scrub: ${_scrubSchedulePool}`, data.tasks, null);
+    const data = await op.api('PUT', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`, body);
+    op.done(`Enable scrub: ${_scrubSchedulePool}`, data.tasks, null);
     toast(`Scrub enabled for ${_scrubSchedulePool}`, 'ok');
     await _refreshScrubSchedules();
   } catch (err) {
-    showOpLog(`Enable scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
+    op.done(`Enable scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
   }
 }
 
 async function removeScrubSchedule() {
   document.getElementById('scrubScheduleDialog').close();
-  showOpLogRunning(`Remove scrub: ${_scrubSchedulePool}`);
+  const op = startOp(`Remove scrub: ${_scrubSchedulePool}`);
   try {
-    const data = await api('DELETE', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`);
-    showOpLog(`Remove scrub: ${_scrubSchedulePool}`, data.tasks, null);
+    const data = await op.api('DELETE', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`);
+    op.done(`Remove scrub: ${_scrubSchedulePool}`, data.tasks, null);
     toast(`Scrub schedule removed for ${_scrubSchedulePool}`, 'ok');
     await _refreshScrubSchedules();
   } catch (err) {
-    showOpLog(`Remove scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
+    op.done(`Remove scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
   }
 }
 
@@ -818,14 +818,14 @@ async function saveAutoSnapSchedule() {
     body[p.prop] = document.getElementById(p.id).value.trim();
   });
   document.getElementById('autoSnapDialog').close();
-  showOpLogRunning(`Auto-snapshot: ${_autoSnapDataset}`);
+  const op = startOp(`Auto-snapshot: ${_autoSnapDataset}`);
   try {
     const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
-    const result = await api('PUT', '/api/auto-snapshot/' + encodedName, body);
-    showOpLog(`Auto-snapshot saved: ${_autoSnapDataset}`, result.tasks, null);
+    const result = await op.api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    op.done(`Auto-snapshot saved: ${_autoSnapDataset}`, result.tasks, null);
     toast('Auto-snapshot config saved', 'ok');
   } catch (err) {
-    showOpLog(`Auto-snapshot save failed`, err.tasks, err.message);
+    op.done(`Auto-snapshot save failed`, err.tasks, err.message);
   }
 }
 
@@ -834,14 +834,14 @@ async function removeAutoSnapSchedule() {
   body['com.sun:auto-snapshot'] = '';
   _autoSnapPeriods.forEach(p => { body[p.prop] = ''; });
   document.getElementById('autoSnapDialog').close();
-  showOpLogRunning(`Remove auto-snapshot: ${_autoSnapDataset}`);
+  const op = startOp(`Remove auto-snapshot: ${_autoSnapDataset}`);
   try {
     const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
-    const result = await api('PUT', '/api/auto-snapshot/' + encodedName, body);
-    showOpLog(`Auto-snapshot removed: ${_autoSnapDataset}`, result.tasks, null);
+    const result = await op.api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    op.done(`Auto-snapshot removed: ${_autoSnapDataset}`, result.tasks, null);
     toast('Auto-snapshot config removed', 'ok');
   } catch (err) {
-    showOpLog(`Auto-snapshot remove failed`, err.tasks, err.message);
+    op.done(`Auto-snapshot remove failed`, err.tasks, err.message);
   }
 }
 

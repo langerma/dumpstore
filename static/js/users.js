@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, delegate, esc, showOpLog, showOpLogRunning, toast } from './utils.js';
+import { api, delegate, esc, startOp, toast } from './utils.js';
 
 // ── Protected account denylists (must match handlers.go) ─────────────────────
 const PROTECTED_USERS  = new Set(['nobody', 'nfsnobody']);
@@ -122,10 +122,10 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
   const createGroup = document.getElementById('user-create-group').checked;
   const smb_user    = document.getElementById('user-smb').checked;
   newUserDialog.close();
-  showOpLogRunning('Creating user…');
+  const op = startOp('Creating user…');
   try {
-    const result = await api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
-    showOpLog(`User created: ${username}`, result.tasks, null);
+    const result = await op.api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
+    op.done(`User created: ${username}`, result.tasks, null);
     const [users, smbData] = await Promise.all([
       api('GET', '/api/users'),
       api('GET', '/api/smb-users').catch(() => null),
@@ -136,7 +136,7 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
       storeSet('sambaUsers', smbData?.users || []);
     });
   } catch (err) {
-    showOpLog('User creation failed', err.tasks, err.message);
+    op.done('User creation failed', err.tasks, err.message);
   }
 });
 
@@ -166,14 +166,14 @@ deleteUserConfirmBtn.addEventListener('click', async () => {
   if (deleteUserConfirmInput.value !== _deleteUserTarget) return;
   const username = _deleteUserTarget;
   deleteUserDialog.close();
-  showOpLogRunning('Deleting user…');
+  const op = startOp('Deleting user…');
   try {
-    const result = await api('DELETE', '/api/users/' + encodeURIComponent(username));
-    showOpLog(`Deleted user: ${username}`, result.tasks, null);
+    const result = await op.api('DELETE', '/api/users/' + encodeURIComponent(username));
+    op.done(`Deleted user: ${username}`, result.tasks, null);
     const users = await api('GET', '/api/users');
     storeSet('users', users || []);
   } catch (e) {
-    showOpLog(`Failed to delete user: ${username}`, e.tasks, e.message);
+    op.done(`Failed to delete user: ${username}`, e.tasks, e.message);
   }
 });
 
@@ -190,14 +190,14 @@ document.getElementById('newGroupForm').addEventListener('submit', async e => {
   const groupname = document.getElementById('group-name').value.trim();
   const gid       = document.getElementById('group-gid').value.trim();
   newGroupDialog.close();
-  showOpLogRunning('Creating group…');
+  const op = startOp('Creating group…');
   try {
-    const result = await api('POST', '/api/groups', { groupname, gid });
-    showOpLog(`Group created: ${groupname}`, result.tasks, null);
+    const result = await op.api('POST', '/api/groups', { groupname, gid });
+    op.done(`Group created: ${groupname}`, result.tasks, null);
     const groups = await api('GET', '/api/groups');
     storeSet('groups', groups || []);
   } catch (e) {
-    showOpLog('Group creation failed', e.tasks, e.message);
+    op.done('Group creation failed', e.tasks, e.message);
   }
 });
 
@@ -227,14 +227,14 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
   if (deleteGroupConfirmInput.value !== _deleteGroupTarget) return;
   const groupname = _deleteGroupTarget;
   deleteGroupDialog.close();
-  showOpLogRunning('Deleting group…');
+  const op = startOp('Deleting group…');
   try {
-    const result = await api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
-    showOpLog(`Deleted group: ${groupname}`, result.tasks, null);
+    const result = await op.api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
+    op.done(`Deleted group: ${groupname}`, result.tasks, null);
     const groups = await api('GET', '/api/groups');
     storeSet('groups', groups || []);
   } catch (e) {
-    showOpLog(`Failed to delete group: ${groupname}`, e.tasks, e.message);
+    op.done(`Failed to delete group: ${groupname}`, e.tasks, e.message);
   }
 });
 
@@ -336,32 +336,32 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
   const newKey      = document.getElementById('edit-user-sshkey-new').value.trim();
   const removedKeys = [..._editUserRemovedKeys];
   editUserDialog.close();
-  showOpLogRunning('Updating user…');
+  const op = startOp('Updating user…');
 
   const allTasks = [];
   try {
-    const result = await api('PUT', '/api/users/' + encodeURIComponent(username),
+    const result = await op.api('PUT', '/api/users/' + encodeURIComponent(username),
       { shell, group, user_groups, password, home, move_home, smb_sync });
     allTasks.push(...(result.tasks || []));
 
     for (const key of removedKeys) {
-      const r = await api('DELETE', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key });
+      const r = await op.api('DELETE', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key });
       allTasks.push(...(r.tasks || []));
     }
 
     if (newKey) {
-      const r = await api('POST', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key: newKey });
+      const r = await op.api('POST', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key: newKey });
       allTasks.push(...(r.tasks || []));
     }
 
-    showOpLog(`User updated: ${username}`, allTasks, null);
+    op.done(`User updated: ${username}`, allTasks, null);
     const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
     storeBatch(() => {
       storeSet('users', users || []);
       storeSet('groups', groups || []);
     });
   } catch (err) {
-    showOpLog(`Failed to update user: ${username}`, [...allTasks, ...(err.tasks || [])], err.message);
+    op.done(`Failed to update user: ${username}`, [...allTasks, ...(err.tasks || [])], err.message);
   }
 });
 
@@ -389,17 +389,17 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   const gid       = document.getElementById('edit-group-gid').value.trim();
   const members   = document.getElementById('edit-group-members').value.trim();
   editGroupDialog.close();
-  showOpLogRunning('Updating group…');
+  const op = startOp('Updating group…');
   try {
-    const result = await api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
-    showOpLog(`Group updated: ${result.groupname}`, result.tasks, null);
+    const result = await op.api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
+    op.done(`Group updated: ${result.groupname}`, result.tasks, null);
     const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
     storeBatch(() => {
       storeSet('users', users || []);
       storeSet('groups', groups || []);
     });
   } catch (err) {
-    showOpLog(`Failed to update group: ${groupname}`, err.tasks, err.message);
+    op.done(`Failed to update group: ${groupname}`, err.tasks, err.message);
   }
 });
 
@@ -521,25 +521,25 @@ document.getElementById('smbHomesApplyBtn').addEventListener('click', async () =
     directory_mask: document.getElementById('smb-homes-directory-mask').value.trim(),
   };
   smbHomesDialog.close();
-  showOpLogRunning('Configuring home shares…');
+  const op = startOp('Configuring home shares…');
   try {
-    const result = await api('POST', '/api/smb/homes', body);
-    showOpLog('Home shares enabled', result.tasks, null);
+    const result = await op.api('POST', '/api/smb/homes', body);
+    op.done('Home shares enabled', result.tasks, null);
     storeSet('smbHomes', result.config);
   } catch (err) {
-    showOpLog('Failed to enable home shares', err.tasks, err.message);
+    op.done('Failed to enable home shares', err.tasks, err.message);
   }
 });
 
 document.getElementById('smbHomesDisableBtn').addEventListener('click', async () => {
   smbHomesDialog.close();
-  showOpLogRunning('Disabling home shares…');
+  const op = startOp('Disabling home shares…');
   try {
-    const result = await api('DELETE', '/api/smb/homes');
-    showOpLog('Home shares disabled', result.tasks, null);
+    const result = await op.api('DELETE', '/api/smb/homes');
+    op.done('Home shares disabled', result.tasks, null);
     storeSet('smbHomes', { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' });
   } catch (err) {
-    showOpLog('Failed to disable home shares', err.tasks, err.message);
+    op.done('Failed to disable home shares', err.tasks, err.message);
   }
 });
 
@@ -578,14 +578,14 @@ delegate(document.getElementById('tm-shares-wrap'), {
 
 async function deleteTimeMachineShare(name) {
   if (!confirm(`Delete Time Machine share "${name}"?`)) return;
-  showOpLogRunning('Removing Time Machine share…');
+  const op = startOp('Removing Time Machine share…');
   try {
-    const result = await api('DELETE', '/api/smb/timemachine/' + encodeURIComponent(name));
-    showOpLog(`Time Machine share deleted: ${name}`, result.tasks, null);
+    const result = await op.api('DELETE', '/api/smb/timemachine/' + encodeURIComponent(name));
+    op.done(`Time Machine share deleted: ${name}`, result.tasks, null);
     const shares = await api('GET', '/api/smb/timemachine').catch(() => []);
     storeSet('timeMachineShares', shares || []);
   } catch (err) {
-    showOpLog(`Failed to delete Time Machine share: ${name}`, err.tasks, err.message);
+    op.done(`Failed to delete Time Machine share: ${name}`, err.tasks, err.message);
   }
 }
 
@@ -624,14 +624,14 @@ delegate(document.getElementById('smb-stale-wrap'), {
 
 async function removeStaleSMBShare(name, path) {
   if (!confirm(`Remove stale SMB share "${name}" (${path})?`)) return;
-  showOpLogRunning('Removing SMB share…');
+  const op = startOp('Removing SMB share…');
   try {
     // The {dataset} path segment is only used for the audit log here.
     const ds = path.replace(/^\/+/, '') || 'stale';
-    const result = await api('DELETE', '/api/smb-share/' + ds + '?name=' + encodeURIComponent(name));
-    showOpLog(`SMB share removed: ${name}`, result.tasks, null);
+    const result = await op.api('DELETE', '/api/smb-share/' + ds + '?name=' + encodeURIComponent(name));
+    op.done(`SMB share removed: ${name}`, result.tasks, null);
   } catch (err) {
-    showOpLog(`Failed to remove SMB share: ${name}`, err.tasks, err.message);
+    op.done(`Failed to remove SMB share: ${name}`, err.tasks, err.message);
   }
   const shares = await api('GET', '/api/smb-shares').catch(() => null);
   if (shares) storeSet('smbShares', shares);
@@ -687,13 +687,13 @@ document.getElementById('tmCreateBtn').addEventListener('click', async () => {
     valid_users: document.getElementById('tm-valid-users').value.trim(),
   };
   timeMachineDialog.close();
-  showOpLogRunning('Creating Time Machine share…');
+  const op = startOp('Creating Time Machine share…');
   try {
-    const result = await api('POST', '/api/smb/timemachine', body);
-    showOpLog('Time Machine share created', result.tasks, null);
+    const result = await op.api('POST', '/api/smb/timemachine', body);
+    op.done('Time Machine share created', result.tasks, null);
     storeSet('timeMachineShares', result.shares || []);
   } catch (err) {
-    showOpLog('Failed to create Time Machine share', err.tasks, err.message);
+    op.done('Failed to create Time Machine share', err.tasks, err.message);
   }
 });
 
@@ -765,17 +765,17 @@ document.getElementById('addSmbUserForm').addEventListener('submit', async e => 
   const username = _addSmbUserTarget;
   const password = document.getElementById('smb-user-password').value;
   addSmbUserDialog.close();
-  showOpLogRunning('Adding SMB user…');
+  const op = startOp('Adding SMB user…');
   try {
-    const result = await api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
-    showOpLog(`SMB access added: ${username}`, result.tasks, null);
+    const result = await op.api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
+    op.done(`SMB access added: ${username}`, result.tasks, null);
     const smbData = await api('GET', '/api/smb-users').catch(() => null);
     storeBatch(() => {
       storeSet('sambaAvailable', smbData?.available ?? false);
       storeSet('sambaUsers', smbData?.users || []);
     });
   } catch (err) {
-    showOpLog(`Failed to add SMB access: ${username}`, err.tasks, err.message);
+    op.done(`Failed to add SMB access: ${username}`, err.tasks, err.message);
   }
 });
 
@@ -794,17 +794,17 @@ document.getElementById('removeSmbUserCancelBtn').addEventListener('click', () =
 document.getElementById('removeSmbUserConfirmBtn').addEventListener('click', async () => {
   const username = _removeSmbUserTarget;
   removeSmbUserDialog.close();
-  showOpLogRunning('Removing SMB user…');
+  const op = startOp('Removing SMB user…');
   try {
-    const result = await api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
-    showOpLog(`SMB access removed: ${username}`, result.tasks, null);
+    const result = await op.api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
+    op.done(`SMB access removed: ${username}`, result.tasks, null);
     const smbData = await api('GET', '/api/smb-users').catch(() => null);
     storeBatch(() => {
       storeSet('sambaAvailable', smbData?.available ?? false);
       storeSet('sambaUsers', smbData?.users || []);
     });
   } catch (err) {
-    showOpLog(`Failed to remove SMB access: ${username}`, err.tasks, err.message);
+    op.done(`Failed to remove SMB access: ${username}`, err.tasks, err.message);
   }
 });
 
@@ -815,13 +815,13 @@ document.getElementById('configureSambaCancelBtn').addEventListener('click', () 
 
 document.getElementById('configureSambaConfirmBtn').addEventListener('click', async () => {
   configureSambaDialog.close();
-  showOpLogRunning('Initialising Samba…');
+  const op = startOp('Initialising Samba…');
   try {
-    const result = await api('POST', '/api/smb/init');
-    showOpLog('Samba initialised', result.tasks, null);
+    const result = await op.api('POST', '/api/smb/init');
+    op.done('Samba initialised', result.tasks, null);
     await refreshSMBStatus();
   } catch (err) {
-    showOpLog('Failed to initialise Samba', err.tasks, err.message);
+    op.done('Failed to initialise Samba', err.tasks, err.message);
   }
 });
 
@@ -881,13 +881,13 @@ export function renderSMBWsdd() {
 }
 
 async function applySMBWsdd() {
-  showOpLogRunning('Applying wsdd options…');
+  const op = startOp('Applying wsdd options…');
   try {
-    const result = await api('POST', '/api/smb/wsdd');
-    showOpLog('wsdd options applied', result.tasks, null);
+    const result = await op.api('POST', '/api/smb/wsdd');
+    op.done('wsdd options applied', result.tasks, null);
     await refreshSMBStatus();
   } catch (err) {
-    showOpLog('Failed to apply wsdd options', err.tasks, err.message);
+    op.done('Failed to apply wsdd options', err.tasks, err.message);
   }
 }
 

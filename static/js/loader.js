@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, esc, toast, setRefreshing, appendOpLogStep, opLogDialog } from './utils.js';
+import { api, esc, toast, setRefreshing, opSessionStep, opSessionResync } from './utils.js';
 import { refreshACLStatus } from './dataset-dialogs.js';
 import { mergeJob } from './jobs.js';
 
@@ -187,15 +187,16 @@ export function startSSE() {
     // but endpoints not backed by SSE would otherwise stay stale/empty across
     // server restarts and post-reboot reconnects.
     loadAll();
+    // Steps published while disconnected are fetched from the operation
+    // record (#184).
+    opSessionResync();
   };
 
+  // Steps are tagged with their operation ID; the active op-log session
+  // shows only its own, in seq order (#184).
   es.addEventListener('ansible.progress', e => {
     try {
-      const step = JSON.parse(e.data);
-      // Only append if the dialog is open and still in running state (close button disabled)
-      if (opLogDialog.open && document.getElementById('opLogClose').disabled) {
-        appendOpLogStep(step);
-      }
+      opSessionStep(JSON.parse(e.data));
     } catch (err) { console.warn('[SSE] ansible.progress parse error', err); }
   });
 
