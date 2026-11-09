@@ -4,7 +4,7 @@ import { renderSysInfo, renderSoftware, renderNetwork, renderPools, renderIOStat
 import { renderDatasets } from './js/datasets.js';
 import { renderDatasetDrawer } from './js/dataset-drawer.js';
 import { renderSnapshots } from './js/snapshots.js';
-import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine, renderSMBInitStatus, renderSMBWsdd } from './js/users.js';
+import { renderUsers, renderGroups, renderSambaUsers, renderSMBHomes, renderTimeMachine, renderSMBInitStatus, renderSMBWsdd, renderStaleSMBShares } from './js/users.js';
 import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
 import { renderReplications } from './js/replication.js';
@@ -31,6 +31,7 @@ subscribe(['smbWsdd', 'smbInitialized'],                                renderSM
 subscribe(['sambaUsers', 'sambaAvailable', 'smbInitialized', 'users'], renderSambaUsers);
 subscribe(['smbHomes', 'smbInitialized', 'datasets'],                  renderSMBHomes);
 subscribe(['timeMachineShares', 'smbInitialized'],                     renderTimeMachine);
+subscribe(['smbShares', 'smbInitialized'],                             renderStaleSMBShares);
 subscribe(['services'],                                         renderServices);
 subscribe(['jobs'],                                             renderJobs);
 subscribe(['replication'],                                      renderReplications);

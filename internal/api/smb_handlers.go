@@ -220,7 +220,9 @@ func (h *Handler) getSMBShares(w http.ResponseWriter, r *http.Request) {
 	if h.requireSMBInit(w, r) {
 		return
 	}
-	shares, err := system.ListSMBUsershares()
+	// Read the share files directly: `net usershare info` hides shares whose
+	// path is gone, and those re-activate when the path reappears (#183).
+	shares, err := smb.ListUsershares(smb.UsershareDir(runtime.GOOS))
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
@@ -257,6 +259,8 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
+	h.refMu.Lock() // the dataset must not be destroyed or moved while the share is added (#183)
+	defer h.refMu.Unlock()
 	out, err := h.runOp(r.Context(), "smb_usershare_set.yml", map[string]string{
 		"dataset":   dataset,
 		"sharename": req.Sharename,
@@ -425,6 +429,11 @@ func (h *Handler) setSMBHomes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Held from mountpoint lookup through apply so the dataset can't be
+	// destroyed or moved in between (#183).
+	h.refMu.Lock()
+	defer h.refMu.Unlock()
+
 	// Resolve dataset → mountpoint if path not supplied directly
 	if req.Dataset != "" && req.Path == "" {
 		if !validZFSName(req.Dataset) {
@@ -574,6 +583,11 @@ func (h *Handler) createTimeMachineShare(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Held from mountpoint lookup through apply so the dataset can't be
+	// destroyed or moved in between (#183).
+	h.refMu.Lock()
+	defer h.refMu.Unlock()
+
 	// Resolve dataset → mountpoint
 	if req.Dataset != "" && req.Path == "" {
 		if !validZFSName(req.Dataset) {
@@ -679,7 +693,7 @@ func (h *Handler) deleteTimeMachineShare(w http.ResponseWriter, r *http.Request)
 }
 
 // datasetMountpoint looks up the mountpoint for the named dataset.
-// Returns "" if the dataset is not found or has no mountpoint.
+// Returns "" if the dataset is not found or has no usable mountpoint.
 func datasetMountpoint(dataset string) (string, error) {
 	datasets, err := zfs.ListDatasets()
 	if err != nil {
@@ -687,7 +701,7 @@ func datasetMountpoint(dataset string) (string, error) {
 	}
 	for _, ds := range datasets {
 		if ds.Name == dataset {
-			if ds.Mountpoint == "-" || ds.Mountpoint == "none" {
+			if ds.Mountpoint == "-" || ds.Mountpoint == "none" || ds.Mountpoint == "legacy" {
 				return "", nil
 			}
 			return ds.Mountpoint, nil

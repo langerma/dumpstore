@@ -109,6 +109,8 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		playbook = "iscsi_target_create_freebsd.yml"
 	}
 
+	h.refMu.Lock() // the zvol must not be destroyed or renamed while the target is added (#183)
+	defer h.refMu.Unlock()
 	out, err := h.runOp(r.Context(), playbook, map[string]string{
 		"zvol":          req.Zvol,
 		"iqn":           req.IQN,

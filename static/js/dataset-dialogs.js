@@ -67,7 +67,7 @@ deleteDatasetBtn.addEventListener('click', async () => {
     state.collapsedDatasets.delete(name);
     storeSet('datasets', datasets || []);
   } catch (e) {
-    showOpLog(`Failed to delete ${name}`, e.tasks, e.message);
+    showOpLog(`Failed to delete ${name}`, e.tasks, e.message, e.conflicts);
   }
 });
 
@@ -107,7 +107,7 @@ document.getElementById('renameDatasetForm').addEventListener('submit', async e 
     const datasets = await api('GET', '/api/datasets');
     storeSet('datasets', datasets || []);
   } catch (err) {
-    showOpLog('Rename failed', err.tasks, err.message);
+    showOpLog('Rename failed', err.tasks, err.message, err.conflicts);
   }
 });
 

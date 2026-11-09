@@ -91,42 +91,6 @@ func ListGroups() ([]Group, error) {
 	return groups, nil
 }
 
-// SMBShare represents a single entry from `net usershare info`.
-type SMBShare struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
-// ListSMBUsershares runs `net usershare info *` and returns all registered
-// usershares. Returns an empty slice when `net` is not in PATH.
-func ListSMBUsershares() ([]SMBShare, error) {
-	if _, err := exec.LookPath("net"); err != nil {
-		return []SMBShare{}, nil
-	}
-	var out bytes.Buffer
-	cmd := exec.Command("net", "usershare", "info", "*")
-	cmd.Stdout = &out
-	cmd.Run() // non-zero when no shares exist — that is fine
-
-	var shares []SMBShare
-	var cur *SMBShare
-	for _, line := range strings.Split(out.String(), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			if cur != nil {
-				shares = append(shares, *cur)
-			}
-			cur = &SMBShare{Name: line[1 : len(line)-1]}
-		} else if cur != nil && strings.HasPrefix(line, "path=") {
-			cur.Path = strings.TrimPrefix(line, "path=")
-		}
-	}
-	if cur != nil {
-		shares = append(shares, *cur)
-	}
-	return shares, nil
-}
-
 // ErrSambaNotAvailable is returned by ListSambaUsers when pdbedit is not in PATH.
 var ErrSambaNotAvailable = fmt.Errorf("pdbedit not found in PATH — is Samba installed?")
 

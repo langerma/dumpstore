@@ -5,28 +5,19 @@ package integration
 import (
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
 
-// TestISCSITarget exports a zvol as an iSCSI target and removes it again.
-// Linux only (targetcli/LIO); the FreeBSD ctld backend has its own config
-// lifecycle and is skipped when targetcli is absent.
+// TestISCSITarget exports a zvol as an iSCSI target and removes it again,
+// on targetcli/LIO (Linux) or ctld (FreeBSD) — see iscsiFixture.
 func TestISCSITarget(t *testing.T) {
-	skipUnlessVMTool(t, "targetcli")
 	zvol := testPool + "/itest-vol"
 	const iqn = "iqn.2026-10.local.dumpstore:itest"
-	backstore := strings.ReplaceAll(zvol, "/", "-")
 
 	destroyDatasetInVM(zvol)
-	cleanupTarget := func() {
-		_, _ = vmExecErr("targetcli /iscsi delete " + iqn + " >/dev/null 2>&1;" +
-			" targetcli /backstores/block delete " + backstore + " >/dev/null 2>&1;" +
-			" targetcli saveconfig >/dev/null 2>&1; true")
-	}
-	cleanupTarget()
-	t.Cleanup(func() { cleanupTarget(); destroyDatasetInVM(zvol) })
+	iscsiFixture(t, zvol, iqn)
+	t.Cleanup(func() { destroyDatasetInVM(zvol) })
 
 	apiOK(t, "POST", "/api/datasets", map[string]any{"name": zvol, "type": "volume", "volsize": "64M"})
 	// udev creates /dev/zvol/<name> asynchronously after zfs create.

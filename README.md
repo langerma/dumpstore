@@ -42,6 +42,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - Windows network discovery via wsdd, kept in sync with Samba's workgroup
 - iSCSI targets for zvols (`targetcli`/LIO on Linux, `ctld` on FreeBSD) with CHAP and initiator ACLs
 - Start, stop, enable, and disable Samba, NFS, iSCSI, and wsdd from the Services tab
+- Datasets still referenced by a share, iSCSI target, or replication task can't be destroyed, renamed, or re-mounted — the UI lists what blocks it
 
 **Users & permissions**
 - Local users (including SSH keys and Samba password sync) and groups

@@ -139,6 +139,8 @@ func (h *Handler) createReplication(w http.ResponseWriter, r *http.Request) {
 
 	var task replication.Task
 	req.applyTo(&task)
+	h.refMu.Lock() // source/target must not be destroyed or renamed meanwhile (#183)
+	defer h.refMu.Unlock()
 	stored, err := h.repl.Store().Create(task)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("persist task: %w", err), nil)
@@ -172,6 +174,8 @@ func (h *Handler) updateReplication(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
 		return
 	}
+	h.refMu.Lock() // source/target must not be destroyed or renamed meanwhile (#183)
+	defer h.refMu.Unlock()
 	updated, err := h.repl.Store().Update(id, func(t *replication.Task) { req.applyTo(t) })
 	if err != nil {
 		if errors.Is(err, replication.ErrNotFound) {

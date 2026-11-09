@@ -70,6 +70,10 @@ playbooks/smb_apply.yml (example)
 
 Sub-features (shares, home dirs, Time Machine targets) are gated behind an **init gate** — they are disabled in the UI until the service has been bootstrapped with `POST /api/smb/init` (or equivalent). This prevents partial config states where the config file exists but hasn't been initialised by dumpstore yet.
 
+### Reference guard
+
+Owned config points at datasets — shares and Time Machine targets by path, iSCSI targets and replication tasks by dataset name. Destroying, renaming, or re-mounting a dataset underneath them would leave config that fails at runtime, or — for Samba usershares — silently re-activates on whatever dataset next appears at that path. `internal/api/refguard.go` therefore checks every such reference before a destroy, rename, or mountpoint change and refuses with `409` plus a structured `conflicts` list (#183). It reads the usershare files directly (`internal/smb.ListUsershares`), since `net usershare info` hides shares whose path is gone. The check fails closed on any read error and runs under `Handler.refMu`, which every handler that *adds* a reference also holds (taken before `smbMu`), so a reference can't appear between check and mutation.
+
 ## Execution lanes
 
 Reads call ZFS/system CLI tools directly. Writes are split across three lanes by shape (#115):
@@ -143,7 +147,7 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 | Path | Responsibility |
 |------|----------------|
 | `main.go` | Flags, startup dependency checks, middleware chain, wiring of scheduler/jobs/poller |
-| `internal/api` | HTTP handlers and route registration; input validation for all writes |
+| `internal/api` | HTTP handlers and route registration; input validation for all writes; dataset reference guard (`refguard.go`) |
 | `internal/zfs` | Direct `zpool`/`zfs` reads; POSIX/NFSv4 ACL parsing |
 | `internal/ops` | Single-command writes (argv exec, no shell) |
 | `internal/ansible` | Playbook runner (ndjson callback) and its metrics |
@@ -151,7 +155,7 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 | `internal/scheduler` | 5-field cron parser and ticker |
 | `internal/replication` | Scheduled send/recv tasks: holds, incrementals, pruning |
 | `internal/autosnap` | Native `com.sun:auto-snapshot*` execution and daemon takeover |
-| `internal/smb` | Owned `smb.conf` and wsdd options: parse and render from templates |
+| `internal/smb` | Owned `smb.conf` and wsdd options: parse and render from templates; usershare file reader |
 | `internal/iscsi` | Read iSCSI targets (targetcli saveconfig / `ctl.conf`) |
 | `internal/system` | Host info, users/groups, services (systemd / rc.d), installed software |
 | `internal/smart`, `internal/blockdev` | S.M.A.R.T. data; physical devices and vdev matching |
