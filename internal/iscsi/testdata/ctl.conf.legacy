@@ -1,0 +1,65 @@
+# Written by hand before dumpstore
+debug 1
+
+auth-group ag-mutual {
+	chap-mutual "u" "s" "mu" "ms"
+}
+
+# BEGIN DUMPSTORE PORTAL pg-iqn-2026-10-local-dumpst
+portal-group pg-iqn-2026-10-local-dumpst {
+    listen 0.0.0.0:3260
+}
+# END DUMPSTORE PORTAL pg-iqn-2026-10-local-dumpst
+# BEGIN DUMPSTORE TARGET iqn.2026-10.local.dumpstore:vm1
+target iqn.2026-10.local.dumpstore:vm1 {
+    portal-group pg-iqn-2026-10-local-dumpst
+
+
+    lun 0 {
+        path /dev/zvol/tank/vm1
+    }
+}
+# END DUMPSTORE TARGET iqn.2026-10.local.dumpstore:vm1
+# BEGIN DUMPSTORE PORTAL pg-iqn-2026-10-local-dumpstore-vm2
+portal-group pg-iqn-2026-10-local-dumpstore-vm2 {
+    listen :::3260
+}
+# END DUMPSTORE PORTAL pg-iqn-2026-10-local-dumpstore-vm2
+# BEGIN DUMPSTORE TARGET iqn.2026-10.local.dumpstore:vm2
+target iqn.2026-10.local.dumpstore:vm2 {
+    portal-group pg-iqn-2026-10-local-dumpstore-vm2
+    chap "alice" "s3cr#t pass"
+    initiator-name iqn.1994-05.com.redhat:client1
+    lun 0 {
+        path /dev/zvol/tank/vm2
+    }
+}
+# END DUMPSTORE TARGET iqn.2026-10.local.dumpstore:vm2
+
+portal-group pg-multi {
+	listen 0.0.0.0:3261
+	listen [::]:3261
+}
+
+target iqn.2026-10.local.hand:file {
+	portal-group pg-iqn-2026-10-local-dumpst
+	lun 0 {
+		path /data/disk.img
+		size 1G
+	}
+}
+
+target iqn.2026-10.local.hand:multi {
+	portal-group pg-multi
+	lun 0 {
+		path /dev/zvol/tank/multi
+	}
+}
+
+target iqn.2026-10.local.hand:mutual {
+	portal-group pg-iqn-2026-10-local-dumpst
+	auth-group ag-mutual
+	lun 0 {
+		path /dev/zvol/tank/mutual
+	}
+}

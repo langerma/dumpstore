@@ -640,7 +640,7 @@
           <span class="pool-name">iSCSI target management</span>
           <span class="health-badge badge-blue">targetcli / ctld</span>
         </div>
-        <p>Expose ZFS volumes as iSCSI targets. Per-zvol dialog with auto-generated IQN (editable), portal IP/port, auth mode (None or CHAP with credentials), and initiator ACL list. Backed by <strong>targetcli</strong>/LIO on Linux and <strong>ctld</strong> on FreeBSD.</p>
+        <p>Expose ZFS volumes as iSCSI targets. Per-zvol dialog with auto-generated IQN (editable), portal IP/port, auth mode (None or CHAP with credentials), and initiator ACL list. Backed by <strong>targetcli</strong>/LIO on Linux and <strong>ctld</strong> on FreeBSD, where dumpstore renders <code>/etc/ctl.conf</code> whole from a template after a one-time init (existing targets are imported, the old file is backed up).</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

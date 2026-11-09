@@ -50,9 +50,9 @@ apt install targetcli-fb
 # RHEL/Fedora — iSCSI targets
 dnf install targetcli
 
-# FreeBSD — iSCSI targets (ctld is built-in, just enable the service)
-sysrc ctld_enable=YES
-service ctld start
+# FreeBSD — iSCSI targets: ctld is built-in. Nothing to install; the iSCSI
+# dialog's "Initialize ctld" (POST /api/iscsi/init) takes over /etc/ctl.conf
+# (backup: /etc/ctl.conf.pre-dumpstore), enables ctld, and starts it.
 
 # FreeBSD — Windows network discovery
 pkg install -g 'py3*-wsdd'

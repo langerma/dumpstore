@@ -133,7 +133,9 @@ func TestDatasetRefGuard(t *testing.T) {
 		zvol := testPool + "/itest-ref-vol"
 		const iqn = "iqn.2026-11.local.dumpstore:itest-ref"
 		destroyDatasetInVM(zvol)
-		iscsiFixture(t, zvol, iqn)
+		if iscsiFixture(t, zvol, iqn) {
+			assertTasks(t, apiOK(t, "POST", "/api/iscsi/init", nil))
+		}
 		t.Cleanup(func() { destroyDatasetInVM(zvol) })
 
 		apiOK(t, "POST", "/api/datasets", map[string]any{"name": zvol, "type": "volume", "volsize": "64M"})
@@ -184,9 +186,11 @@ func TestDatasetRefGuard(t *testing.T) {
 
 // iscsiFixture clears any stale target for iqn/zvol in the VM, skips when no
 // iSCSI backend is installed, and registers cleanup that leaves the host as
-// it was. Linux: targetcli/LIO. FreeBSD: ctld — /etc/ctl.conf, ctld_enable,
-// and whether ctld was running are restored.
-func iscsiFixture(t *testing.T, zvol, iqn string) {
+// it was. Linux: targetcli/LIO. FreeBSD: ctld — /etc/ctl.conf and its
+// ctl.conf.pre-dumpstore backup, ctld_enable, and whether ctld was running
+// are restored. On ctld the fixture starts from an uninitialised host (no
+// ctl.conf, no backup) and returns true; callers then run POST /api/iscsi/init.
+func iscsiFixture(t *testing.T, zvol, iqn string) (ctld bool) {
 	t.Helper()
 	if _, err := vmExecErr("command -v targetcli"); err == nil {
 		backstore := strings.ReplaceAll(zvol, "/", "-")
@@ -197,23 +201,31 @@ func iscsiFixture(t *testing.T, zvol, iqn string) {
 		}
 		cleanup()
 		t.Cleanup(cleanup)
-		return
+		return false
 	}
 	if _, err := vmExecErr("command -v ctld"); err != nil {
 		t.Skipf("no iSCSI backend (targetcli or ctld) in VM %s", vmName)
 	}
 	// Service commands redirect stdio: a daemon started over `limactl shell`
 	// otherwise inherits the session's fds and the call never returns.
-	const bak = "/etc/ctl.conf.itest-bak"
+	const (
+		conf = "/etc/ctl.conf"
+		pre  = conf + ".pre-dumpstore"
+		bak  = conf + ".itest-bak"
+	)
 	vmExec(t, "rm -rf "+bak+"*; "+
-		"if [ -f /etc/ctl.conf ]; then cp -p /etc/ctl.conf "+bak+"; fi; "+
+		"if [ -f "+conf+" ]; then mv "+conf+" "+bak+"; fi; "+
+		"if [ -f "+pre+" ]; then mv "+pre+" "+bak+".pre; fi; "+
 		"sysrc -n ctld_enable > "+bak+".enable; "+
 		"if service ctld onestatus >/dev/null 2>&1; then touch "+bak+".running; fi")
 	t.Cleanup(func() {
-		_, _ = vmExecErr("if [ -f " + bak + " ]; then mv " + bak + " /etc/ctl.conf; else rm -f /etc/ctl.conf; fi; " +
+		_, _ = vmExecErr("rm -f " + conf + " " + pre + "; " +
+			"if [ -f " + bak + " ]; then mv " + bak + " " + conf + "; fi; " +
+			"if [ -f " + bak + ".pre ]; then mv " + bak + ".pre " + pre + "; fi; " +
 			"sysrc ctld_enable=$(cat " + bak + ".enable) >/dev/null; " +
 			"if [ -f " + bak + ".running ]; then service ctld onereload >/dev/null 2>&1 </dev/null; " +
 			"else service ctld onestop >/dev/null 2>&1 </dev/null; fi; " +
 			"rm -f " + bak + ".enable " + bak + ".running; true")
 	})
+	return true
 }

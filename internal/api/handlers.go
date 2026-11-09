@@ -202,7 +202,8 @@ type Handler struct {
 	autosnap   *autosnap.Runner
 	userMu     sync.Mutex   // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex   // serialises smb.conf read-modify-write cycles
-	refMu      sync.Mutex   // serialises dataset destroy/rename/re-mount against adding references to datasets (#183); taken before smbMu
+	refMu      sync.Mutex   // serialises dataset destroy/rename/re-mount against adding references to datasets (#183); taken before smbMu and iscsiMu
+	iscsiMu    sync.Mutex   // serialises ctl.conf read-modify-write cycles (#186)
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
@@ -363,6 +364,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/iscsi-targets", h.getISCSITargets)
 	mux.HandleFunc("POST /api/iscsi-targets", h.createISCSITarget)
 	mux.HandleFunc("DELETE /api/iscsi-targets", h.deleteISCSITarget)
+	mux.HandleFunc("GET /api/iscsi/status", h.getISCSIStatus)
+	mux.HandleFunc("POST /api/iscsi/init", h.initISCSI)
 	mux.HandleFunc("GET /api/schema", h.getSchema)
 	mux.HandleFunc("POST /api/auth/change-password", h.changePassword)
 	mux.HandleFunc("POST /api/auth/change-username", h.changeUsername)

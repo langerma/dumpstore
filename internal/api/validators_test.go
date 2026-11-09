@@ -504,3 +504,19 @@ func TestDecodeJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestValidCHAPSecret(t *testing.T) {
+	for in, want := range map[string]bool{
+		"s3cr3t-pass-123":  true,
+		"with spaces & #$": true,
+		"{braces}":         true,
+		`has"quote`:        false,
+		`back\slash`:       false,
+		"new\nline":        false,
+		"carriage\rreturn": false,
+	} {
+		if got := validCHAPSecret(in); got != want {
+			t.Errorf("validCHAPSecret(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

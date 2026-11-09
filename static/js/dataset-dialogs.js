@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, startOp, toast, reZFSName } from './utils.js';
+import { api, delegate, esc, fmtBytes, opLogDialog, startOp, toast, reZFSName } from './utils.js';
 
 // Dataset-scoped dialogs: delete, rename, rewrite, per-user quotas, ACL,
 // chown, NFS, SMB, iSCSI. Moved out of datasets.js so both the table and the
@@ -792,12 +792,21 @@ export async function openISCSIDialog(dataset) {
   document.getElementById('iscsiDialogStatus').innerHTML = '<span class="muted">Loading…</span>';
   document.getElementById('iscsiCreateSection').style.display = 'none';
   document.getElementById('iscsiRemoveSection').style.display = 'none';
+  document.getElementById('iscsiInitSection').style.display = 'none';
+  for (const id of ['iscsiExposeBtn', 'iscsiRemoveBtn', 'iscsiInitBtn']) {
+    document.getElementById(id).style.display = 'none';
+  }
   iscsiDialog.showModal();
 
   try {
-    const targets = await api('GET', '/api/iscsi-targets');
+    const [targets, status] = await Promise.all([
+      api('GET', '/api/iscsi-targets'),
+      api('GET', '/api/iscsi/status'),
+    ]);
     storeSet('iscsiTargets', targets || []);
     const existing = state.iscsiTargets.find(t => t.zvol_name === dataset);
+    // ctld (FreeBSD): writes are gated until dumpstore owns /etc/ctl.conf (#186).
+    const needsInit = status.backend === 'freebsd' && !status.initialized;
 
     if (existing) {
       _iscsiCurrentIQN = existing.iqn;
@@ -818,9 +827,10 @@ export async function openISCSIDialog(dataset) {
           <span class="field-note" style="width:5rem">Initiators</span>
           <code>${existing.initiators && existing.initiators.length ? esc(existing.initiators.join(', ')) : 'any (allow-all)'}</code>
         </div>`;
-      document.getElementById('iscsiRemoveSection').style.display = '';
-      document.getElementById('iscsiRemoveBtn').style.display = '';
-      document.getElementById('iscsiExposeBtn').style.display = 'none';
+      if (!needsInit) {
+        document.getElementById('iscsiRemoveSection').style.display = '';
+        document.getElementById('iscsiRemoveBtn').style.display = '';
+      }
     } else {
       // Auto-generate IQN from dataset name and current date.
       const now = new Date();
@@ -836,9 +846,14 @@ export async function openISCSIDialog(dataset) {
       document.getElementById('iscsiCHAPPass').value = '';
       document.getElementById('iscsiInitiators').value = '';
       document.getElementById('iscsiDialogStatus').innerHTML = '<p class="muted">Not currently exposed as an iSCSI target.</p>';
-      document.getElementById('iscsiCreateSection').style.display = '';
-      document.getElementById('iscsiExposeBtn').style.display = '';
-      document.getElementById('iscsiRemoveBtn').style.display = 'none';
+      if (!needsInit) {
+        document.getElementById('iscsiCreateSection').style.display = '';
+        document.getElementById('iscsiExposeBtn').style.display = '';
+      }
+    }
+    if (needsInit) {
+      document.getElementById('iscsiInitSection').style.display = '';
+      document.getElementById('iscsiInitBtn').style.display = '';
     }
   } catch (e) {
     document.getElementById('iscsiDialogStatus').innerHTML = `<p class="op-error">${esc(e.message)}</p>`;
@@ -875,6 +890,22 @@ document.getElementById('iscsiExposeBtn').addEventListener('click', async () => 
     await _refreshISCSITargets();
   } catch (e) {
     op.done('Failed to create iSCSI target', e.tasks, e.message);
+  }
+});
+
+document.getElementById('iscsiInitBtn').addEventListener('click', async () => {
+  const dataset = _iscsiDataset;
+  iscsiDialog.close();
+  const op = startOp('Initializing ctld…');
+  try {
+    const result = await op.api('POST', '/api/iscsi/init');
+    op.done(`ctld initialized — ${result.imported} target(s) imported, ${result.skipped} item(s) not imported`, result.tasks, null);
+    await _refreshISCSITargets();
+    // Back to the target form once the op-log (with any "not imported" steps) is dismissed.
+    if (opLogDialog.open) opLogDialog.addEventListener('close', () => openISCSIDialog(dataset), { once: true });
+    else openISCSIDialog(dataset);
+  } catch (e) {
+    op.done('Failed to initialize ctld', e.tasks, e.message);
   }
 });
 
