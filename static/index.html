@@ -1179,6 +1179,20 @@
     <div class="dialog-body">
       <div id="iscsiDialogStatus" style="margin-bottom:1rem"></div>
 
+      <!-- Init gate (FreeBSD/ctld: shown until dumpstore owns /etc/ctl.conf) -->
+      <div id="iscsiInitSection" style="display:none">
+        <p class="field-note" style="margin:0 0 0.5rem">
+          dumpstore manages <code>/etc/ctl.conf</code> as a whole and rewrites it on every iSCSI change.
+          Initializing ctld will:
+        </p>
+        <ul class="field-note" style="margin:0 0 0.75rem;padding-left:1.2rem">
+          <li>back up the current file to <code>/etc/ctl.conf.pre-dumpstore</code> (once, never overwritten)</li>
+          <li>import zvol-backed targets with one portal and no auth or a single CHAP login &mdash; including targets created by earlier dumpstore versions</li>
+          <li>leave everything else (other LUN types, auth groups, global settings) out; the op-log lists what was not imported</li>
+          <li>enable ctld and reload or start it</li>
+        </ul>
+      </div>
+
       <!-- Create form (shown when zvol is not yet exposed) -->
       <div id="iscsiCreateSection" style="display:none">
         <fieldset class="form-section">
@@ -1226,6 +1240,7 @@
         <button type="button" id="iscsiDialogClose" class="btn-secondary">Cancel</button>
         <button type="button" id="iscsiRemoveBtn" class="btn-danger" style="display:none">Remove Target</button>
         <button type="button" id="iscsiExposeBtn" class="btn-primary" style="display:none">Expose as iSCSI</button>
+        <button type="button" id="iscsiInitBtn" class="btn-primary" style="display:none">Initialize ctld</button>
       </div>
     </div>
   </dialog>

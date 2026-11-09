@@ -1,0 +1,30 @@
+{{.Header}} — do not edit; every iSCSI change rewrites this file.
+# The configuration found before dumpstore took over is kept in
+# {{.Backup}}.
+{{- range .PortalGroups}}
+
+portal-group {{.Name}} {
+	discovery-auth-group no-authentication
+	discovery-filter portal-name
+	listen {{.Listen}}
+}
+{{- end}}
+{{- range .Targets}}
+
+target {{.IQN}} {
+	portal-group {{.PortalGroup}}
+{{- if eq .AuthMode "chap"}}
+	chap "{{.CHAPUser}}" "{{.CHAPSecret}}"
+{{- else if not .Initiators}}
+	auth-group no-authentication
+{{- else}}
+	auth-type none
+{{- end}}
+{{- range .Initiators}}
+	initiator-name {{.}}
+{{- end}}
+	lun 0 {
+		path {{.Device}}
+	}
+}
+{{- end}}

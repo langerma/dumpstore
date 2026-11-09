@@ -49,7 +49,8 @@ This is one half of the project's **scope boundary** (#121). The other half: dom
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | reload `smbd`/`nmbd` / `samba_server` (started if not running) |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
-| iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` | `targetcli` / `service ctld restart` |
+| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf`, rendered from `internal/iscsi/ctl.conf.tmpl`; init gate `POST /api/iscsi/init` | `service ctld reload` (start if stopped), verified via `ctladm portlist` + listening sockets, rolled back on failure |
+| iSCSI (Linux) | ✅ via CLI | `targetcli saveconfig` | `targetcli` |
 | TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
 | Users / Groups | — | OS is source of truth | n/a |
 | ZFS datasets | — | ZFS kernel properties | n/a |
@@ -161,7 +162,7 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 | `internal/replication` | Scheduled send/recv tasks: holds, incrementals, pruning |
 | `internal/autosnap` | Native `com.sun:auto-snapshot*` execution and daemon takeover |
 | `internal/smb` | Owned `smb.conf` and wsdd options: parse and render from templates; usershare file reader |
-| `internal/iscsi` | Read iSCSI targets (targetcli saveconfig / `ctl.conf`) |
+| `internal/iscsi` | Read iSCSI targets (targetcli saveconfig); FreeBSD: parse, import, and render the dumpstore-owned `ctl.conf` |
 | `internal/system` | Host info, users/groups, services (systemd / rc.d), installed software |
 | `internal/smart`, `internal/blockdev` | S.M.A.R.T. data; physical devices and vdev matching |
 | `internal/broker` | SSE pub/sub and the background poller |

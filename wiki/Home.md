@@ -29,7 +29,7 @@ dumpstore **manages** ZFS and sharing (SMB, NFS, iSCSI, wsdd, and the local user
 - NFS via the ZFS `sharenfs` property
 - SMB usershares, Samba users, `[homes]`, and Time Machine shares — dumpstore owns `smb.conf`
 - Windows network discovery via wsdd, kept in sync with Samba's workgroup
-- iSCSI targets for zvols (`targetcli`/LIO on Linux, `ctld` on FreeBSD) with CHAP and initiator ACLs
+- iSCSI targets for zvols (`targetcli`/LIO on Linux, `ctld` on FreeBSD — dumpstore owns `/etc/ctl.conf`) with CHAP and initiator ACLs
 - Start, stop, enable, and disable Samba, NFS, iSCSI, and wsdd from the Services tab
 - Datasets still referenced by a share, iSCSI target, or replication task can't be destroyed, renamed, or re-mounted — the UI lists what blocks it
 

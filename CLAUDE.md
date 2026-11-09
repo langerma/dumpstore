@@ -110,7 +110,8 @@ The service lifecycle (unit file, enable/disable) stays with the OS. dumpstore o
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd`), rendered from smb.conf with Samba; FreeBSD: none (rc.d reads `smb4.conf`) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) |
-| iSCSI | ✅ via CLI | `targetcli saveconfig` / `/etc/ctl.conf` |
+| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf` — rendered from `internal/iscsi/ctl.conf.tmpl`, init gate `POST /api/iscsi/init` (backup `ctl.conf.pre-dumpstore`) |
+| iSCSI (Linux) | ✅ via CLI | `targetcli saveconfig` |
 | TLS | ✅ full | `dumpstore.conf` |
 | Users/Groups | — | OS is source of truth (`useradd`/`groupadd`) |
 
@@ -203,7 +204,9 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/api/user_handlers.go` | User + group handlers, SSH key management |
 | `internal/api/acl_handlers.go` | ACL handlers (POSIX + NFSv4) |
 | `internal/api/smb_handlers.go` | SMB handlers: shares, users, homes, Time Machine, wsdd |
-| `internal/api/iscsi_handlers.go` | iSCSI target handlers |
+| `internal/api/iscsi_handlers.go` | iSCSI target handlers; FreeBSD: ctld init gate, read-modify-render of `ctl.conf` via `applyCtlConf` |
+| `internal/iscsi/iscsi.go` | `Target` model, `Backend`, `ListTargets`, targetcli saveconfig reader |
+| `internal/iscsi/ctld.go` | ctld (#186): `ParseCtld`/`LoadCtld`, `Import` (takes over an existing `ctl.conf`), `Render` (whole file from `ctl.conf.tmpl`), `CtldInitialized`, `Listeners` |
 | `internal/api/httpmetrics.go` | HTTP middleware for request count/latency metrics |
 | `internal/api/metrics.go` | `/metrics` handler (Prometheus exposition) |
 | `internal/system/system.go` | `ListUsers`, `ListGroups`, `UIDMin` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` |
@@ -233,6 +236,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `playbooks/smb_usershare_unset.yml` | Removes a Samba usershare; vars: `sharename` |
 | `playbooks/smb_user_add.yml` | Registers user in Samba tdbsam; vars: `username`, `smb_password` |
 | `playbooks/smb_user_remove.yml` | Removes user from Samba tdbsam; vars: `username` |
+| `playbooks/iscsi_ctld_apply.yml` | FreeBSD: validates (`ctld -t`), deploys `/etc/ctl.conf` (0600), reloads/starts ctld, verifies ports + listeners, rolls back on failure; vars: `src`, `ctl_conf`, `expect_iqns`, `absent_iqns`, `expect_listeners`, optional `rollback_src`, `init` |
 | `playbooks/inventory/localhost` | `ansible_connection=local`, `ansible_python_interpreter=auto_silent` |
 
 ### Frontend & install

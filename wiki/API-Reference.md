@@ -92,6 +92,8 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/iscsi-targets`           | List all iSCSI targets |
 | POST   | `/api/iscsi-targets`           | Create an iSCSI target for a zvol |
 | DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |
+| GET    | `/api/iscsi/status`            | iSCSI backend and ctld init state |
+| POST   | `/api/iscsi/init`              | Take ownership of `/etc/ctl.conf` (FreeBSD) |
 | GET    | `/api/services`                | List status of all managed services |
 | POST   | `/api/services/{name}/{action}` | Control a service (start/stop/restart/enable/disable) |
 | GET    | `/api/replication`             | List scheduled replication tasks |
@@ -647,6 +649,24 @@ Empty string (`""`) triggers `zfs inherit` on the property (clears the local val
 
 Expose ZFS volumes as iSCSI targets. Uses `targetcli`/LIO on Linux or `ctld` on FreeBSD. Endpoints return 501 if no backend is detected.
 
+On FreeBSD dumpstore owns `/etc/ctl.conf` completely (#186): every write re-reads the file, changes the target list, and renders the whole file again — one portal group per listen address, discovery allowed and filtered to what each initiator may reach (`discovery-filter portal-name`), and per-target auth. Writes are gated: `POST`/`DELETE /api/iscsi-targets` return `409 "ctld not initialised — run POST /api/iscsi/init first"` until init has run. After reloading ctld the playbook checks `ctladm portlist` and ctld's listening sockets; if the new config did not take effect (e.g. a portal IP not assigned to the host), the previous file is restored, ctld reloaded, and the request fails with the reason.
+
+### GET /api/iscsi/status
+
+```json
+{ "backend": "freebsd", "initialized": false, "conf_path": "/etc/ctl.conf", "conf_exists": true }
+```
+
+`backend` is `linux`, `freebsd`, or `""`. On Linux `initialized` is always `true` (targetcli has no init gate) and `conf_path` is empty.
+
+### POST /api/iscsi/init
+
+FreeBSD only (`400` on Linux, `501` without ctld). Backs up an existing `/etc/ctl.conf` once to `/etc/ctl.conf.pre-dumpstore` (never overwritten), imports the targets dumpstore can represent — zvol-backed, LUN 0, one portal, auth none or a single CHAP credential, which includes files written by earlier dumpstore versions — and renders the file from template, then enables and reloads (or starts) ctld. Everything else (other LUN types, multi-portal targets, auth groups, `chap-mutual`, global settings) is not carried over; each item is reported as a `skipped` step `Not imported: …`. Safe to call again.
+
+```json
+{ "initialized": true, "imported": 2, "skipped": 1, "tasks": [ … ] }
+```
+
 ### GET /api/iscsi-targets
 
 List all iSCSI targets backed by ZFS volumes.
@@ -690,16 +710,16 @@ Create an iSCSI target for a ZFS volume.
 | `portal_port` | no | Listen port, defaults to `3260` |
 | `auth_mode` | yes | `"none"` or `"chap"` |
 | `chap_user` | when chap | CHAP username |
-| `chap_password` | when chap | CHAP password |
+| `chap_password` | when chap | CHAP password; no `"`, `\`, or newlines |
 | `initiators` | no | Array of allowed initiator IQNs; empty = allow all |
 
-Returns Ansible task steps.
+Returns Ansible task steps. FreeBSD: `409` before init, if the IQN already exists, or if the zvol is already exported; `400` if `/dev/zvol/<zvol>` does not exist. CHAP credentials are never returned by `GET /api/iscsi-targets`.
 
 ### DELETE /api/iscsi-targets?iqn=\<iqn\>&zvol=\<zvol\>
 
 Remove an iSCSI target and its backstore. Both query parameters are required.
 
-Returns Ansible task steps.
+Returns Ansible task steps. FreeBSD: `409` before init; `404` if no target with that IQN exports that zvol.
 
 ---
 

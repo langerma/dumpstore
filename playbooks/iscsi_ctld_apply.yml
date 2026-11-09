@@ -1,0 +1,180 @@
+---
+# iscsi_ctld_apply.yml — Deploy a fully rendered /etc/ctl.conf and make ctld
+# use it (FreeBSD, #186).
+#
+# dumpstore owns ctl.conf: the file is rendered whole from
+# internal/iscsi/ctl.conf.tmpl on every write. This playbook validates it,
+# installs it, reloads (or starts) ctld, and then checks the kernel's port
+# list. `service ctld reload` only sends SIGHUP and returns 0 even when ctld
+# cannot apply the new config (e.g. a portal address that cannot be bound),
+# so the verify step is what turns a failed reload into a failed operation.
+# ctld creates a target's kernel port even when it cannot bind the target's
+# portal, so verify checks both the port list and ctld's listening sockets.
+# On any failure after validation the previous file is put back and ctld is
+# reloaded, so a config ctld cannot run never survives to the next restart.
+#
+# Required extra vars:
+#   src          – path to the rendered ctl.conf temp file
+#   ctl_conf     – destination path (/etc/ctl.conf)
+#   expect_iqns  – JSON list of the target IQNs the file defines (may be [])
+#   absent_iqns  – JSON list of IQNs the previous file defined and this one
+#                  drops (may be []); they must disappear from the port list.
+#                  Kernel ports outside both lists (e.g. orphans left by a
+#                  ctld that crashed) are not dumpstore's and are ignored.
+#   expect_listeners – JSON list of sockets ctld must hold, in sockstat(1)
+#                  form ("tcp4 *:3260", "tcp6 ::1:3260"); may be []
+#
+# Optional extra vars:
+#   rollback_src – copy of the current ctl.conf, restored on failure; when
+#                  unset (no file yet) a failed apply removes ctl.conf again
+#   init         – "true" on POST /api/iscsi/init: back up an existing
+#                  ctl.conf to <ctl_conf>.pre-dumpstore (never overwritten)
+
+- name: Apply dumpstore ctld configuration
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # ctladm portlist: "... iqn.x:y,t,0x0101"
+    _port_re: '([^ ,]+),t,0x[0-9a-fA-F]+'
+    # sockstat -46lq -P tcp: "root ctld 72778 8 tcp4 *:3260 *:*"
+    _listen_re: '(?m)^[^ ]+ +ctld +[0-9]+ +[0-9]+ +(tcp[46]+) +([^ ]+)'
+  tasks:
+    - name: Assert required variables are defined
+      ansible.builtin.assert:
+        that:
+          - src is defined and src | length > 0
+          - ctl_conf is defined and ctl_conf | length > 0
+          - expect_iqns is defined
+          - absent_iqns is defined
+          - expect_listeners is defined
+        fail_msg: "src, ctl_conf, expect_iqns, absent_iqns, and expect_listeners are required"
+
+    - name: Normalise target lists
+      ansible.builtin.set_fact:
+        _expect: "{{ expect_iqns | from_json | map('lower') | list }}"
+        _absent: "{{ absent_iqns | from_json | map('lower') | list }}"
+        _listeners: "{{ expect_listeners | from_json }}"
+
+    - name: Validate rendered ctl.conf
+      ansible.builtin.command:
+        argv: ["ctld", "-t", "-f", "{{ src }}"]
+      changed_when: false
+
+    - name: Check for an existing ctl.conf
+      ansible.builtin.stat:
+        path: "{{ ctl_conf }}"
+      register: ctl_conf_stat
+      when: (init | default('false')) == 'true'
+
+    - name: Back up existing ctl.conf
+      ansible.builtin.copy:
+        src: "{{ ctl_conf }}"
+        dest: "{{ ctl_conf }}.pre-dumpstore"
+        remote_src: true
+        force: false
+        owner: root
+        mode: "0600"
+      when:
+        - (init | default('false')) == 'true'
+        - ctl_conf_stat.stat.exists
+
+    - name: Deploy and activate ctl.conf
+      block:
+        # No backup: true — the file holds CHAP secrets; stray copies would leak them.
+        - name: Deploy ctl.conf
+          ansible.builtin.copy:
+            src: "{{ src }}"
+            dest: "{{ ctl_conf }}"
+            owner: root
+            group: wheel
+            mode: "0600"
+
+        - name: Enable ctld
+          ansible.builtin.service:
+            name: ctld
+            enabled: true
+
+        - name: Check whether ctld is running
+          ansible.builtin.command:
+            argv: ["service", "ctld", "status"]
+          register: ctld_status
+          changed_when: false
+          failed_when: false
+
+        - name: Reload ctld
+          ansible.builtin.service:
+            name: ctld
+            state: reloaded
+          when: ctld_status.rc == 0
+
+        - name: Start ctld
+          ansible.builtin.service:
+            name: ctld
+            state: started
+          when: ctld_status.rc != 0
+
+        - name: Wait for ctld to publish the configured targets
+          ansible.builtin.command:
+            argv: ["sh", "-c", "ctladm portlist -f iscsi -q && sockstat -46lq -P tcp"]
+          register: ctld_state
+          changed_when: false
+          failed_when: false
+          retries: 5
+          delay: 1
+          until: >-
+            ctld_state.rc == 0 and
+            (_expect | difference(ctld_state.stdout | regex_findall(_port_re) | map('lower') | list)) | length == 0 and
+            (_absent | intersect(ctld_state.stdout | regex_findall(_port_re) | map('lower') | list)) | length == 0 and
+            (_listeners | difference(ctld_state.stdout | regex_findall(_listen_re) | map('join', ' ') | list)) | length == 0
+
+        - name: Verify ctld applied the configuration
+          vars:
+            _active: "{{ ctld_state.stdout | regex_findall(_port_re) | map('lower') | unique | list }}"
+            _listening: "{{ ctld_state.stdout | regex_findall(_listen_re) | map('join', ' ') | unique | list }}"
+          ansible.builtin.assert:
+            that:
+              - ctld_state.rc == 0
+              - (_expect | difference(_active)) | length == 0
+              - (_absent | intersect(_active)) | length == 0
+              - (_listeners | difference(_listening)) | length == 0
+            fail_msg: >-
+              ctld did not apply the new configuration.
+              Missing targets: {{ _expect | difference(_active) | join(', ') or 'none' }}.
+              Targets that should be gone: {{ _absent | intersect(_active) | join(', ') or 'none' }}.
+              Portals not listening: {{ _listeners | difference(_listening) | join(', ') or 'none' }}.
+              Check the ctld messages in /var/log/messages — a portal address
+              that is not assigned to this host cannot be bound.
+            quiet: true
+
+      rescue:
+        - name: Restore previous ctl.conf
+          ansible.builtin.copy:
+            src: "{{ rollback_src }}"
+            dest: "{{ ctl_conf }}"
+            owner: root
+            group: wheel
+            mode: "0600"
+          when: (rollback_src | default('')) | length > 0
+
+        - name: Remove rejected ctl.conf
+          ansible.builtin.file:
+            path: "{{ ctl_conf }}"
+            state: absent
+          when: (rollback_src | default('')) | length == 0
+
+        - name: Check whether ctld is still running
+          ansible.builtin.command:
+            argv: ["service", "ctld", "status"]
+          register: ctld_status_after
+          changed_when: false
+          failed_when: false
+
+        - name: Reload ctld with the previous configuration
+          ansible.builtin.service:
+            name: ctld
+            state: reloaded
+          when: ctld_status_after.rc == 0
+
+        - name: Report the failed apply
+          ansible.builtin.fail:
+            msg: "ctl.conf change rolled back: {{ ansible_failed_task.name }} failed"
