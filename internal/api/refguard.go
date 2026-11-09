@@ -74,8 +74,8 @@ type refConflict struct {
 	Name    string `json:"name"`           // share name, target IQN, or task name
 	ID      string `json:"id,omitempty"`   // replication task ID
 	Path    string `json:"path,omitempty"` // shared path (SMB kinds)
-	// Describe returns a human-readable one-liner for the frontend.
-	Describe string `json:"describe,omitempty"`
+	// Describe is a human-readable one-liner for the UI; set by writeConflicts.
+	Describe string `json:"describe"`
 }
 
 func (c refConflict) describe() string {
@@ -248,32 +248,32 @@ func findConflicts(s refSnapshot, op refOp, name string, recursive bool, newMoun
 
 	for _, u := range s.Usershares {
 		if o := affectedOwner(u.Path); o != "" {
-			out = append(out, refConflict{Kind: kindUsershare, Dataset: o, Name: u.Name, Path: u.Path, Describe: u.Name + " (" + u.Path + ")"})
+			out = append(out, refConflict{Kind: kindUsershare, Dataset: o, Name: u.Name, Path: u.Path})
 		}
 	}
 	if s.HomesPath != "" {
 		if o := affectedOwner(homesBase(s.HomesPath)); o != "" {
-			out = append(out, refConflict{Kind: kindHomes, Dataset: o, Name: "homes", Path: s.HomesPath, Describe: "[homes] (" + s.HomesPath + ")"})
+			out = append(out, refConflict{Kind: kindHomes, Dataset: o, Name: "homes", Path: s.HomesPath})
 		}
 	}
 	for _, tm := range s.TimeMachine {
 		if o := affectedOwner(tm.Path); o != "" {
-			out = append(out, refConflict{Kind: kindTimeMachine, Dataset: o, Name: tm.Name, Path: tm.Path, Describe: tm.Name + " (" + tm.Path + ")"})
+			out = append(out, refConflict{Kind: kindTimeMachine, Dataset: o, Name: tm.Name, Path: tm.Path})
 		}
 	}
 	for _, t := range s.Targets {
 		if names[t.ZvolName] {
-			out = append(out, refConflict{Kind: kindISCSI, Dataset: t.ZvolName, Name: t.IQN, Describe: t.IQN})
+			out = append(out, refConflict{Kind: kindISCSI, Dataset: t.ZvolName, Name: t.IQN})
 		}
 	}
 	for _, t := range s.Tasks {
 		// A recursive task on an ancestor just stops sending the removed
 		// child, so only exact sources block.
 		if names[t.Source] {
-			out = append(out, refConflict{Kind: kindReplSource, Dataset: t.Source, Name: t.Name, ID: t.ID, Describe: t.Name + " (source)"})
+			out = append(out, refConflict{Kind: kindReplSource, Dataset: t.Source, Name: t.Name, ID: t.ID})
 		}
 		if t.Remote == "" && names[t.Target] {
-			out = append(out, refConflict{Kind: kindReplTarget, Dataset: t.Target, Name: t.Name, ID: t.ID, Describe: t.Name + " (target)"})
+			out = append(out, refConflict{Kind: kindReplTarget, Dataset: t.Target, Name: t.Name, ID: t.ID})
 		}
 	}
 
@@ -353,8 +353,9 @@ func (h *Handler) checkDatasetRefs(w http.ResponseWriter, r *http.Request, op re
 func writeConflicts(ctx context.Context, w http.ResponseWriter, op refOp, name string, conflicts []refConflict) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "cannot %s %s: still in use by dumpstore-managed configuration:\n", op.verb(), name)
-	for _, c := range conflicts {
-		b.WriteString("  - " + c.describe() + "\n")
+	for i := range conflicts {
+		conflicts[i].Describe = conflicts[i].describe()
+		b.WriteString("  - " + conflicts[i].Describe + "\n")
 	}
 	b.WriteString("Remove these references first, then retry.")
 	writeAPIError(ctx, w, http.StatusConflict, apiError{Error: b.String(), Conflicts: conflicts})

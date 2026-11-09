@@ -49,7 +49,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset |
 | POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry |
 | DELETE | `/api/acl/{dataset}`        | Remove an ACL entry |
-| GET    | `/api/smb-shares`           | List active Samba usershares |
+| GET    | `/api/smb-shares`           | List Samba usershares, including stale ones whose path is gone (`path_missing`) |
 | POST   | `/api/smb-share/{dataset}`  | Create or update a Samba usershare |
 | DELETE | `/api/smb-share/{dataset}`  | Remove a Samba usershare |
 | GET    | `/api/smb-users`            | List users registered in smbpasswd |
@@ -155,6 +155,8 @@ Update dataset properties. Any subset of editable properties may be sent. An emp
 }
 ```
 
+A `mountpoint` change is subject to the [reference guard](#reference-guard-409).
+
 Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`, `sharenfs`, `sharesmb`.
 
 ### POST /api/rewrite/{name}
@@ -207,6 +209,33 @@ Set or remove a per-user/per-group quota (`userquota@<principal>` / `groupquota@
 Destroy a dataset or volume. Append `?recursive=true` to also destroy all child datasets and snapshots.
 
 Pool roots (e.g. `tank`) cannot be deleted via this endpoint — use `zpool destroy`.
+
+#### Reference guard (409)
+
+Destroy, rename (`POST /api/datasets/rename`), and a `mountpoint` change (`PATCH /api/datasets/{name}`) are refused with `409 Conflict` while dumpstore-managed configuration still refers to an affected dataset — for a recursive destroy or a rename, that includes every descendant. Nothing is changed. Checked references:
+
+| `kind` | Blocks when |
+|--------|-------------|
+| `smb_usershare` | a usershare's path lies on the dataset (longest mountpoint match) |
+| `smb_homes` | the `[homes]` base path (up to the first `%` substitution) lies on it |
+| `smb_timemachine` | a Time Machine share's path lies on it |
+| `iscsi_target` | an iSCSI target exports the zvol |
+| `replication_source` | a replication task uses it as its exact source |
+| `replication_target` | a replication task with a local target receives into it |
+
+Path-based references only block when the path actually disappears or moves: a child with its own `mountpoint` is unaffected by a rename of its parent.
+
+```json
+{
+  "error": "cannot destroy tank/data: still in use by dumpstore-managed configuration:\n  - SMB share \"data\" (/tank/data)\nRemove these references first, then retry.",
+  "conflicts": [
+    { "kind": "smb_usershare", "dataset": "tank/data", "name": "data", "path": "/tank/data",
+      "describe": "SMB share \"data\" (/tank/data)" }
+  ]
+}
+```
+
+Replication conflicts also carry the task `id`. If the references cannot be read (e.g. `smb.conf` unreadable), the request fails closed with `500` and an error starting `reference check failed:`.
 
 ---
 

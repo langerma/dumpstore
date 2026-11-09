@@ -117,10 +117,11 @@ export function showOpLog(title, tasks, errorMsg, conflicts) {
   if (conflicts?.length) {
     errorEl.innerHTML = `
       <div class="conflict-panel">
-        <strong class="conflict-header">⚠ ${esc(errorMsg)}</strong>
+        <strong class="conflict-header">⚠ ${esc(errorMsg.split('\n')[0])}</strong>
         <div class="conflict-list">
-          ${conflicts.map(c => `<div class="conflict-item"><span class="conflict-kind">${esc(c.kind)}</span> <span class="conflict-desc">${esc(c.describe || '')}</span></div>`).join('')}
+          ${conflicts.map(c => `<div class="conflict-item"><span class="conflict-desc">${esc(c.describe)}</span></div>`).join('')}
         </div>
+        <div class="conflict-hint">Remove these references first, then retry.</div>
       </div>`;
     errorEl.style.display = '';
   } else if (errorMsg) {

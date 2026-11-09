@@ -48,6 +48,7 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestPosixACL` | acltype gate, POSIX ACE set/get/remove (+ `getfacl` check), 404 on re-delete — Linux only |
 | `TestNFSv4ACL` | NFSv4 ACE add/list/remove in the nfs4-acl-tools form (+ `getfacl` check), 404 on re-delete, bad permission 400 — FreeBSD only (Linux ZFS cannot apply NFSv4 ACLs locally) |
 | `TestChown` | mountpoint owner/group read + change, verified with `stat` |
+| `TestDatasetRefGuard` | #183 reference guard: destroy (incl. recursive parent), rename, and mountpoint change of a usershare'd dataset → 409 with conflict list; replication source/target and iSCSI zvol → 409; stale usershare listed with `path_missing`, removed, and not resurrected by a new dataset at the same path; unreadable `smb.conf`/`smb4.conf` → 500 fail-closed with nothing destroyed. |
 | `TestISCSITarget` | zvol → targetcli target create/list/delete; CHAP-without-password and bad IQN 400 — Linux only |
 | `TestReplicationTask` | task CRUD, invalid schedule/target 400, manual run → job → received snapshot → history record, hold released |
 | `TestAutoSnapshotProperties` | per-dataset auto-snapshot properties set/read/inherit, value validation |

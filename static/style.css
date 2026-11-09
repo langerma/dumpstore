@@ -687,6 +687,7 @@ dialog label select:focus,
 /* REF GUARD CONFLICTS */
 .conflict-panel {
   font-size: 12px;
+  white-space: normal; /* .op-error is pre-wrap for plain messages */
 }
 .conflict-header {
   display: block;
@@ -705,14 +706,13 @@ dialog label select:focus,
   border: 1px solid #5a2020;
   border-radius: 4px;
 }
-.conflict-kind {
-  color: var(--accent);
-  font-weight: 600;
-  white-space: nowrap;
-}
 .conflict-desc {
   color: var(--text);
   word-break: break-word;
+}
+.conflict-hint {
+  margin-top: 6px;
+  color: var(--text-muted);
 }
 
 #opLogDialog { width: 440px; max-width: 95vw; }

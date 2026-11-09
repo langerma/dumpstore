@@ -68,6 +68,7 @@
 | OpenTelemetry export       | v0.2.1     | Env-gated OTLP export (no-op by default): per-request trace spans with Ansible/ops child spans and background job/replication/autosnap root spans; single-producer log pipeline (journald format preserved byte-for-byte, OTLP branch adds `trace_id` correlation); Go runtime + HTTP metrics via OTLP alongside the unchanged Prometheus `/metrics`. Phases 1+2 of #49 |
 | Integration coverage for most endpoints | v0.2.1 | VM suite extended from ~17 paths to most of the API: every read endpoint + SSE, users/groups/SSH keys, Samba, POSIX + NFSv4 ACLs, chown, iSCSI, replication, auto-snapshot properties + takeover/release, scrub schedules, services, TLS, password change — with negative cases; green on Linux (CI) and FreeBSD. Surfaced and fixed eleven bugs. Closes #141 |
 | wsdd management            | v0.2.2     | wsdd treated as part of the owned Samba config: options file (unit's EnvironmentFile, `/etc/default/wsdd` on Debian/Ubuntu) rendered from `smb.conf` with every Samba write, restart only when changed and running; FreeBSD rc.d reads `smb4.conf` itself. Services-tab row, SMB-section status + install hint + take-over action (`POST /api/smb/wsdd`). Closes #86 |
+| Dataset reference guard    | Unreleased | Destroy / rename / mountpoint change refused with `409` + blocker list while SMB usershares, `[homes]`, Time Machine shares, iSCSI targets, or replication tasks still reference the dataset (or a descendant); fails closed on unreadable config; stale usershares listed with a Remove action. Closes #183 |
 
 ---
 

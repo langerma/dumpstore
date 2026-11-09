@@ -60,7 +60,7 @@ func shares(pairs ...string) []smb.Usershare {
 }
 
 func us(name, ds, p string) refConflict {
-	return refConflict{Kind: kindUsershare, Dataset: ds, Name: name, Path: p, Describe: name + " (" + p + ")"}
+	return refConflict{Kind: kindUsershare, Dataset: ds, Name: name, Path: p}
 }
 
 func TestFindConflicts(t *testing.T) {
@@ -127,7 +127,7 @@ func TestFindConflicts(t *testing.T) {
 				us("data", "tank/data", "/tank/data"),
 				us("datasub", "tank/data", "/tank/data/some/dir"),
 				us("child", "tank/data/child", "/tank/data/child"),
-				{Kind: kindReplSource, Dataset: "tank/data/own/sub", Name: "own-repl", ID: "r1", Describe: "own-repl (source)"},
+				{Kind: kindReplSource, Dataset: "tank/data/own/sub", Name: "own-repl", ID: "r1"},
 			},
 		},
 		{
@@ -138,7 +138,7 @@ func TestFindConflicts(t *testing.T) {
 				Targets:    []iscsi.Target{{IQN: "iqn.x", ZvolName: "tank/local/kid"}},
 			},
 			op: refRename, target: "tank/local",
-			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/local/kid", Name: "iqn.x", Describe: "iqn.x"}},
+			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/local/kid", Name: "iqn.x"}},
 		},
 		{
 			name: "rename with unknown parent treats subtree as moving",
@@ -215,7 +215,7 @@ func TestFindConflicts(t *testing.T) {
 				HomesPath: "/tank/data/homes/%U",
 			},
 			op: refDestroy, target: "tank/data",
-			want: []refConflict{{Kind: kindHomes, Dataset: "tank/data", Name: "homes", Path: "/tank/data/homes/%U", Describe: "[homes] (/tank/data/homes/%U)"}},
+			want: []refConflict{{Kind: kindHomes, Dataset: "tank/data", Name: "homes", Path: "/tank/data/homes/%U"}},
 		},
 		{
 			name: "homes with %S in the middle",
@@ -224,7 +224,7 @@ func TestFindConflicts(t *testing.T) {
 				HomesPath: "/tank/data2/%S/files",
 			},
 			op: refDestroy, target: "tank/data2",
-			want: []refConflict{{Kind: kindHomes, Dataset: "tank/data2", Name: "homes", Path: "/tank/data2/%S/files", Describe: "[homes] (/tank/data2/%S/files)"}},
+			want: []refConflict{{Kind: kindHomes, Dataset: "tank/data2", Name: "homes", Path: "/tank/data2/%S/files"}},
 		},
 		{
 			name: "homes on another dataset doesn't block",
@@ -242,7 +242,7 @@ func TestFindConflicts(t *testing.T) {
 				TimeMachine: []smb.TimeMachineShare{{Name: "tm", Path: "/tank/data/tm"}, {Name: "other", Path: "/tank/data2"}},
 			},
 			op: refDestroy, target: "tank/data",
-			want: []refConflict{{Kind: kindTimeMachine, Dataset: "tank/data", Name: "tm", Path: "/tank/data/tm", Describe: "tm (/tank/data/tm)"}},
+			want: []refConflict{{Kind: kindTimeMachine, Dataset: "tank/data", Name: "tm", Path: "/tank/data/tm"}},
 		},
 		{
 			name: "iscsi zvol in and out of the subtree",
@@ -251,7 +251,7 @@ func TestFindConflicts(t *testing.T) {
 				Targets:  []iscsi.Target{{IQN: "iqn.a", ZvolName: "tank/data/vm"}, {IQN: "iqn.b", ZvolName: "tank/vol"}},
 			},
 			op: refDestroy, target: "tank/data", recursive: true,
-			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/data/vm", Name: "iqn.a", Describe: "iqn.a"}},
+			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/data/vm", Name: "iqn.a"}},
 		},
 		{
 			name: "iscsi zvol destroy",
@@ -260,7 +260,7 @@ func TestFindConflicts(t *testing.T) {
 				Targets:  []iscsi.Target{{IQN: "iqn.b", ZvolName: "tank/vol"}},
 			},
 			op: refDestroy, target: "tank/vol",
-			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/vol", Name: "iqn.b", Describe: "iqn.b"}},
+			want: []refConflict{{Kind: kindISCSI, Dataset: "tank/vol", Name: "iqn.b"}},
 		},
 		{
 			name: "replication: source and local target block, ancestor source and remote target don't",
@@ -275,8 +275,8 @@ func TestFindConflicts(t *testing.T) {
 			},
 			op: refDestroy, target: "tank/data", recursive: true,
 			want: []refConflict{
-				{Kind: kindReplSource, Dataset: "tank/data/child", Name: "src", ID: "a", Describe: "src (source)"},
-				{Kind: kindReplTarget, Dataset: "tank/data/child", Name: "local-dst", ID: "c", Describe: "local-dst (target)"},
+				{Kind: kindReplSource, Dataset: "tank/data/child", Name: "src", ID: "a"},
+				{Kind: kindReplTarget, Dataset: "tank/data/child", Name: "local-dst", ID: "c"},
 			},
 		},
 		{
