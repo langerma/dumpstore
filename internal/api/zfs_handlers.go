@@ -119,12 +119,17 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("no recognised properties to update"), nil)
 		return
 	}
-	ok, err := datasetExists(name)
-	if err != nil {
+	// A mountpoint change moves paths that shares may reference (#183).
+	if mp, ok := vars["mountpoint"]; ok {
+		h.refMu.Lock()
+		defer h.refMu.Unlock()
+		if !h.checkDatasetRefs(w, r, refMountpoint, name, false, mp) {
+			return
+		}
+	} else if ok, err := datasetExists(name); err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
 		return
-	}
-	if !ok {
+	} else if !ok {
 		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
@@ -340,11 +345,9 @@ func (h *Handler) renameDataset(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("new name must be under the same parent dataset"), nil)
 		return
 	}
-	if ok, err := datasetExists(req.Name); err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	} else if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", req.Name), nil)
+	h.refMu.Lock()
+	defer h.refMu.Unlock()
+	if !h.checkDatasetRefs(w, r, refRename, req.Name, true, "") {
 		return
 	}
 
@@ -381,19 +384,14 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("refusing to destroy a pool root"), nil)
 		return
 	}
-	ok, err := datasetExists(name)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
-		return
-	}
-
 	recursive := "false"
 	if r.URL.Query().Get("recursive") == "true" {
 		recursive = "true"
+	}
+	h.refMu.Lock()
+	defer h.refMu.Unlock()
+	if !h.checkDatasetRefs(w, r, refDestroy, name, recursive == "true", "") {
+		return
 	}
 
 	out, err := h.runOp(r.Context(), "zfs_dataset_destroy.yml", map[string]string{

@@ -181,10 +181,12 @@ func snapshotExists(name string) (bool, error) {
 
 // apiError is returned as JSON for all non-2xx responses.
 // Tasks is populated for Ansible-backed operations so the UI can show the op-log
-// even when the request fails.
+// even when the request fails. Conflicts is populated for 409s from the
+// dataset reference guard (#183).
 type apiError struct {
-	Error string             `json:"error"`
-	Tasks []ansible.TaskStep `json:"tasks,omitempty"`
+	Error     string             `json:"error"`
+	Tasks     []ansible.TaskStep `json:"tasks,omitempty"`
+	Conflicts []refConflict      `json:"conflicts,omitempty"`
 }
 
 // Handler holds dependencies for the HTTP API.
@@ -198,6 +200,7 @@ type Handler struct {
 	autosnap   *autosnap.Runner
 	userMu     sync.Mutex   // serialises user/group write ops to avoid /etc/group lock contention
 	smbMu      sync.Mutex   // serialises smb.conf read-modify-write cycles
+	refMu      sync.Mutex   // serialises dataset destroy/rename/re-mount against adding references to datasets (#183); taken before smbMu
 	authMu     sync.RWMutex // protects concurrent access to authCfg fields
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
@@ -537,10 +540,15 @@ func writeOpsError(ctx context.Context, w http.ResponseWriter, err error, res *o
 }
 
 func writeError(ctx context.Context, w http.ResponseWriter, code int, err error, steps []ansible.TaskStep) {
-	slog.ErrorContext(ctx, "api error", "status", code, "err", err)
+	writeAPIError(ctx, w, code, apiError{Error: err.Error(), Tasks: steps})
+}
+
+// writeAPIError logs and writes a fully populated apiError body.
+func writeAPIError(ctx context.Context, w http.ResponseWriter, code int, e apiError) {
+	slog.ErrorContext(ctx, "api error", "status", code, "err", e.Error)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(apiError{Error: err.Error(), Tasks: steps})
+	_ = json.NewEncoder(w).Encode(e)
 }
 
 // getSchema handles GET /api/schema

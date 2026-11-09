@@ -18,6 +18,7 @@ export async function api(method, path, body) {
   if (!res.ok) {
     const err = new Error(data.error || `HTTP ${res.status}`);
     err.tasks = data.tasks || null;
+    err.conflicts = data.conflicts || null;
     throw err;
   }
   return data;
@@ -101,7 +102,7 @@ export function showOpLogRunning(title) {
   if (!opLogDialog.open) opLogDialog.showModal();
 }
 
-export function showOpLog(title, tasks, errorMsg) {
+export function showOpLog(title, tasks, errorMsg, conflicts) {
   document.getElementById('opLogTitle').textContent = title;
   const stepsEl = document.getElementById('opLogSteps');
   const errorEl = document.getElementById('opLogError');
@@ -113,7 +114,16 @@ export function showOpLog(title, tasks, errorMsg) {
       ${t.msg ? `<span class="op-step-msg">${esc(t.msg)}</span>` : ''}
     </div>`).join('');
 
-  if (errorMsg) {
+  if (conflicts?.length) {
+    errorEl.innerHTML = `
+      <div class="conflict-panel">
+        <strong class="conflict-header">⚠ ${esc(errorMsg)}</strong>
+        <div class="conflict-list">
+          ${conflicts.map(c => `<div class="conflict-item"><span class="conflict-kind">${esc(c.kind)}</span> <span class="conflict-desc">${esc(c.describe || '')}</span></div>`).join('')}
+        </div>
+      </div>`;
+    errorEl.style.display = '';
+  } else if (errorMsg) {
     errorEl.textContent = errorMsg;
     errorEl.style.display = '';
   } else {

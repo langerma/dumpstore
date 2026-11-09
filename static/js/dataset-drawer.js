@@ -221,7 +221,7 @@ async function applyProps() {
     storeSet('datasets', datasets || []);
     if (state.selectedDataset === name) await loadProps(name);
   } catch (e) {
-    showOpLog(`Failed to update ${name}`, e.tasks, e.message);
+    showOpLog(`Failed to update ${name}`, e.tasks, e.message, e.conflicts);
   }
 }
 

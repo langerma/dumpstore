@@ -683,6 +683,38 @@ dialog label select:focus,
   white-space: pre-wrap;
   margin-top: 0.5rem;
 }
+
+/* REF GUARD CONFLICTS */
+.conflict-panel {
+  font-size: 12px;
+}
+.conflict-header {
+  display: block;
+  margin-bottom: 6px;
+}
+.conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.conflict-item {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #2a1010;
+  border: 1px solid #5a2020;
+  border-radius: 4px;
+}
+.conflict-kind {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.conflict-desc {
+  color: var(--text);
+  word-break: break-word;
+}
+
 #opLogDialog { width: 440px; max-width: 95vw; }
 
 /* TOAST */

@@ -589,6 +589,54 @@ async function deleteTimeMachineShare(name) {
   }
 }
 
+// ── Render: stale SMB usershares (#183) ──────────────────────────────────────
+// Usershares whose path no longer exists. Samba hides them, but re-activates
+// them — with their old ACL — as soon as something appears at the path again.
+export function renderStaleSMBShares() {
+  const wrap = document.getElementById('smb-stale-wrap');
+  const stale = state.smbInitialized ? (state.smbShares || []).filter(s => s.path_missing) : [];
+  if (!stale.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const rows = stale.map(s => `
+    <tr>
+      <td class="mono">${esc(s.name)}</td>
+      <td class="mono">${esc(s.path)}</td>
+      <td class="muted">path no longer exists — this share would reappear if a dataset is created here</td>
+      <td><button class="btn-del btn-small" data-action="del" data-name="${esc(s.name)}" data-path="${esc(s.path)}">Remove</button></td>
+    </tr>`).join('');
+  wrap.innerHTML = `
+    <div class="section-header" style="margin-top:2rem">
+      <h2>Stale SMB Shares</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Share</th><th>Path</th><th></th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+delegate(document.getElementById('smb-stale-wrap'), {
+  del: ({ name, path }) => removeStaleSMBShare(name, path),
+});
+
+async function removeStaleSMBShare(name, path) {
+  if (!confirm(`Remove stale SMB share "${name}" (${path})?`)) return;
+  showOpLogRunning('Removing SMB share…');
+  try {
+    // The {dataset} path segment is only used for the audit log here.
+    const ds = path.replace(/^\/+/, '') || 'stale';
+    const result = await api('DELETE', '/api/smb-share/' + ds + '?name=' + encodeURIComponent(name));
+    showOpLog(`SMB share removed: ${name}`, result.tasks, null);
+  } catch (err) {
+    showOpLog(`Failed to remove SMB share: ${name}`, err.tasks, err.message);
+  }
+  const shares = await api('GET', '/api/smb-shares').catch(() => null);
+  if (shares) storeSet('smbShares', shares);
+}
+
 // ── Time Machine dialog ──────────────────────────────────────────────────────
 const timeMachineDialog = document.getElementById('timeMachineDialog');
 
