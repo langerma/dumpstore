@@ -326,7 +326,7 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 // Removes the key whose SHA256 fingerprint is {fingerprint}; no body.
 func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	userParam
-	Fingerprint string `path:"fingerprint" doc:"SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')"`
+	Fingerprint string `path:"fingerprint" doc:"SHA256 fingerprint as returned by the list, e.g. SHA256:abc…; contains '/' and '+', which are percent-encoded in the path"`
 }) (TaskResult, error) {
 	name := in.Name
 	if name == "" || !validUnixName(name) {

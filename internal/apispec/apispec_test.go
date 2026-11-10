@@ -272,7 +272,8 @@ func TestSpecDocument(t *testing.T) {
 	paths := doc["paths"].(map[string]any)
 
 	get := paths["/api/things/{name}"].(map[string]any)["get"].(map[string]any)
-	if get["operationId"] != "thingsGet" || get["x-fern-sdk-group-name"] != "things" || get["x-fern-sdk-method-name"] != "get" {
+	if get["operationId"] != "thingsGet" || get["x-fern-sdk-group-name"] != "things" || get["x-fern-sdk-method-name"] != "get" ||
+		get["x-forge-group-name"] != "things" || get["x-forge-method-name"] != "get" {
 		t.Errorf("get metadata: %v", get)
 	}
 	if got := jsonOf(get["parameters"]); got != `[{"description":"dataset name","in":"path","name":"name","required":true,"schema":{"description":"dataset name","type":"string"}},{"in":"query","name":"after","required":false,"schema":{"type":"integer"}},{"in":"query","name":"must","required":true,"schema":{"type":"string"}}]` {
@@ -310,7 +311,7 @@ func TestSpecDocument(t *testing.T) {
 	if got := jsonOf(m["security"]); got != `[]` {
 		t.Errorf("public security = %s", got)
 	}
-	if m["x-forge-internal"] != true {
+	if m["x-forge-skip"] != true || m["x-fern-ignore"] != true {
 		t.Error("internal flag missing")
 	}
 	if _, ok := m["responses"].(map[string]any)["401"]; ok {

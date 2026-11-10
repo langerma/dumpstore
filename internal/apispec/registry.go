@@ -64,7 +64,7 @@ type Route struct {
 	ResponseType string // success content type; "" means JSON
 
 	Public   bool // no authentication required (security: [])
-	Internal bool // x-forge-internal: not part of generated SDKs
+	Internal bool // x-forge-skip + x-fern-ignore: not part of generated SDKs or SDK docs
 
 	Handler http.Handler
 }
@@ -306,6 +306,10 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 		"operationId":            r.OperationID(),
 		"summary":                r.Summary,
 		"tags":                   []any{r.Tag()},
+		// Forge reads its native keys; the Fern ones are kept for Fern and
+		// other tools (forge normalize maps them to the same values).
+		"x-forge-group-name":     r.Group,
+		"x-forge-method-name":    r.Name,
 		"x-fern-sdk-group-name":  r.Group,
 		"x-fern-sdk-method-name": r.Name,
 	}
@@ -313,7 +317,11 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 		op["description"] = r.Description
 	}
 	if r.Internal {
-		op["x-forge-internal"] = true
+		// x-forge-skip: Forge generates no method for the operation
+		// (x-forge-hidden would still generate one); x-fern-ignore is the
+		// Fern equivalent.
+		op["x-forge-skip"] = true
+		op["x-fern-ignore"] = true
 	}
 	if r.Public {
 		op["security"] = []any{}

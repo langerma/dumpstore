@@ -1,128 +1,30 @@
 # API Reference
 
-All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all request and response bodies are `application/json`.
+All endpoints are served at `http://<host>:8080`. The API is JSON over HTTP. The exceptions are the login form (`POST /auth/login`, form-encoded), the event stream (`GET /api/v1/events`, `text/event-stream`) and `GET /metrics` (Prometheus text).
 
-**Machine-readable spec:** an OpenAPI 3.1 document generated from the server's route registry is served at `GET /api/v1/openapi.json` (authenticated) and committed in the repository as [`api/openapi.json`](https://github.com/langerma/dumpstore/blob/main/api/openapi.json). Load it into any OpenAPI tool (Swagger UI, Redocly, client generators). Dataset, snapshot and device names contain `/` and `@`; generated clients percent-encode them in path parameters, which the server accepts. Some request and response bodies are still documented as generic JSON objects; they get full schemas in Phase 2 of [#181](https://github.com/langerma/dumpstore/issues/181).
+## Endpoints
 
-## Endpoint overview
+The complete endpoint list is the OpenAPI document, generated from the server's route registry, so it always matches the running version:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET    | `/api/v1/system/info`              | Host and process info |
-| GET    | `/api/v1/system/network`              | Network interfaces (name, state, MAC, MTU, IPs, speed, RX/TX) |
-| GET    | `/api/v1/system/version`              | OpenZFS version string |
-| GET    | `/api/v1/pools`                | List all pools with usage stats |
-| GET    | `/api/v1/pools/status`           | Detailed pool status with vdev tree |
-| GET    | `/api/v1/datasets`             | List all datasets and volumes |
-| GET    | `/api/v1/datasets/{name}/properties` | Editable properties for a dataset |
-| GET    | `/api/v1/snapshots`            | List all snapshots |
-| GET    | `/api/v1/snapshots/{snap}/diff`       | Files changed between snapshots (`zfs diff`) |
-| GET    | `/api/v1/pools/iostat`               | Pool I/O statistics (1-second sample) |
-| GET    | `/api/v1/system/smart`                | S.M.A.R.T. health per disk |
-| GET    | `/api/v1/events`               | Server-Sent Events stream |
-| GET    | `/api/v1/openapi.json`      | OpenAPI 3.1 description of this API |
-| GET    | `/api/v1/operations/{id}`      | Write operation record: state, steps (`?after=<seq>`), final status + result |
-| GET    | `/metrics`                  | Prometheus text exposition |
-| GET    | `/api/v1/system/schema`               | Dataset property definitions and system metadata for the current OS |
-| POST   | `/api/v1/datasets`             | Create a dataset or volume |
-| PATCH  | `/api/v1/datasets/{name}`      | Update dataset properties |
-| DELETE | `/api/v1/datasets/{name}`      | Destroy a dataset or volume |
-| POST   | `/api/v1/datasets/{name}/rename`      | Rename a dataset or volume (`{"name","new_name"}`, same parent) |
-| POST   | `/api/v1/datasets/{name}/rewrite`       | Rewrite existing blocks (`zfs rewrite`, background job) |
-| GET    | `/api/v1/datasets/{name}/userspace`     | Per-user/group space usage (`?kind=user\|group`) |
-| PUT   | `/api/v1/datasets/{name}/quotas`     | Set or remove a per-user/group quota |
-| POST   | `/api/v1/snapshots`            | Create a snapshot |
-| POST   | `/api/v1/snapshots/{snap}/clone`      | Clone a snapshot to a new dataset |
-| POST   | `/api/v1/snapshots/{snap}/send`       | Send a snapshot to a target dataset (local or remote SSH) |
-| POST   | `/api/v1/snapshots/batch-delete` | Destroy several snapshots (`{"snapshots":[...]}`) |
-| DELETE | `/api/v1/snapshots/{snap}`     | Destroy a snapshot |
-| GET    | `/api/v1/users`                | List local users |
-| POST   | `/api/v1/users`                | Create a local user |
-| PUT    | `/api/v1/users/{name}`         | Edit user (shell, groups, password) |
-| DELETE | `/api/v1/users/{name}`         | Delete user and home directory |
-| GET    | `/api/v1/users/{name}/ssh-keys` | List a user's SSH authorized keys |
-| POST   | `/api/v1/users/{name}/ssh-keys` | Add an SSH authorized key |
-| DELETE | `/api/v1/users/{name}/ssh-keys/{fingerprint}` | Remove an SSH authorized key (`{"key":"ssh-ed25519 …"}`) |
-| GET    | `/api/v1/groups`               | List local groups |
-| POST   | `/api/v1/groups`               | Create a local group |
-| PUT    | `/api/v1/groups/{name}`        | Edit group (name, GID, members) |
-| DELETE | `/api/v1/groups/{name}`        | Delete a local group |
-| GET    | `/api/v1/datasets/{name}/owner`      | Get mountpoint owner and group |
-| PUT   | `/api/v1/datasets/{name}/owner`      | Set mountpoint owner and group (both required) |
-| GET    | `/api/v1/datasets/acl-status`           | Per-dataset ACL flag (dataset → bool; `true` when `acltype` is not `off`) |
-| GET    | `/api/v1/datasets/{name}/acl`        | Get ACL entries for a dataset |
-| POST   | `/api/v1/datasets/{name}/acl/entries`        | Add or modify an ACL entry |
-| DELETE | `/api/v1/datasets/{name}/acl/entries`        | Remove an ACL entry |
-| GET    | `/api/v1/smb/shares`           | List Samba usershares, including stale ones whose path is gone (`path_missing`) |
-| PUT   | `/api/v1/smb/shares/{name}`  | Create or update a Samba usershare |
-| DELETE | `/api/v1/smb/shares/{name}`  | Remove a Samba usershare |
-| GET    | `/api/v1/smb/users`            | List users in the Samba user database (`pdbedit`) |
-| PUT   | `/api/v1/smb/users/{name}`     | Add a user to the Samba user database |
-| DELETE | `/api/v1/smb/users/{name}`     | Remove a user from the Samba user database |
-| GET    | `/api/v1/smb/status`           | Samba init state, conf path, OS, wsdd status |
-| POST   | `/api/v1/smb/init`             | Initialise Samba (back up existing config, render smb.conf) |
-| POST   | `/api/v1/smb/wsdd/apply`             | Render wsdd options from smb.conf (take over wsdd) |
-| GET    | `/api/v1/smb/homes`            | Get current SMB [homes] config |
-| PUT   | `/api/v1/smb/homes`            | Enable/update SMB [homes] section |
-| DELETE | `/api/v1/smb/homes`            | Disable/remove SMB [homes] section |
-| GET    | `/api/v1/smb/timemachine`      | List all Time Machine shares |
-| PUT   | `/api/v1/smb/timemachine/{name}`      | Create/update a Time Machine share |
-| DELETE | `/api/v1/smb/timemachine/{name}` | Remove a Time Machine share |
-| GET    | `/api/v1/devices`              | List physical block devices (vdev candidates, in-use flag) |
-| POST   | `/api/v1/pools`                | Create a pool (`zpool create`) |
-| GET    | `/api/v1/pools/importable`     | List pools available for import |
-| POST   | `/api/v1/pools/import`         | Import a pool (`zpool import [-f]`) |
-| POST   | `/api/v1/pools/{pool}/export`  | Export a pool (`zpool export`) |
-| POST   | `/api/v1/pools/{pool}/vdevs`   | Add a data vdev (`zpool add`) |
-| POST   | `/api/v1/pools/{pool}/cache`   | Add an L2ARC cache device |
-| POST   | `/api/v1/pools/{pool}/log`     | Add a SLOG log device (optionally mirrored) |
-| POST   | `/api/v1/pools/{pool}/spare`   | Add a hot spare |
-| DELETE | `/api/v1/pools/{pool}/devices/{device}` | Remove a cache/log/spare device (`zpool remove`) |
-| POST   | `/api/v1/pools/{pool}/devices/{device}/replace` | Replace a pool device (starts resilver) |
-| POST   | `/api/v1/pools/{pool}/devices/{device}/offline` | Take a pool device offline |
-| POST   | `/api/v1/pools/{pool}/devices/{device}/online`  | Bring a pool device online |
-| POST   | `/api/v1/pools/{pool}/scrub`         | Start a pool scrub |
-| DELETE | `/api/v1/pools/{pool}/scrub`         | Cancel a running pool scrub |
-| GET    | `/api/v1/pools/scrub-schedules`      | List periodic scrub schedule config |
-| PUT    | `/api/v1/pools/{pool}/scrub-schedule`| Add pool to periodic scrub schedule |
-| DELETE | `/api/v1/pools/{pool}/scrub-schedule`| Remove pool from periodic scrub schedule |
-| GET    | `/api/v1/datasets/{name}/auto-snapshot` | Get auto-snapshot property values for a dataset |
-| PUT    | `/api/v1/datasets/{name}/auto-snapshot` | Set auto-snapshot properties for a dataset |
-| GET    | `/api/v1/auto-snapshot/status`    | Auto-snapshot ownership (OS daemon vs dumpstore) |
-| POST   | `/api/v1/auto-snapshot/takeover`  | Disable the OS daemon and run snapshots from dumpstore |
-| POST   | `/api/v1/auto-snapshot/release`   | Re-enable the OS daemon and stop dumpstore's scheduler |
-| GET    | `/api/v1/auto-snapshot/schedules` | Auto-snapshot properties for all datasets |
-| GET    | `/api/v1/iscsi/targets`           | List all iSCSI targets |
-| POST   | `/api/v1/iscsi/targets`           | Create an iSCSI target for a zvol |
-| DELETE | `/api/v1/iscsi/targets/{iqn}`           | Remove an iSCSI target |
-| GET    | `/api/v1/iscsi/status`            | iSCSI backend and ctld init state |
-| POST   | `/api/v1/iscsi/init`              | Take ownership of `/etc/ctl.conf` (FreeBSD) |
-| GET    | `/api/v1/services`                | List status of all managed services |
-| POST   | `/api/v1/services/{service}/{action}` | Control a service (start/stop/restart/enable/disable) |
-| GET    | `/api/v1/replication/tasks`             | List scheduled replication tasks |
-| POST   | `/api/v1/replication/tasks`             | Create a replication task |
-| PATCH  | `/api/v1/replication/tasks/{id}`        | Update a replication task |
-| DELETE | `/api/v1/replication/tasks/{id}`        | Delete a replication task |
-| POST   | `/api/v1/replication/tasks/{id}/run`    | Fire a replication task immediately (returns 202 + job_id) |
-| GET    | `/api/v1/replication/tasks/{id}/history` | Recent run records for a task |
-| GET    | `/api/v1/jobs`                    | List background jobs |
-| GET    | `/api/v1/jobs/{id}`               | Single job status |
-| POST   | `/api/v1/jobs/{id}/cancel`        | Cancel a running job (SIGTERM, then SIGKILL) |
-| DELETE | `/api/v1/jobs/{id}`               | Remove a finished job record |
-| GET    | `/api/v1/tls`              | TLS configuration and certificate metadata |
-| POST   | `/api/v1/tls/self-signed`             | Generate a self-signed certificate |
-| PATCH  | `/api/v1/tls`              | Use an existing certificate + key from disk |
-| POST   | `/api/v1/tls/acme/issue`          | Issue a certificate via ACME (`lego`) |
-| POST   | `/api/v1/tls/acme/renew`          | Renew the ACME certificate |
-| GET    | `/login`                       | Login page |
-| POST   | `/auth/login`                  | Log in (form: `username`, `password`); sets the session cookie |
-| POST   | `/auth/logout`                 | Log out |
-| GET    | `/api/v1/auth/whoami`                  | Current identity (session or trusted-proxy `X-Remote-User`) |
-| GET    | `/api/v1/auth/config`             | Configured username and session TTL |
-| PUT   | `/api/v1/auth/password`    | Change the login password |
-| PUT   | `/api/v1/auth/username`    | Change the login username |
+- served by dumpstore at `GET /api/v1/openapi.json` (authenticated)
+- committed in the repository as [`api/openapi.json`](https://github.com/langerma/dumpstore/blob/main/api/openapi.json); CI fails when it is stale
 
----
+It lists every operation with its method and path, parameters, request and response schemas, documented error statuses, and SDK names (`operationId`; Forge's `x-forge-group-name` / `x-forge-method-name` and Fern's `x-fern-sdk-*`). CI generates and type-checks a TypeScript SDK from it with [Forge](https://github.com/cloudflare/forge). Generated SDKs percent-encode names in paths themselves. To browse it:
+
+```bash
+# a self-contained HTML reference (Redocly CLI 2.x)
+npx @redocly/cli build-docs api/openapi.json -o api-reference.html
+```
+
+Any OpenAPI 3.1 tool works as well (Swagger UI, Stoplight, client generators).
+
+Conventions that apply to every operation:
+
+- **Paths** live under `/api/v1`. Dataset, snapshot and device names contain `/` and `@`: percent-encode them as one path segment (`/api/v1/datasets/tank%2Fdata/acl`). Reverse proxies must forward `%2F` undecoded, see [[Installation]].
+- **Writes** (`POST`, `PUT`, `PATCH`, `DELETE`) accept an optional `X-Operation-ID` header and return `tasks` (the op-log steps); see [Operations](#operations) below.
+- **Errors** share one body, `{"error": "…"}`, plus `tasks` for a failed write and `conflicts` for the reference guard's `409`.
+
+The sections below describe behaviour the schema can't express: validation rules, what runs on the host, side effects and SSE topics. Where they and the spec disagree, the spec is right; please report it.
 
 ## Authentication
 
@@ -326,7 +228,7 @@ Capabilities are probed once per process; reinstalling ZFS requires a restart to
 
 ### GET /api/v1/openapi.json
 
-The OpenAPI 3.1 document for every route, generated on first request from the server's route registry (`internal/apispec`); identical to the committed `api/openapi.json` of the same version. Requires authentication like the rest of `/api`. Each operation carries `operationId`, a tag, `x-fern-sdk-group-name` and `x-fern-sdk-method-name` (SDK generation, e.g. Forge), and is marked `x-forge-internal` when it is not meant for SDKs (SSE, `/metrics`, the HTML login page, this document).
+The OpenAPI 3.1 document for every route, generated on first request from the server's route registry (`internal/apispec`); identical to the committed `api/openapi.json` of the same version. Requires authentication like the rest of `/api`. Each operation carries `operationId`, a tag, and its SDK group and method as `x-forge-group-name` / `x-forge-method-name` (Forge) and `x-fern-sdk-group-name` / `x-fern-sdk-method-name` (Fern). Operations that are not meant for SDKs (SSE, `/metrics`, the HTML login page, this document) are marked `x-forge-skip` and `x-fern-ignore`.
 
 ### GET /metrics
 

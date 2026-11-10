@@ -20,6 +20,51 @@ jobs:
           node-version: 22
       - run: npx --yes @redocly/cli@2.77.0 lint api/openapi.json
 
+  # Generates a TypeScript SDK from the committed spec with Forge
+  # (cloudflare/forge) and type-checks it (#181 Phase 4). Forge is not on npm
+  # yet, so it is built from a pinned commit; bump FORGE_REV deliberately and
+  # re-check the output. Fails on a Forge error, a client without the API's
+  # groups, or a type error in the generated code. Forge's code runs only
+  # here, from that pinned commit, with no repository credentials.
+  forge-sdk:
+    runs-on: ubuntu-latest
+    env:
+      FORGE_REV: 0d1877431691b07cbe3b042a4b64cb0bd8e81c03
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: cloudflare/forge
+          ref: ${{ env.FORGE_REV }}
+          path: forge-src
+          persist-credentials: false
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.rustup/toolchains
+            forge-src/target
+          key: forge-${{ runner.os }}-${{ env.FORGE_REV }}
+      # rustup installs the toolchain pinned in Forge's rust-toolchain.toml.
+      - run: cargo build --release --locked --bin forge
+        working-directory: forge-src
+      - run: forge-src/target/release/forge api/openapi.json --target ts --out sdk
+      - name: Client covers the API's groups
+        run: |
+          groups=$(find sdk -mindepth 1 -maxdepth 1 -type d ! -name _ | wc -l)
+          echo "generated groups: $groups"
+          test "$groups" -ge 15
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Forge types date-time fields as Temporal.Instant, which TypeScript's
+      # esnext lib declares from 7.0.
+      - run: >-
+          npx --yes -p typescript@7.0.2 tsc --noEmit --strict --skipLibCheck
+          --target esnext --module nodenext --moduleResolution nodenext --lib esnext,dom
+          sdk/index.ts
+
   build-and-test:
     runs-on: ubuntu-latest
     steps:

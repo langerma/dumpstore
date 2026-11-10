@@ -112,7 +112,7 @@ The [wiki](https://github.com/langerma/dumpstore/wiki) holds the details:
 - [Installation](https://github.com/langerma/dumpstore/wiki/Installation) — requirements per distro, install options, authentication and the config file, reverse proxies, TLS/HTTPS, command-line flags, service configuration, versioning
 - [Observability](https://github.com/langerma/dumpstore/wiki/Observability) — Prometheus metrics reference, OpenTelemetry setup (traces, logs, metrics), log and audit format
 - [Architecture](https://github.com/langerma/dumpstore/wiki/Architecture) — the read/write execution lanes, service ownership model, frontend, observability internals, project layout, testing
-- [API Reference](https://github.com/langerma/dumpstore/wiki/API-Reference) — all 112 routes with request/response examples, status codes, and the SSE event stream
+- [API Reference](https://github.com/langerma/dumpstore/wiki/API-Reference) — the OpenAPI spec for every endpoint, plus behaviour notes, request/response examples, and the SSE event stream
 - [Screenshots](https://github.com/langerma/dumpstore/wiki/Screenshots) — every tab and dialog, captured from the dev VM
 
 ## Development
