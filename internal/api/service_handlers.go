@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -30,8 +31,8 @@ func servicePlaybook() string {
 
 // getServices handles GET /api/services
 // Returns the status of all managed sharing services (Samba, NFS, iSCSI).
-func (h *Handler) getServices(w http.ResponseWriter, r *http.Request) {
-	writeJSON(r.Context(), w, system.ListServices())
+func (h *Handler) getServices(context.Context, struct{}) ([]system.ServiceStatus, error) {
+	return system.ListServices(), nil
 }
 
 // mutateService handles POST /api/services/{service}/{action}

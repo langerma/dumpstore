@@ -182,8 +182,9 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	auth.RegisterRoutes(mux, cfg, store, rl)
-	apiHandler.RegisterRoutes(mux)
+	reg := api.NewRegistry(mux)
+	auth.RegisterRoutes(reg, cfg, store, rl)
+	apiHandler.RegisterRoutes(reg)
 
 	staticDir := filepath.Join(*baseDir, "static")
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))

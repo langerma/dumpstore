@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -13,11 +14,10 @@ import (
 // getDevices handles GET /api/devices
 // Returns the physical block devices on this host, with in_use_by set to the
 // pool name for devices that currently back a vdev (best-effort matching).
-func (h *Handler) getDevices(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getDevices(context.Context, struct{}) ([]blockdev.Device, error) {
 	devs, err := blockdev.List(runtime.GOOS)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("listing block devices: %w", err), nil)
-		return
+		return nil, fmt.Errorf("listing block devices: %w", err)
 	}
 	if statuses, err := zfs.PoolStatuses(); err == nil {
 		vdevByPool := make(map[string]string)
@@ -30,7 +30,7 @@ func (h *Handler) getDevices(w http.ResponseWriter, r *http.Request) {
 		}
 		blockdev.MarkInUse(devs, vdevByPool)
 	}
-	writeJSON(r.Context(), w, devs)
+	return devs, nil
 }
 
 // replaceDevice handles POST /api/pools/{pool}/replace

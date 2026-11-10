@@ -8,6 +8,18 @@ permissions:
   contents: read
 
 jobs:
+  # Lints the committed, generated OpenAPI spec (#181). Freshness of
+  # api/openapi.json against the route registry is enforced by
+  # TestOpenAPISpec in build-and-test. Node is CI-only tooling here.
+  openapi-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npx --yes @redocly/cli@2.77.0 lint api/openapi.json
+
   build-and-test:
     runs-on: ubuntu-latest
     steps:

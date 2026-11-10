@@ -113,7 +113,7 @@ func TestMetricsCompat(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	h.RegisterRoutes(api.NewRegistry(mux))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
 	if rec.Code != 200 {

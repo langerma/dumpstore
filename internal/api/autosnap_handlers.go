@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -19,7 +20,7 @@ type autoSnapshotStatusResponse struct {
 
 // getAutoSnapshotStatus reports whether the OS daemon is active and whether
 // dumpstore's scheduler tasks are currently registered.
-func (h *Handler) getAutoSnapshotStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getAutoSnapshotStatus(context.Context, struct{}) (autoSnapshotStatusResponse, error) {
 	status := autosnap.DetectStatus()
 	if h.autosnap != nil {
 		status.DumpstoreManaged = h.autosnap.IsRegistered()
@@ -28,7 +29,7 @@ func (h *Handler) getAutoSnapshotStatus(w http.ResponseWriter, r *http.Request) 
 	if h.autosnap != nil {
 		resp.LastRuns = h.autosnap.LastRuns()
 	}
-	writeJSON(r.Context(), w, resp)
+	return resp, nil
 }
 
 // autosnapPlaybookVars carries where takeover records the systemd timers it

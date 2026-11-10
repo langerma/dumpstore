@@ -2,6 +2,8 @@
 
 All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all request and response bodies are `application/json`.
 
+**Machine-readable spec:** an OpenAPI 3.1 document generated from the server's route registry is served at `GET /api/v1/openapi.json` (authenticated) and committed in the repository as [`api/openapi.json`](https://github.com/langerma/dumpstore/blob/main/api/openapi.json). Load it into any OpenAPI tool (Swagger UI, Redocly, client generators). Dataset, snapshot and device names contain `/` and `@`; generated clients percent-encode them in path parameters, which the server accepts. Some request and response bodies are still documented as generic JSON objects; they get full schemas in Phase 2 of [#181](https://github.com/langerma/dumpstore/issues/181).
+
 ## Endpoint overview
 
 | Method | Path | Description |
@@ -18,6 +20,7 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | GET    | `/api/iostat`               | Pool I/O statistics (1-second sample) |
 | GET    | `/api/smart`                | S.M.A.R.T. health per disk |
 | GET    | `/api/events`               | Server-Sent Events stream |
+| GET    | `/api/v1/openapi.json`      | OpenAPI 3.1 description of this API |
 | GET    | `/api/operations/{id}`      | Write operation record: state, steps (`?after=<seq>`), final status + result |
 | GET    | `/metrics`                  | Prometheus text exposition |
 | GET    | `/api/schema`               | Dataset property definitions and system metadata for the current OS |
@@ -320,6 +323,10 @@ Dataset property definitions filtered for the running OS, plus host metadata the
 | `capabilities.draid` | `draid` listed in `zpool upgrade -v` |
 
 Capabilities are probed once per process; reinstalling ZFS requires a restart to update them. The same property schema is written to `playbooks/vars/zfs_allowed_values.yml` at startup for playbook validation.
+
+### GET /api/v1/openapi.json
+
+The OpenAPI 3.1 document for every route, generated on first request from the server's route registry (`internal/apispec`); identical to the committed `api/openapi.json` of the same version. Requires authentication like the rest of `/api`. Each operation carries `operationId`, a tag, `x-fern-sdk-group-name` and `x-fern-sdk-method-name` (SDK generation, e.g. Forge), and is marked `x-forge-internal` when it is not meant for SDKs (SSE, `/metrics`, the HTML login page, this document).
 
 ### GET /metrics
 

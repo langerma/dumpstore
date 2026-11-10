@@ -1,0 +1,7 @@
+# OpenAPI lint config for api/openapi.json (#181). CI runs
+#   npx @redocly/cli@<pinned> lint api/openapi.json
+# recommended-strict turns every warning into an error, so a regression in
+# the generated spec fails the build. Deliberate exceptions live in
+# .redocly.lint-ignore.yaml, each with the reason.
+extends:
+  - recommended-strict

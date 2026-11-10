@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,55 +16,32 @@ import (
 	"dumpstore/internal/zfs"
 )
 
-func (h *Handler) getPoolStatuses(w http.ResponseWriter, r *http.Request) {
-	statuses, err := zfs.PoolStatuses()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, statuses)
+func (h *Handler) getPoolStatuses(context.Context, struct{}) ([]zfs.PoolDetail, error) {
+	return zfs.PoolStatuses()
 }
 
-func (h *Handler) getPools(w http.ResponseWriter, r *http.Request) {
-	pools, err := zfs.ListPools()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, pools)
+func (h *Handler) getPools(context.Context, struct{}) ([]zfs.Pool, error) {
+	return zfs.ListPools()
 }
 
-func (h *Handler) getDatasets(w http.ResponseWriter, r *http.Request) {
-	datasets, err := zfs.ListDatasets()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, datasets)
+func (h *Handler) getDatasets(context.Context, struct{}) ([]zfs.Dataset, error) {
+	return zfs.ListDatasets()
 }
 
 // getSMART handles GET /api/smart
-func (h *Handler) getSMART(w http.ResponseWriter, r *http.Request) {
-	writeJSON(r.Context(), w, smart.Collect())
+func (h *Handler) getSMART(context.Context, struct{}) (smart.Result, error) {
+	return smart.Collect(), nil
 }
 
 // getDatasetProps handles GET /api/dataset-props/{name...}
-func (h *Handler) getDatasetProps(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
-		return
+func (h *Handler) getDatasetProps(_ context.Context, p datasetNameParam) (map[string]zfs.DatasetProp, error) {
+	if p.Name == "" {
+		return nil, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
 	}
-	if !validZFSName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
-		return
+	if !validZFSName(p.Name) {
+		return nil, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
-	props, err := zfs.GetDatasetProps(name)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, props)
+	return zfs.GetDatasetProps(p.Name)
 }
 
 // setDatasetProps handles PATCH /api/datasets/{name...}
@@ -243,22 +221,12 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) getSnapshots(w http.ResponseWriter, r *http.Request) {
-	snaps, err := zfs.ListSnapshots()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, snaps)
+func (h *Handler) getSnapshots(context.Context, struct{}) ([]zfs.Snapshot, error) {
+	return zfs.ListSnapshots()
 }
 
-func (h *Handler) getIOStat(w http.ResponseWriter, r *http.Request) {
-	stats, err := zfs.IOStats()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, stats)
+func (h *Handler) getIOStat(context.Context, struct{}) ([]zfs.IOStat, error) {
+	return zfs.IOStats()
 }
 
 // createSnapshot handles POST /api/snapshots
@@ -1045,13 +1013,12 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 // listScrubSchedules handles GET /api/scrub-schedules
 // Returns mode + schedules from the platform cron source (Linux) or
 // /etc/periodic.conf (FreeBSD).
-func (h *Handler) listScrubSchedules(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listScrubSchedules(context.Context, struct{}) (zfs.ScrubScheduleList, error) {
 	list, err := zfs.ScrubSchedules()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("reading scrub schedules: %w", err), nil)
-		return
+		return list, fmt.Errorf("reading scrub schedules: %w", err)
 	}
-	writeJSON(r.Context(), w, list)
+	return list, nil
 }
 
 // setScrubSchedule handles PUT /api/scrub-schedule/{pool}
@@ -1122,13 +1089,8 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 // listAutoSnapshotSchedules handles GET /api/auto-snapshot-schedules
-func (h *Handler) listAutoSnapshotSchedules(w http.ResponseWriter, r *http.Request) {
-	props, err := zfs.ListAutoSnapshotProps()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, props)
+func (h *Handler) listAutoSnapshotSchedules(context.Context, struct{}) (map[string]zfs.AutoSnapshotProps, error) {
+	return zfs.ListAutoSnapshotProps()
 }
 
 // publishAutoSnapshot re-reads all auto-snapshot props and pushes autosnapshot.query
@@ -1165,18 +1127,11 @@ func validAutoSnapValue(prop, val string) bool {
 }
 
 // getAutoSnapshotProps handles GET /api/auto-snapshot/{name...}
-func (h *Handler) getAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !validZFSName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
-		return
+func (h *Handler) getAutoSnapshotProps(_ context.Context, p datasetNameParam) (zfs.AutoSnapshotProps, error) {
+	if !validZFSName(p.Name) {
+		return zfs.AutoSnapshotProps{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
-	props, err := zfs.GetAutoSnapshotProps(name)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, props)
+	return zfs.GetAutoSnapshotProps(p.Name)
 }
 
 // setAutoSnapshotProps handles PUT /api/auto-snapshot/{name...}

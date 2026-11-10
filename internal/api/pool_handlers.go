@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -252,13 +253,8 @@ func (h *Handler) removePoolDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 // getImportablePools handles GET /api/pools/importable
-func (h *Handler) getImportablePools(w http.ResponseWriter, r *http.Request) {
-	pools, err := zfs.ImportablePools()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, pools)
+func (h *Handler) getImportablePools(context.Context, struct{}) ([]zfs.ImportablePool, error) {
+	return zfs.ImportablePools()
 }
 
 // importPool handles POST /api/pools/import

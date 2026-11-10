@@ -1,7 +1,7 @@
 BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
-        test-integration screenshots release \
+        test-integration screenshots release openapi \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -9,6 +9,11 @@ all: build
 
 build:
 	go build -buildvcs=false -ldflags="-s -w -X main.version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o $(BINARY) .
+
+# Regenerate api/openapi.json from the route registry (#181). CI fails
+# (TestOpenAPISpec) when the committed file is stale.
+openapi:
+	go test ./internal/api/ -run '^TestOpenAPISpec$$' -update
 
 # Cross-build and package every release target into dist/.
 # Single source of truth for the release recipe — used by release.yml on

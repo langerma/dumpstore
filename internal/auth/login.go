@@ -4,17 +4,56 @@ import (
 	"encoding/json"
 	"html"
 	"net/http"
+	"reflect"
+
+	"dumpstore/internal/apispec"
 )
 
 const sessionCookieName = "dumpstore_session"
 
-// RegisterRoutes registers the login/logout and auth config endpoints on mux.
-func RegisterRoutes(mux *http.ServeMux, cfg *Config, store *SessionStore, rl *RateLimiter) {
-	mux.HandleFunc("GET /login", handleLoginPage(cfg, store))
-	mux.HandleFunc("POST /auth/login", handleLogin(cfg, store, rl))
-	mux.HandleFunc("POST /auth/logout", handleLogout(store))
-	mux.HandleFunc("GET /api/whoami", handleWhoami(cfg, store))
-	mux.HandleFunc("GET /api/auth/config", handleAuthConfig(cfg))
+// loginForm is the POST /auth/login form body.
+type loginForm struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type loginPageParams struct {
+	Error string `query:"error" doc:"Message to show above the form"`
+}
+
+// RegisterRoutes registers the login/logout and auth config endpoints, with
+// their OpenAPI metadata (#181).
+func RegisterRoutes(reg *apispec.Registry, cfg *Config, store *SessionStore, rl *RateLimiter) {
+	reg.Handle(apispec.Route{
+		Method: "GET", Path: "/login", Group: "auth", Name: "loginPage",
+		Summary: "HTML login form", Params: reflect.TypeFor[loginPageParams](),
+		ResponseType: apispec.HTML, Public: true, Internal: true,
+		Handler: handleLoginPage(cfg, store),
+	})
+	reg.Handle(apispec.Route{
+		Method: "POST", Path: "/auth/login", Group: "auth", Name: "login",
+		Summary:     "Log in and receive a session cookie",
+		Description: "Browser form login: redirects to / on success (setting the dumpstore_session cookie) or back to /login?error=… on failure. Rate-limited per client IP.",
+		Request:     reflect.TypeFor[loginForm](), RequestType: apispec.Form,
+		Status: http.StatusFound, Public: true,
+		Handler: handleLogin(cfg, store, rl),
+	})
+	reg.Handle(apispec.Route{
+		Method: "POST", Path: "/auth/logout", Group: "auth", Name: "logout",
+		Summary: "Log out (clears the session) and redirect to /login",
+		Status:  http.StatusFound, Public: true,
+		Handler: handleLogout(store),
+	})
+	reg.Handle(apispec.Route{
+		Method: "GET", Path: "/api/whoami", Group: "auth", Name: "whoami",
+		Summary: "The authenticated user", Response: reflect.TypeFor[map[string]string](),
+		Handler: handleWhoami(cfg, store),
+	})
+	reg.Handle(apispec.Route{
+		Method: "GET", Path: "/api/auth/config", Group: "auth", Name: "config",
+		Summary: "Admin username and session lifetime", Response: reflect.TypeFor[map[string]string](),
+		Handler: handleAuthConfig(cfg),
+	})
 }
 
 // handleLoginPage serves a self-contained HTML login form.
