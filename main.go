@@ -194,14 +194,7 @@ func main() {
 	if otelx.Enabled() {
 		// Outermost so RequestLogger's context carries the span. Static assets
 		// and the hours-long SSE stream are not worth a span each.
-		handler = otelhttp.NewHandler(handler, "dumpstore",
-			otelhttp.WithFilter(func(r *http.Request) bool {
-				if r.URL.Path == "/api/events" {
-					return false
-				}
-				return strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/")
-			}),
-		)
+		handler = otelhttp.NewHandler(handler, "dumpstore", otelhttp.WithFilter(traceRequest))
 	}
 
 	if *tlsFlag && cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
@@ -273,4 +266,14 @@ func checkDeps(baseDir string) error {
 		return fmt.Errorf("static directory not found at %s: %w", staticDir, err)
 	}
 	return nil
+}
+
+// traceRequest selects the requests that get a server span: API and auth
+// endpoints. Static assets are not worth a span each, and the SSE stream
+// would produce one span per open browser tab lasting hours.
+func traceRequest(r *http.Request) bool {
+	if r.URL.Path == "/api/v1/events" {
+		return false
+	}
+	return strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/")
 }
