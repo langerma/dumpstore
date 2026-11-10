@@ -378,7 +378,7 @@ type CloneSnapshotRequest struct {
 
 // snapshotParam is a snapshot name path parameter.
 type snapshotParam struct {
-	Snapshot string `path:"snap" doc:"Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')"`
+	Snapshot string `path:"snap" doc:"Snapshot name, e.g. tank/data@snap1; percent-encoded in the path (tank%2Fdata%40snap1)"`
 }
 
 // CloneSnapshotResult is the POST /api/v1/snapshots/{snap}/clone response.

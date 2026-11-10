@@ -23,10 +23,10 @@ import (
 // '/' or '@' must be percent-encoded by clients.
 type (
 	datasetNameParam struct {
-		Name string `path:"name" doc:"Dataset name, e.g. tank/data (percent-encode '/')"`
+		Name string `path:"name" doc:"Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)"`
 	}
 	datasetParam struct {
-		Dataset string `path:"name" doc:"Dataset name, e.g. tank/data (percent-encode '/')"`
+		Dataset string `path:"name" doc:"Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)"`
 	}
 	idParam struct {
 		ID string `path:"id"`
@@ -36,7 +36,7 @@ type (
 	}
 	poolDeviceParam struct {
 		Pool   string `path:"pool" doc:"Pool name"`
-		Device string `path:"device" doc:"Device path or vdev name (percent-encode '/')"`
+		Device string `path:"device" doc:"Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)"`
 	}
 	userParam struct {
 		Name string `path:"name" doc:"User name"`
@@ -55,23 +55,23 @@ type (
 		Action  string `path:"action" enum:"start,stop,restart,enable,disable"`
 	}
 	deleteDatasetParams struct {
-		Name      string `path:"name" doc:"Dataset name, e.g. tank/data (percent-encode '/')"`
+		Name      string `path:"name" doc:"Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)"`
 		Recursive string `query:"recursive" enum:"true,false" doc:"Also destroy descendant datasets and snapshots (only the exact value true enables it)"`
 	}
 	deleteSnapshotParams struct {
-		Snapshot  string `path:"snap" doc:"Snapshot name, e.g. tank/data@before (percent-encode '/' and '@')"`
+		Snapshot  string `path:"snap" doc:"Snapshot name, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)"`
 		Recursive string `query:"recursive" enum:"true,false" doc:"Also destroy same-named snapshots of descendant datasets (only the exact value true enables it)"`
 	}
 	userSpaceParams struct {
-		Name string `path:"name" doc:"Dataset name, e.g. tank/data (percent-encode '/')"`
+		Name string `path:"name" doc:"Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)"`
 		Kind string `query:"kind" enum:"user,group" doc:"Report per-user (default) or per-group usage"`
 	}
 	snapshotDiffParams struct {
-		From string `path:"snap" doc:"Snapshot to diff from, e.g. tank/data@before (percent-encode '/' and '@')"`
+		From string `path:"snap" doc:"Snapshot to diff from, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)"`
 		To   string `query:"to" doc:"Later snapshot of the same dataset; omit to diff against the live filesystem"`
 	}
 	removeACLParams struct {
-		Dataset   string `path:"name" doc:"Dataset name, e.g. tank/data (percent-encode '/')"`
+		Dataset   string `path:"name" doc:"Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)"`
 		Entry     string `query:"entry" required:"true" doc:"ACL entry to remove, in the form returned by GET /api/v1/datasets/{name}/acl"`
 		Recursive string `query:"recursive" enum:"true,false" doc:"Apply to all files below the mountpoint (only the exact value true enables it)"`
 	}

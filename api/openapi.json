@@ -3133,7 +3133,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "config"
+        "x-fern-sdk-method-name": "config",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "config"
       }
     },
     "/api/v1/auth/password": {
@@ -3192,7 +3194,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "setPassword"
+        "x-fern-sdk-method-name": "setPassword",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "setPassword"
       }
     },
     "/api/v1/auth/username": {
@@ -3250,7 +3254,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "setUsername"
+        "x-fern-sdk-method-name": "setUsername",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "setUsername"
       }
     },
     "/api/v1/auth/whoami": {
@@ -3279,7 +3285,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "whoami"
+        "x-fern-sdk-method-name": "whoami",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "whoami"
       }
     },
     "/api/v1/auto-snapshot/release": {
@@ -3327,7 +3335,9 @@
           "autoSnapshot"
         ],
         "x-fern-sdk-group-name": "autoSnapshot",
-        "x-fern-sdk-method-name": "release"
+        "x-fern-sdk-method-name": "release",
+        "x-forge-group-name": "autoSnapshot",
+        "x-forge-method-name": "release"
       }
     },
     "/api/v1/auto-snapshot/schedules": {
@@ -3362,7 +3372,9 @@
           "autoSnapshot"
         ],
         "x-fern-sdk-group-name": "autoSnapshot",
-        "x-fern-sdk-method-name": "listSchedules"
+        "x-fern-sdk-method-name": "listSchedules",
+        "x-forge-group-name": "autoSnapshot",
+        "x-forge-method-name": "listSchedules"
       }
     },
     "/api/v1/auto-snapshot/status": {
@@ -3391,7 +3403,9 @@
           "autoSnapshot"
         ],
         "x-fern-sdk-group-name": "autoSnapshot",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-method-name": "status",
+        "x-forge-group-name": "autoSnapshot",
+        "x-forge-method-name": "status"
       }
     },
     "/api/v1/auto-snapshot/takeover": {
@@ -3439,7 +3453,9 @@
           "autoSnapshot"
         ],
         "x-fern-sdk-group-name": "autoSnapshot",
-        "x-fern-sdk-method-name": "takeover"
+        "x-fern-sdk-method-name": "takeover",
+        "x-forge-group-name": "autoSnapshot",
+        "x-forge-method-name": "takeover"
       }
     },
     "/api/v1/datasets": {
@@ -3474,7 +3490,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "datasetsCreate",
@@ -3530,7 +3548,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/datasets/acl-status": {
@@ -3565,7 +3585,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-method-name": "status",
+        "x-forge-group-name": "datasets.acl",
+        "x-forge-method-name": "status"
       }
     },
     "/api/v1/datasets/{name}": {
@@ -3574,12 +3596,12 @@
         "operationId": "datasetsDelete",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -3641,19 +3663,21 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "delete"
       },
       "patch": {
         "description": "A mountpoint change is refused with 409 while shares reference the moving paths (#183).",
         "operationId": "datasetsUpdate",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -3714,7 +3738,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "update"
+        "x-fern-sdk-method-name": "update",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "update"
       }
     },
     "/api/v1/datasets/{name}/acl": {
@@ -3722,12 +3748,12 @@
         "operationId": "datasetsAclGet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           }
@@ -3765,7 +3791,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "datasets.acl",
+        "x-forge-method-name": "get"
       }
     },
     "/api/v1/datasets/{name}/acl/entries": {
@@ -3773,12 +3801,12 @@
         "operationId": "datasetsAclRemoveEntry",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -3850,18 +3878,20 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "removeEntry"
+        "x-fern-sdk-method-name": "removeEntry",
+        "x-forge-group-name": "datasets.acl",
+        "x-forge-method-name": "removeEntry"
       },
       "post": {
         "operationId": "datasetsAclAddEntry",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -3919,7 +3949,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "addEntry"
+        "x-fern-sdk-method-name": "addEntry",
+        "x-forge-group-name": "datasets.acl",
+        "x-forge-method-name": "addEntry"
       }
     },
     "/api/v1/datasets/{name}/auto-snapshot": {
@@ -3927,12 +3959,12 @@
         "operationId": "datasetsAutoSnapshotGet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           }
@@ -3963,18 +3995,20 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.autoSnapshot",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "datasets.autoSnapshot",
+        "x-forge-method-name": "get"
       },
       "put": {
         "operationId": "datasetsAutoSnapshotSet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4035,7 +4069,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.autoSnapshot",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "datasets.autoSnapshot",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/datasets/{name}/owner": {
@@ -4043,12 +4079,12 @@
         "operationId": "datasetsOwnerGet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           }
@@ -4079,18 +4115,20 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.owner",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "datasets.owner",
+        "x-forge-method-name": "get"
       },
       "put": {
         "operationId": "datasetsOwnerSet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4148,7 +4186,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.owner",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "datasets.owner",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/datasets/{name}/properties": {
@@ -4156,12 +4196,12 @@
         "operationId": "datasetsGetProperties",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           }
@@ -4198,7 +4238,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "getProperties"
+        "x-fern-sdk-method-name": "getProperties",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "getProperties"
       }
     },
     "/api/v1/datasets/{name}/quotas": {
@@ -4206,12 +4248,12 @@
         "operationId": "datasetsQuotasSet",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4269,7 +4311,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.quotas",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "datasets.quotas",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/datasets/{name}/rename": {
@@ -4277,12 +4321,12 @@
         "operationId": "datasetsRename",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4340,7 +4384,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "rename"
+        "x-fern-sdk-method-name": "rename",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "rename"
       }
     },
     "/api/v1/datasets/{name}/rewrite": {
@@ -4348,12 +4394,12 @@
         "operationId": "datasetsRewrite",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4411,7 +4457,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "rewrite"
+        "x-fern-sdk-method-name": "rewrite",
+        "x-forge-group-name": "datasets",
+        "x-forge-method-name": "rewrite"
       }
     },
     "/api/v1/datasets/{name}/userspace": {
@@ -4419,12 +4467,12 @@
         "operationId": "datasetsQuotasUsage",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "Dataset name, e.g. tank/data; percent-encoded in the path (tank%2Fdata)",
               "type": "string"
             }
           },
@@ -4472,7 +4520,9 @@
           "datasets"
         ],
         "x-fern-sdk-group-name": "datasets.quotas",
-        "x-fern-sdk-method-name": "usage"
+        "x-fern-sdk-method-name": "usage",
+        "x-forge-group-name": "datasets.quotas",
+        "x-forge-method-name": "usage"
       }
     },
     "/api/v1/devices": {
@@ -4507,7 +4557,9 @@
           "devices"
         ],
         "x-fern-sdk-group-name": "devices",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "devices",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/events": {
@@ -4551,9 +4603,12 @@
         "tags": [
           "events"
         ],
+        "x-fern-ignore": true,
         "x-fern-sdk-group-name": "events",
         "x-fern-sdk-method-name": "stream",
-        "x-forge-internal": true
+        "x-forge-group-name": "events",
+        "x-forge-method-name": "stream",
+        "x-forge-skip": true
       }
     },
     "/api/v1/groups": {
@@ -4588,7 +4643,9 @@
           "groups"
         ],
         "x-fern-sdk-group-name": "groups",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "groups",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "groupsCreate",
@@ -4644,7 +4701,9 @@
           "groups"
         ],
         "x-fern-sdk-group-name": "groups",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "groups",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/groups/{name}": {
@@ -4708,7 +4767,9 @@
           "groups"
         ],
         "x-fern-sdk-group-name": "groups",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "groups",
+        "x-forge-method-name": "delete"
       },
       "put": {
         "operationId": "groupsUpdate",
@@ -4780,7 +4841,9 @@
           "groups"
         ],
         "x-fern-sdk-group-name": "groups",
-        "x-fern-sdk-method-name": "update"
+        "x-fern-sdk-method-name": "update",
+        "x-forge-group-name": "groups",
+        "x-forge-method-name": "update"
       }
     },
     "/api/v1/iscsi/init": {
@@ -4828,7 +4891,9 @@
           "iscsi"
         ],
         "x-fern-sdk-group-name": "iscsi",
-        "x-fern-sdk-method-name": "init"
+        "x-fern-sdk-method-name": "init",
+        "x-forge-group-name": "iscsi",
+        "x-forge-method-name": "init"
       }
     },
     "/api/v1/iscsi/status": {
@@ -4857,7 +4922,9 @@
           "iscsi"
         ],
         "x-fern-sdk-group-name": "iscsi",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-method-name": "status",
+        "x-forge-group-name": "iscsi",
+        "x-forge-method-name": "status"
       }
     },
     "/api/v1/iscsi/targets": {
@@ -4892,7 +4959,9 @@
           "iscsi"
         ],
         "x-fern-sdk-group-name": "iscsi.targets",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "iscsi.targets",
+        "x-forge-method-name": "list"
       },
       "post": {
         "description": "On FreeBSD, refused with 409 until POST /api/v1/iscsi/init has run, or when the IQN or zvol is already exported.",
@@ -4949,7 +5018,9 @@
           "iscsi"
         ],
         "x-fern-sdk-group-name": "iscsi.targets",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "iscsi.targets",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/iscsi/targets/{iqn}": {
@@ -5011,7 +5082,9 @@
           "iscsi"
         ],
         "x-fern-sdk-group-name": "iscsi.targets",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "iscsi.targets",
+        "x-forge-method-name": "delete"
       }
     },
     "/api/v1/jobs": {
@@ -5046,7 +5119,9 @@
           "jobs"
         ],
         "x-fern-sdk-group-name": "jobs",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "jobs",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/jobs/{id}": {
@@ -5096,7 +5171,9 @@
           "jobs"
         ],
         "x-fern-sdk-group-name": "jobs",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "jobs",
+        "x-forge-method-name": "delete"
       },
       "get": {
         "operationId": "jobsGet",
@@ -5136,7 +5213,9 @@
           "jobs"
         ],
         "x-fern-sdk-group-name": "jobs",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "jobs",
+        "x-forge-method-name": "get"
       }
     },
     "/api/v1/jobs/{id}/cancel": {
@@ -5186,7 +5265,9 @@
           "jobs"
         ],
         "x-fern-sdk-group-name": "jobs",
-        "x-fern-sdk-method-name": "cancel"
+        "x-fern-sdk-method-name": "cancel",
+        "x-forge-group-name": "jobs",
+        "x-forge-method-name": "cancel"
       }
     },
     "/api/v1/openapi.json": {
@@ -5218,9 +5299,12 @@
         "tags": [
           "meta"
         ],
+        "x-fern-ignore": true,
         "x-fern-sdk-group-name": "meta",
         "x-fern-sdk-method-name": "openapi",
-        "x-forge-internal": true
+        "x-forge-group-name": "meta",
+        "x-forge-method-name": "openapi",
+        "x-forge-skip": true
       }
     },
     "/api/v1/operations/{id}": {
@@ -5279,7 +5363,9 @@
           "operations"
         ],
         "x-fern-sdk-group-name": "operations",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "operations",
+        "x-forge-method-name": "get"
       }
     },
     "/api/v1/pools": {
@@ -5314,7 +5400,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "poolsCreate",
@@ -5370,7 +5458,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/pools/import": {
@@ -5428,7 +5518,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "import"
+        "x-fern-sdk-method-name": "import",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "import"
       }
     },
     "/api/v1/pools/importable": {
@@ -5463,7 +5555,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "listImportable"
+        "x-fern-sdk-method-name": "listImportable",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "listImportable"
       }
     },
     "/api/v1/pools/iostat": {
@@ -5498,7 +5592,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "iostat"
+        "x-fern-sdk-method-name": "iostat",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "iostat"
       }
     },
     "/api/v1/pools/scrub-schedules": {
@@ -5527,7 +5623,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "listSchedules"
+        "x-fern-sdk-method-name": "listSchedules",
+        "x-forge-group-name": "pools.scrub",
+        "x-forge-method-name": "listSchedules"
       }
     },
     "/api/v1/pools/status": {
@@ -5562,7 +5660,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-method-name": "status",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "status"
       }
     },
     "/api/v1/pools/{pool}/cache": {
@@ -5630,7 +5730,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "addCache"
+        "x-fern-sdk-method-name": "addCache",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "addCache"
       }
     },
     "/api/v1/pools/{pool}/devices/{device}": {
@@ -5648,12 +5750,12 @@
             }
           },
           {
-            "description": "Device path or vdev name (percent-encode '/')",
+            "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
             "in": "path",
             "name": "device",
             "required": true,
             "schema": {
-              "description": "Device path or vdev name (percent-encode '/')",
+              "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
               "type": "string"
             }
           },
@@ -5698,7 +5800,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "remove"
+        "x-fern-sdk-method-name": "remove",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "remove"
       }
     },
     "/api/v1/pools/{pool}/devices/{device}/offline": {
@@ -5716,12 +5820,12 @@
             }
           },
           {
-            "description": "Device path or vdev name (percent-encode '/')",
+            "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
             "in": "path",
             "name": "device",
             "required": true,
             "schema": {
-              "description": "Device path or vdev name (percent-encode '/')",
+              "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
               "type": "string"
             }
           },
@@ -5766,7 +5870,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "offline"
+        "x-fern-sdk-method-name": "offline",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "offline"
       }
     },
     "/api/v1/pools/{pool}/devices/{device}/online": {
@@ -5784,12 +5890,12 @@
             }
           },
           {
-            "description": "Device path or vdev name (percent-encode '/')",
+            "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
             "in": "path",
             "name": "device",
             "required": true,
             "schema": {
-              "description": "Device path or vdev name (percent-encode '/')",
+              "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
               "type": "string"
             }
           },
@@ -5834,7 +5940,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "online"
+        "x-fern-sdk-method-name": "online",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "online"
       }
     },
     "/api/v1/pools/{pool}/devices/{device}/replace": {
@@ -5852,12 +5960,12 @@
             }
           },
           {
-            "description": "Device path or vdev name (percent-encode '/')",
+            "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
             "in": "path",
             "name": "device",
             "required": true,
             "schema": {
-              "description": "Device path or vdev name (percent-encode '/')",
+              "description": "Device path or vdev name, e.g. /dev/sdb; percent-encoded in the path (%2Fdev%2Fsdb)",
               "type": "string"
             }
           },
@@ -5912,7 +6020,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "replace"
+        "x-fern-sdk-method-name": "replace",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "replace"
       }
     },
     "/api/v1/pools/{pool}/export": {
@@ -5970,7 +6080,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "export"
+        "x-fern-sdk-method-name": "export",
+        "x-forge-group-name": "pools",
+        "x-forge-method-name": "export"
       }
     },
     "/api/v1/pools/{pool}/log": {
@@ -6038,7 +6150,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "addLog"
+        "x-fern-sdk-method-name": "addLog",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "addLog"
       }
     },
     "/api/v1/pools/{pool}/scrub": {
@@ -6096,7 +6210,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "cancel"
+        "x-fern-sdk-method-name": "cancel",
+        "x-forge-group-name": "pools.scrub",
+        "x-forge-method-name": "cancel"
       },
       "post": {
         "operationId": "poolsScrubStart",
@@ -6152,7 +6268,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "start"
+        "x-fern-sdk-method-name": "start",
+        "x-forge-group-name": "pools.scrub",
+        "x-forge-method-name": "start"
       }
     },
     "/api/v1/pools/{pool}/scrub-schedule": {
@@ -6210,7 +6328,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "removeSchedule"
+        "x-fern-sdk-method-name": "removeSchedule",
+        "x-forge-group-name": "pools.scrub",
+        "x-forge-method-name": "removeSchedule"
       },
       "put": {
         "operationId": "poolsScrubSetSchedule",
@@ -6276,7 +6396,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "setSchedule"
+        "x-fern-sdk-method-name": "setSchedule",
+        "x-forge-group-name": "pools.scrub",
+        "x-forge-method-name": "setSchedule"
       }
     },
     "/api/v1/pools/{pool}/spare": {
@@ -6344,7 +6466,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "addSpare"
+        "x-fern-sdk-method-name": "addSpare",
+        "x-forge-group-name": "pools.devices",
+        "x-forge-method-name": "addSpare"
       }
     },
     "/api/v1/pools/{pool}/vdevs": {
@@ -6412,7 +6536,9 @@
           "pools"
         ],
         "x-fern-sdk-group-name": "pools.vdevs",
-        "x-fern-sdk-method-name": "add"
+        "x-fern-sdk-method-name": "add",
+        "x-forge-group-name": "pools.vdevs",
+        "x-forge-method-name": "add"
       }
     },
     "/api/v1/replication/tasks": {
@@ -6447,7 +6573,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "replicationCreate",
@@ -6503,7 +6631,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/replication/tasks/{id}": {
@@ -6555,7 +6685,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "delete"
       },
       "patch": {
         "operationId": "replicationUpdate",
@@ -6622,7 +6754,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "update"
+        "x-fern-sdk-method-name": "update",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "update"
       }
     },
     "/api/v1/replication/tasks/{id}/history": {
@@ -6673,7 +6807,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "history"
+        "x-fern-sdk-method-name": "history",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "history"
       }
     },
     "/api/v1/replication/tasks/{id}/run": {
@@ -6732,7 +6868,9 @@
           "replication"
         ],
         "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "run"
+        "x-fern-sdk-method-name": "run",
+        "x-forge-group-name": "replication",
+        "x-forge-method-name": "run"
       }
     },
     "/api/v1/services": {
@@ -6767,7 +6905,9 @@
           "services"
         ],
         "x-fern-sdk-group-name": "services",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "services",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/services/{service}/{action}": {
@@ -6844,7 +6984,9 @@
           "services"
         ],
         "x-fern-sdk-group-name": "services",
-        "x-fern-sdk-method-name": "control"
+        "x-fern-sdk-method-name": "control",
+        "x-forge-group-name": "services",
+        "x-forge-method-name": "control"
       }
     },
     "/api/v1/smb/homes": {
@@ -6892,7 +7034,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.homes",
-        "x-fern-sdk-method-name": "disable"
+        "x-fern-sdk-method-name": "disable",
+        "x-forge-group-name": "smb.homes",
+        "x-forge-method-name": "disable"
       },
       "get": {
         "operationId": "smbHomesGet",
@@ -6919,7 +7063,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.homes",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "smb.homes",
+        "x-forge-method-name": "get"
       },
       "put": {
         "operationId": "smbHomesSet",
@@ -6975,7 +7121,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.homes",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "smb.homes",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/smb/init": {
@@ -7026,7 +7174,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb",
-        "x-fern-sdk-method-name": "init"
+        "x-fern-sdk-method-name": "init",
+        "x-forge-group-name": "smb",
+        "x-forge-method-name": "init"
       }
     },
     "/api/v1/smb/shares": {
@@ -7064,7 +7214,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "smb.shares",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/smb/shares/{name}": {
@@ -7125,7 +7277,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "smb.shares",
+        "x-forge-method-name": "delete"
       },
       "put": {
         "operationId": "smbSharesSet",
@@ -7191,7 +7345,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "smb.shares",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/smb/status": {
@@ -7220,7 +7376,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-method-name": "status",
+        "x-forge-group-name": "smb",
+        "x-forge-method-name": "status"
       }
     },
     "/api/v1/smb/timemachine": {
@@ -7255,7 +7413,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.timeMachine",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "smb.timeMachine",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/smb/timemachine/{name}": {
@@ -7313,7 +7473,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.timeMachine",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "smb.timeMachine",
+        "x-forge-method-name": "delete"
       },
       "put": {
         "operationId": "smbTimeMachineSet",
@@ -7379,7 +7541,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.timeMachine",
-        "x-fern-sdk-method-name": "set"
+        "x-fern-sdk-method-name": "set",
+        "x-forge-group-name": "smb.timeMachine",
+        "x-forge-method-name": "set"
       }
     },
     "/api/v1/smb/users": {
@@ -7408,7 +7572,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "smb.users",
+        "x-forge-method-name": "list"
       }
     },
     "/api/v1/smb/users/{name}": {
@@ -7466,7 +7632,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "remove"
+        "x-fern-sdk-method-name": "remove",
+        "x-forge-group-name": "smb.users",
+        "x-forge-method-name": "remove"
       },
       "put": {
         "operationId": "smbUsersAdd",
@@ -7532,7 +7700,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "add"
+        "x-fern-sdk-method-name": "add",
+        "x-forge-group-name": "smb.users",
+        "x-forge-method-name": "add"
       }
     },
     "/api/v1/smb/wsdd/apply": {
@@ -7580,7 +7750,9 @@
           "smb"
         ],
         "x-fern-sdk-group-name": "smb.wsdd",
-        "x-fern-sdk-method-name": "apply"
+        "x-fern-sdk-method-name": "apply",
+        "x-forge-group-name": "smb.wsdd",
+        "x-forge-method-name": "apply"
       }
     },
     "/api/v1/snapshots": {
@@ -7615,7 +7787,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "snapshotsCreate",
@@ -7674,7 +7848,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/snapshots/batch-delete": {
@@ -7732,7 +7908,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "deleteBatch"
+        "x-fern-sdk-method-name": "deleteBatch",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "deleteBatch"
       }
     },
     "/api/v1/snapshots/{snap}": {
@@ -7740,12 +7918,12 @@
         "operationId": "snapshotsDelete",
         "parameters": [
           {
-            "description": "Snapshot name, e.g. tank/data@before (percent-encode '/' and '@')",
+            "description": "Snapshot name, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)",
             "in": "path",
             "name": "snap",
             "required": true,
             "schema": {
-              "description": "Snapshot name, e.g. tank/data@before (percent-encode '/' and '@')",
+              "description": "Snapshot name, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)",
               "type": "string"
             }
           },
@@ -7807,7 +7985,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "delete"
       }
     },
     "/api/v1/snapshots/{snap}/clone": {
@@ -7815,12 +7995,12 @@
         "operationId": "snapshotsClone",
         "parameters": [
           {
-            "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+            "description": "Snapshot name, e.g. tank/data@snap1; percent-encoded in the path (tank%2Fdata%40snap1)",
             "in": "path",
             "name": "snap",
             "required": true,
             "schema": {
-              "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+              "description": "Snapshot name, e.g. tank/data@snap1; percent-encoded in the path (tank%2Fdata%40snap1)",
               "type": "string"
             }
           },
@@ -7875,7 +8055,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "clone"
+        "x-fern-sdk-method-name": "clone",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "clone"
       }
     },
     "/api/v1/snapshots/{snap}/diff": {
@@ -7883,12 +8065,12 @@
         "operationId": "snapshotsDiff",
         "parameters": [
           {
-            "description": "Snapshot to diff from, e.g. tank/data@before (percent-encode '/' and '@')",
+            "description": "Snapshot to diff from, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)",
             "in": "path",
             "name": "snap",
             "required": true,
             "schema": {
-              "description": "Snapshot to diff from, e.g. tank/data@before (percent-encode '/' and '@')",
+              "description": "Snapshot to diff from, e.g. tank/data@before; percent-encoded in the path (tank%2Fdata%40before)",
               "type": "string"
             }
           },
@@ -7932,7 +8114,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "diff"
+        "x-fern-sdk-method-name": "diff",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "diff"
       }
     },
     "/api/v1/snapshots/{snap}/send": {
@@ -7940,12 +8124,12 @@
         "operationId": "snapshotsSend",
         "parameters": [
           {
-            "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+            "description": "Snapshot name, e.g. tank/data@snap1; percent-encoded in the path (tank%2Fdata%40snap1)",
             "in": "path",
             "name": "snap",
             "required": true,
             "schema": {
-              "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+              "description": "Snapshot name, e.g. tank/data@snap1; percent-encoded in the path (tank%2Fdata%40snap1)",
               "type": "string"
             }
           },
@@ -8003,7 +8187,9 @@
           "snapshots"
         ],
         "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "send"
+        "x-fern-sdk-method-name": "send",
+        "x-forge-group-name": "snapshots",
+        "x-forge-method-name": "send"
       }
     },
     "/api/v1/system/info": {
@@ -8032,7 +8218,9 @@
           "system"
         ],
         "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "info"
+        "x-fern-sdk-method-name": "info",
+        "x-forge-group-name": "system",
+        "x-forge-method-name": "info"
       }
     },
     "/api/v1/system/network": {
@@ -8067,7 +8255,9 @@
           "system"
         ],
         "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "network"
+        "x-fern-sdk-method-name": "network",
+        "x-forge-group-name": "system",
+        "x-forge-method-name": "network"
       }
     },
     "/api/v1/system/schema": {
@@ -8096,7 +8286,9 @@
           "system"
         ],
         "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "schema"
+        "x-fern-sdk-method-name": "schema",
+        "x-forge-group-name": "system",
+        "x-forge-method-name": "schema"
       }
     },
     "/api/v1/system/smart": {
@@ -8125,7 +8317,9 @@
           "system"
         ],
         "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "smart"
+        "x-fern-sdk-method-name": "smart",
+        "x-forge-group-name": "system",
+        "x-forge-method-name": "smart"
       }
     },
     "/api/v1/system/version": {
@@ -8154,7 +8348,9 @@
           "system"
         ],
         "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "version"
+        "x-fern-sdk-method-name": "version",
+        "x-forge-group-name": "system",
+        "x-forge-method-name": "version"
       }
     },
     "/api/v1/tls": {
@@ -8183,7 +8379,9 @@
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "get"
+        "x-fern-sdk-method-name": "get",
+        "x-forge-group-name": "tls",
+        "x-forge-method-name": "get"
       },
       "patch": {
         "operationId": "tlsUpdate",
@@ -8239,7 +8437,9 @@
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "update"
+        "x-fern-sdk-method-name": "update",
+        "x-forge-group-name": "tls",
+        "x-forge-method-name": "update"
       }
     },
     "/api/v1/tls/acme/issue": {
@@ -8297,7 +8497,9 @@
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "acmeIssue"
+        "x-fern-sdk-method-name": "acmeIssue",
+        "x-forge-group-name": "tls",
+        "x-forge-method-name": "acmeIssue"
       }
     },
     "/api/v1/tls/acme/renew": {
@@ -8345,7 +8547,9 @@
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "acmeRenew"
+        "x-fern-sdk-method-name": "acmeRenew",
+        "x-forge-group-name": "tls",
+        "x-forge-method-name": "acmeRenew"
       }
     },
     "/api/v1/tls/self-signed": {
@@ -8403,7 +8607,9 @@
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "generateSelfSigned"
+        "x-fern-sdk-method-name": "generateSelfSigned",
+        "x-forge-group-name": "tls",
+        "x-forge-method-name": "generateSelfSigned"
       }
     },
     "/api/v1/users": {
@@ -8438,7 +8644,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "users",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "usersCreate",
@@ -8494,7 +8702,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users",
-        "x-fern-sdk-method-name": "create"
+        "x-fern-sdk-method-name": "create",
+        "x-forge-group-name": "users",
+        "x-forge-method-name": "create"
       }
     },
     "/api/v1/users/{name}": {
@@ -8558,7 +8768,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-group-name": "users",
+        "x-forge-method-name": "delete"
       },
       "put": {
         "operationId": "usersUpdate",
@@ -8630,7 +8842,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users",
-        "x-fern-sdk-method-name": "update"
+        "x-fern-sdk-method-name": "update",
+        "x-forge-group-name": "users",
+        "x-forge-method-name": "update"
       }
     },
     "/api/v1/users/{name}/ssh-keys": {
@@ -8677,7 +8891,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users.sshKeys",
-        "x-fern-sdk-method-name": "list"
+        "x-fern-sdk-method-name": "list",
+        "x-forge-group-name": "users.sshKeys",
+        "x-forge-method-name": "list"
       },
       "post": {
         "operationId": "usersSshKeysAdd",
@@ -8749,7 +8965,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users.sshKeys",
-        "x-fern-sdk-method-name": "add"
+        "x-fern-sdk-method-name": "add",
+        "x-forge-group-name": "users.sshKeys",
+        "x-forge-method-name": "add"
       }
     },
     "/api/v1/users/{name}/ssh-keys/{fingerprint}": {
@@ -8767,12 +8985,12 @@
             }
           },
           {
-            "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')",
+            "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc…; contains '/' and '+', which are percent-encoded in the path",
             "in": "path",
             "name": "fingerprint",
             "required": true,
             "schema": {
-              "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')",
+              "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc…; contains '/' and '+', which are percent-encoded in the path",
               "type": "string"
             }
           },
@@ -8823,7 +9041,9 @@
           "users"
         ],
         "x-fern-sdk-group-name": "users.sshKeys",
-        "x-fern-sdk-method-name": "remove"
+        "x-fern-sdk-method-name": "remove",
+        "x-forge-group-name": "users.sshKeys",
+        "x-forge-method-name": "remove"
       }
     },
     "/auth/login": {
@@ -8861,7 +9081,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "login"
+        "x-fern-sdk-method-name": "login",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "login"
       }
     },
     "/auth/logout": {
@@ -8888,7 +9110,9 @@
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "logout"
+        "x-fern-sdk-method-name": "logout",
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "logout"
       }
     },
     "/login": {
@@ -8926,9 +9150,12 @@
         "tags": [
           "auth"
         ],
+        "x-fern-ignore": true,
         "x-fern-sdk-group-name": "auth",
         "x-fern-sdk-method-name": "loginPage",
-        "x-forge-internal": true
+        "x-forge-group-name": "auth",
+        "x-forge-method-name": "loginPage",
+        "x-forge-skip": true
       }
     },
     "/metrics": {
@@ -8955,9 +9182,12 @@
         "tags": [
           "metrics"
         ],
+        "x-fern-ignore": true,
         "x-fern-sdk-group-name": "metrics",
         "x-fern-sdk-method-name": "scrape",
-        "x-forge-internal": true
+        "x-forge-group-name": "metrics",
+        "x-forge-method-name": "scrape",
+        "x-forge-skip": true
       }
     }
   },

@@ -4,6 +4,17 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Forge SDK check in CI** (#181, Phase 4). A new `forge-sdk` job proves the published spec is SDK-ready.
+  - **How it works:** it builds [Forge](https://github.com/cloudflare/forge) from a pinned commit, since Forge isn't on npm yet. It generates the TypeScript SDK from `api/openapi.json`, checks that the client has the API's groups, and type-checks it strictly with TypeScript 7.
+  - **Spec changes this needed:**
+    - Operations now also carry Forge's native `x-forge-group-name` / `x-forge-method-name`. Forge's generator does not read the `x-fern-sdk-*` keys we emitted, so it produced an empty client.
+    - Internal routes are marked `x-forge-skip` and `x-fern-ignore` instead of `x-forge-internal`, a key Forge itself ignores.
+    - Path parameter descriptions now say names travel percent-encoded, which generated SDKs do themselves.
+  - **Wiki:** the API Reference replaces its hand-written endpoint table with the generated spec, plus how to render it (`npx @redocly/cli build-docs`) and the conventions shared by every operation. The per-route behaviour notes stay.
+  - This completes #181.
+
 ### Changed (breaking)
 
 - **The API moved to `/api/v1`, with cleaned-up paths** (#181, Phase 3). This is a hard cut: the old paths are gone and there are no aliases.

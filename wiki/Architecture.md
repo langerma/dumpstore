@@ -93,7 +93,7 @@ Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) 
 
 ## Route registry and OpenAPI
 
-Routes are not registered on the `ServeMux` directly. Each one goes through `internal/apispec.Registry.Handle` with its metadata: SDK group and method (`x-fern-sdk-group-name` / `x-fern-sdk-method-name`, from which `operationId` and the docs tag are derived), summary, parameter, request and response types, success status, and whether it is public or internal (#181). `Registry.Spec()` builds the OpenAPI 3.1 document from exactly these registrations, reflecting JSON schemas from the Go types, so the spec cannot list a route the server doesn't serve or miss one it does.
+Routes are not registered on the `ServeMux` directly. Each one goes through `internal/apispec.Registry.Handle` with its metadata: SDK group and method (emitted as Forge's `x-forge-group-name` / `x-forge-method-name` and Fern's `x-fern-sdk-*`, and used to derive `operationId` and the docs tag), summary, parameter, request and response types, success status, and whether it is public or internal (#181). `Registry.Spec()` builds the OpenAPI 3.1 document from exactly these registrations, reflecting JSON schemas from the Go types, so the spec cannot list a route the server doesn't serve or miss one it does.
 
 Every JSON route uses the typed adapter `handle(reg, route(...), fn)` with `fn func(ctx, In) (Out, error)` (#181 Phase 2):
 - **Binding.** The adapter binds `path:"x"` / `query:"x"` fields, which may come from embedded shared param structs, and one `body:""` field (`body:"optional"` accepts an empty body).
@@ -106,6 +106,8 @@ Every JSON route uses the typed adapter `handle(reg, route(...), fn)` with `fn f
 The committed `api/openapi.json` is regenerated with `make openapi`; `TestOpenAPISpec` fails while it is stale, `TestSpecPathsResolve` requests every documented path with percent-encoded names and checks it reaches the same mux pattern, and CI lints the file with Redocly (`redocly.yaml`, `recommended-strict`). The integration suite records every JSON response it receives. After the run it validates each one against the served spec's schema for that operation and status, and fails on any 4xx status the operation doesn't list. This covers writes and error responses too.
 
 API paths live under `/api/v1` (#181 Phase 3). Every path parameter is one segment, so names are percent-encoded (`/datasets/tank%2Fdata/acl`); `TestSpecPathsResolve` requests each route with a `/`, `@` and space-containing value. The frontend builds all paths with the `v1` tagged template in `static/js/utils.js`, which encodes every interpolated value. `TestFrontendPaths` scans `static/` and fails on any path that doesn't resolve to a registered route with that method, or on a hand-written `/api/` path. HTTP metrics and span names use the matched route pattern; the Operations middleware hands the pattern back to the outer middleware.
+
+CI proves the spec is SDK-ready (#181 Phase 4): the `forge-sdk` job builds [Forge](https://github.com/cloudflare/forge) from a pinned commit (it isn't on npm yet), generates the TypeScript SDK from `api/openapi.json`, checks the client has the API's groups, and type-checks it strictly. Generated SDKs percent-encode path parameters themselves, so SDK users pass raw names. Internal routes (SSE, `/metrics`, the HTML login page, the spec itself) carry `x-forge-skip` and `x-fern-ignore`, so SDKs and SDK docs leave them out.
 
 ## Write operation request flow
 
