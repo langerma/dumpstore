@@ -13,6 +13,10 @@
 #   dumpstore_dir (path):      Base directory. Default: /usr/local/lib/dumpstore
 #   dumpstore_config (path):   Config file. Default: /usr/local/etc/dumpstore/dumpstore.conf
 #   dumpstore_logfile (path):  Log file. Default: /var/log/dumpstore.log
+#   dumpstore_args (str):      Extra dumpstore flags, e.g. "--tls" or
+#                              "--tls --tls-port 8443 --http-port 8080 -debug".
+#                              Default: "". (dumpstore_flags would go to
+#                              daemon(8), not to dumpstore.)
 #
 # OpenTelemetry export (optional): set the standard OTLP env vars for the
 # service, e.g. in rc.conf:
@@ -32,6 +36,7 @@ load_rc_config ${name}
 : ${dumpstore_dir:="/usr/local/lib/dumpstore"}
 : ${dumpstore_config:="/usr/local/etc/dumpstore/dumpstore.conf"}
 : ${dumpstore_logfile:="/var/log/dumpstore.log"}
+: ${dumpstore_args:=""}
 
 pidfile="/var/run/${name}.pid"
 procname="${dumpstore_dir}/dumpstore"
@@ -40,7 +45,8 @@ command_args="-p ${pidfile} -o ${dumpstore_logfile} -m 3 -S -T ${name} \
     ${procname} \
     -addr ${dumpstore_addr} \
     -dir ${dumpstore_dir} \
-    -config ${dumpstore_config}"
+    -config ${dumpstore_config} \
+    ${dumpstore_args}"
 
 export PATH="${PATH}:/usr/local/bin:/usr/local/sbin"
 

@@ -207,7 +207,7 @@ func main() {
 		redirectSrv := &http.Server{
 			Addr: redirectAddr,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				target := "https://" + r.Host + r.URL.RequestURI()
+				target := redirectTarget(r.Host, *tlsPort, r.URL.RequestURI())
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
 			}),
 		}
@@ -288,4 +288,24 @@ func tlsAddrs(loopbackOnly bool, tlsPort, httpPort string) (https, redirect stri
 		host = "127.0.0.1"
 	}
 	return net.JoinHostPort(host, tlsPort), net.JoinHostPort(host, httpPort)
+}
+
+// redirectTarget is the HTTPS URL the plain-HTTP listener redirects to: the
+// request's host without its HTTP port, plus the TLS port unless it is the
+// HTTPS default (a non-default --tls-port used to be dropped, sending
+// browsers to :443 where nothing listens).
+func redirectTarget(requestHost, tlsPort, requestURI string) string {
+	host := requestHost
+	if h, _, err := net.SplitHostPort(requestHost); err == nil {
+		host = h
+	} else {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	if tlsPort == "443" {
+		if strings.Contains(host, ":") { // IPv6 literal
+			host = "[" + host + "]"
+		}
+		return "https://" + host + requestURI
+	}
+	return "https://" + net.JoinHostPort(host, tlsPort) + requestURI
 }

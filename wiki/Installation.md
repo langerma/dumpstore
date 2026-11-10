@@ -201,7 +201,12 @@ sudo systemctl edit dumpstore
 sudo systemctl daemon-reload && sudo systemctl restart dumpstore
 ```
 
-On FreeBSD the shipped rc.d script has no variable for extra flags, so `--tls` cannot be set from `rc.conf` yet.
+On FreeBSD, pass the flags through `dumpstore_args`:
+
+```bash
+sysrc dumpstore_args="--tls"            # or: "--tls --tls-port 8443 --http-port 8080"
+service dumpstore restart
+```
 
 Things to know:
 
@@ -262,11 +267,13 @@ The rc script is installed to `/usr/local/etc/rc.d/dumpstore`. To customise, add
 dumpstore_enable="YES"
 dumpstore_addr=":9090"
 dumpstore_dir="/usr/local/lib/dumpstore"
+# optional: extra dumpstore flags (--tls, --tls-port, --http-port, -debug, -log-stdout=false)
+dumpstore_args="--tls"
 # optional: OpenTelemetry export (no-op when unset)
 dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.example:4318"
 ```
 
-Then restart: `service dumpstore restart`. Logs go to `/var/log/dumpstore.log` in the same format as previous releases; with OTLP enabled they are additionally exported with `trace_id` correlation.
+`dumpstore_args` is appended to dumpstore's own arguments. `dumpstore_flags` would not work: rc.subr passes it to `daemon(8)`, not to dumpstore. Then restart: `service dumpstore restart`. Logs go to `/var/log/dumpstore.log` in the same format as previous releases; with OTLP enabled they are additionally exported with `trace_id` correlation.
 
 ---
 
