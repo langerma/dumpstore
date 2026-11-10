@@ -110,6 +110,16 @@ func TestReplicationTask(t *testing.T) {
 		t.Fatalf("hold still present on %s after run: %s", run.Snapshot, out)
 	}
 
+	// A single DELETE releases a dumpstore-repl hold first, like the batch
+	// path (#197); without that, zfs destroy fails with "dataset is busy".
+	vmExec(t, "zfs hold dumpstore-repl "+run.Snapshot)
+	assertTasks(t, apiOK(t, "DELETE", v1("/snapshots/%s", run.Snapshot), nil))
+	for _, s := range listSnapshots(t) {
+		if s.Name == run.Snapshot {
+			t.Fatalf("held snapshot %s still present after single DELETE", run.Snapshot)
+		}
+	}
+
 	apiStatus(t, http.StatusNoContent, "DELETE", v1("/replication/tasks/%s", created.ID), nil)
 	if _, ok := replTaskByID(t, created.ID); ok {
 		t.Fatalf("task %s still listed after delete", created.ID)

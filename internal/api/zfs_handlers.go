@@ -770,6 +770,12 @@ func (h *Handler) deleteSnapshot(ctx context.Context, in deleteSnapshotParams) (
 		return SnapshotResult{}, errStatus(http.StatusNotFound, fmt.Errorf("snapshot %q not found", snapshot))
 	}
 
+	// Release dumpstore-repl holds first, like the batch path; the release
+	// is recursive, which covers recursive=true.
+	if h.repl != nil {
+		h.repl.ReleaseHoldsFor([]string{snapshot})
+	}
+
 	argv := []string{"zfs", "destroy"}
 	if in.Recursive == "true" {
 		argv = append(argv, "-r")
@@ -777,11 +783,12 @@ func (h *Handler) deleteSnapshot(ctx context.Context, in deleteSnapshotParams) (
 	argv = append(argv, snapshot)
 	out, err := h.runLocal(ctx, ops.Step{Name: "Destroy snapshot " + snapshot, Argv: argv})
 	auditLog(ctx, "snapshot.destroy", snapshot, err)
+	// Publish on failure too: a failed recursive destroy may have removed
+	// some of the snapshots already.
+	h.publishSnapshots()
 	if err != nil {
 		return SnapshotResult{}, localError(err, out)
 	}
-
-	h.publishSnapshots()
 	return SnapshotResult{Snapshot: snapshot, Tasks: out.Steps()}, nil
 }
 
@@ -834,10 +841,12 @@ func (h *Handler) deleteSnapshotBatch(ctx context.Context, in struct {
 	}
 	out, err := h.runLocal(ctx, steps...)
 	auditLog(ctx, "snapshot.batch_destroy", strings.Join(body.Snapshots, ","), err)
+	// Publish on failure too: the steps before (and after) the failed one
+	// destroyed their snapshots.
+	h.publishSnapshots()
 	if err != nil {
 		return DeleteSnapshotsResult{}, localError(err, out)
 	}
-	h.publishSnapshots()
 	return DeleteSnapshotsResult{Snapshots: body.Snapshots, Tasks: out.Steps()}, nil
 }
 
