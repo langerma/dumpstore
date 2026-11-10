@@ -78,6 +78,14 @@
 
 | Bug                                                                                         | Priority | Issue                                                   | Notes                                                                                                   |
 |---------------------------------------------------------------------------------------------|----------|---------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| No-password loopback safeguard bypassed with `--tls` | High | [#192](https://github.com/langerma/dumpstore/issues/192) | TLS listeners bind all interfaces even without a password |
+| Let's Encrypt certificates cannot be renewed from dumpstore | Medium | [#190](https://github.com/langerma/dumpstore/issues/190) | ACME settings not persisted; TLS-ALPN-01 needs port 443; no timer; cert loaded once |
+| FreeBSD rc.d script cannot pass `--tls` | Medium | [#191](https://github.com/langerma/dumpstore/issues/191) | No variable for extra dumpstore flags |
+| SMB init gate only checks that `smb.conf` exists | Medium | [#193](https://github.com/langerma/dumpstore/issues/193) | Distro-default smb.conf counts as initialised |
+| TLS cert paths may contain whitespace | Medium | [#194](https://github.com/langerma/dumpstore/issues/194) | Split into extra openssl/lego arguments |
+| FreeBSD: SMB writes fail while Samba is stopped | Medium | [#196](https://github.com/langerma/dumpstore/issues/196) | `reload` does not start the service |
+| `/api/whoami` trusts `X-Remote-User` without CIDR check | Low | [#195](https://github.com/langerma/dumpstore/issues/195) | Display-only today |
+| Smaller defects from the docs audit | Low | [#197](https://github.com/langerma/dumpstore/issues/197) | SSH key group, chown on `legacy`, snapshot holds, periodic.conf patching, … |
 
 ---
 
