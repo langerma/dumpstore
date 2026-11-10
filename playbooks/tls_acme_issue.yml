@@ -34,13 +34,18 @@
         mode: "0700"
 
     - name: Issue certificate via ACME (TLS-ALPN-01)
+      # argv, not a command string: no value can be split into extra
+      # options (#194).
       ansible.builtin.command:
-        cmd: >
-          lego
-          --email {{ email }}
-          --domains {{ domain }}
-          --path {{ cert_dir }}
-          --tls
-          run
+        argv:
+          - lego
+          - --email
+          - "{{ email }}"
+          - --domains
+          - "{{ domain }}"
+          - --path
+          - "{{ cert_dir }}"
+          - --tls
+          - run
       register: lego_result
       changed_when: lego_result.rc == 0
