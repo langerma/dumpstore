@@ -138,10 +138,15 @@ Do not change this split without a good reason — the ops side keeps single-sho
 ### Adding a new operation
 
 1. **Read**: add a function to `internal/zfs/zfs.go` and a typed handler `func (h *Handler) getX(ctx context.Context, p xParams) (X, error)` — return `errStatus(code, err)` for 4xx, any other error is a 500.
-2. **Single-command write**: validate inputs in the handler, build the argv, run it via `h.runLocal(ops.Step{Name: ..., Argv: ...})`; on error use `writeOpsError`.
-3. **Configuration write** (owned config file / OS resource): add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(...)`.
+2. **Single-command write**: validate inputs in the handler, build the argv, run it via `h.runLocal(ctx, ops.Step{Name: ..., Argv: ...})`; on error return `localError(err, res)` (500 with the op-log steps).
+3. **Configuration write** (owned config file / OS resource): add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(ctx, ...)`; on error return `playbookError(err, out)`.
 4. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
-5. Register the route in `internal/api/routes.go:RegisterRoutes` with its OpenAPI metadata: `handle(reg, route("GET /api/x", "group.method", "Summary"), h.getX)` for typed handlers (preferred — spec types come from the signature), or `raw(reg, route(..., params[P](), body[B](), reply[R]()), h.x)` for plain ones. SDK names follow the #181 mapping. Then run `make openapi` and commit `api/openapi.json` (CI fails when it is stale). New routes must not join the `untypedResponses` / `untypedBodies` lists in `internal/api/spec_test.go`.
+5. Register the route in `internal/api/routes.go:RegisterRoutes` with its OpenAPI metadata: `handle(reg, route("POST /api/x", "group.method", "Summary", fails(http.StatusBadRequest, …), status(http.StatusCreated)), h.createX)`.
+   - **Types:** every JSON handler is typed. Input is a struct with `path:`/`query:` fields (embed the shared param types) plus a `Body XRequest \`body:""\`` field. Output is a named struct. Never `map[string]any` or anonymous request structs; `TestNoUntypedRoutes` fails.
+   - **Optional fields:** mark request fields a client may omit with `omitempty` so the spec's `required` list is right.
+   - **`fails(...)`:** list every 4xx the handler or its helpers return. The integration suite fails on an undocumented one.
+   - SDK names follow the #181 mapping.
+   - Then run `make openapi` and commit `api/openapi.json` (CI fails when it is stale).
 6. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
 
 ---
@@ -196,8 +201,8 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/apispec/` | Route registry + OpenAPI 3.1 generator (#181): `Registry.Handle` (route + metadata), `Spec()`, reflection schemas (`schema.go`) |
 | `internal/api/routes.go` | `RegisterRoutes` — every API route with SDK group/method, summary and types; shared param types; `NewRegistry` (error type, tag descriptions, schema names) |
-| `internal/api/route.go` | Typed handler adapter `handle`/`typed` (binds `path:`/`query:`/`body:` fields), `errStatus` |
-| `internal/api/spec_test.go` | Spec staleness (`make openapi`), typing burn-down lists, path/percent-encoding resolution, adapter tests |
+| `internal/api/route.go` | Typed handler adapter `handle`/`typed` (binds `path:`/`query:`/`body:` fields, writes the success status), `TaskResult`, error constructors `errStatus`/`opError`/`playbookError`/`localError` |
+| `internal/api/spec_test.go` | Spec staleness (`make openapi`), `TestNoUntypedRoutes`, path/percent-encoding resolution, adapter tests |
 | `api/openapi.json` | Generated OpenAPI spec — never edit by hand; `make openapi` |
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
 | `internal/logging/handler.go` | `NewJournalHandler` — legacy slog handler with systemd journal priority prefixes (fallback path only) |

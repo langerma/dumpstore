@@ -11,6 +11,17 @@ import (
 
 const sessionCookieName = "dumpstore_session"
 
+// WhoamiResponse is the GET /api/whoami response.
+type WhoamiResponse struct {
+	User string `json:"user"`
+}
+
+// AuthConfigResponse is the GET /api/auth/config response.
+type AuthConfigResponse struct {
+	Username   string `json:"username"`
+	SessionTTL string `json:"session_ttl" doc:"Go duration string, e.g. 24h0m0s"`
+}
+
 // loginForm is the POST /auth/login form body.
 type loginForm struct {
 	Username string `json:"username"`
@@ -46,12 +57,12 @@ func RegisterRoutes(reg *apispec.Registry, cfg *Config, store *SessionStore, rl 
 	})
 	reg.Handle(apispec.Route{
 		Method: "GET", Path: "/api/whoami", Group: "auth", Name: "whoami",
-		Summary: "The authenticated user", Response: reflect.TypeFor[map[string]string](),
+		Summary: "The authenticated user", Response: reflect.TypeFor[WhoamiResponse](),
 		Handler: handleWhoami(cfg, store),
 	})
 	reg.Handle(apispec.Route{
 		Method: "GET", Path: "/api/auth/config", Group: "auth", Name: "config",
-		Summary: "Admin username and session lifetime", Response: reflect.TypeFor[map[string]string](),
+		Summary: "Admin username and session lifetime", Response: reflect.TypeFor[AuthConfigResponse](),
 		Handler: handleAuthConfig(cfg),
 	})
 }
@@ -141,7 +152,7 @@ func handleWhoami(cfg *Config, store *SessionStore) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"user": user})
+		_ = json.NewEncoder(w).Encode(WhoamiResponse{User: user})
 	}
 }
 

@@ -59,44 +59,35 @@ func (h *Handler) getTLSStatus(context.Context, struct{}) (tlsStatusResponse, er
 }
 
 // tlsGenCert generates a self-signed certificate via the tls_gencert.yml playbook.
-func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Hostname string `json:"hostname"`
-		CertDir  string `json:"cert_dir"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
-		return
-	}
+func (h *Handler) tlsGenCert(ctx context.Context, in struct {
+	Body GenCertRequest `body:""`
+}) (TaskResult, error) {
+	req := in.Body
 	if req.Hostname == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("hostname is required"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("hostname is required"))
 	}
 	if !reDomain.MatchString(req.Hostname) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid hostname"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid hostname"))
 	}
 	if req.CertDir == "" {
 		req.CertDir = filepath.Dir(h.configPath) + "/tls"
 	}
 	if !reTLSPath.MatchString(req.CertDir) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid cert_dir"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid cert_dir"))
 	}
 
-	out, err := h.runOp(r.Context(), "tls_gencert.yml", map[string]string{
+	out, err := h.runOp(ctx, "tls_gencert.yml", map[string]string{
 		"hostname": req.Hostname,
 		"cert_dir": req.CertDir,
 	})
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 
 	certPath := req.CertDir + "/cert.pem"
 	keyPath := req.CertDir + "/key.pem"
 
-	cfgOut, cfgErr := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
+	cfgOut, cfgErr := h.runOp(ctx, "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   certPath,
 		"key_path":    keyPath,
@@ -107,8 +98,7 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 		if cfgOut != nil {
 			steps = append(steps, cfgOut.Steps()...)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, cfgErr, steps)
-		return
+		return TaskResult{}, opError(cfgErr, steps)
 	}
 
 	h.authMu.Lock()
@@ -117,47 +107,44 @@ func (h *Handler) tlsGenCert(w http.ResponseWriter, r *http.Request) {
 	h.authCfg.TLSEnabled = true
 	h.authMu.Unlock()
 
-	auditLog(r.Context(), r, "tls.gencert", req.Hostname, nil)
+	auditLog(ctx, "tls.gencert", req.Hostname, nil)
 
 	steps := out.Steps()
 	steps = append(steps, cfgOut.Steps()...)
-	writeJSON(r.Context(), w, map[string]any{"tasks": steps})
+	return TaskResult{Tasks: steps}, nil
+}
+
+// GenCertRequest is the POST /api/tls/gencert body.
+type GenCertRequest struct {
+	Hostname string `json:"hostname"`
+	CertDir  string `json:"cert_dir,omitempty" doc:"Default: <config dir>/tls"`
 }
 
 // tlsSetConfig validates and persists an existing cert+key pair.
-func (h *Handler) tlsSetConfig(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		CertPath string `json:"cert_path"`
-		KeyPath  string `json:"key_path"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
-		return
-	}
+func (h *Handler) tlsSetConfig(ctx context.Context, in struct {
+	Body TLSConfigRequest `body:""`
+}) (TaskResult, error) {
+	req := in.Body
 	if req.CertPath == "" || req.KeyPath == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("cert_path and key_path are required"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("cert_path and key_path are required"))
 	}
 	if !reTLSPath.MatchString(req.CertPath) || !reTLSPath.MatchString(req.KeyPath) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid path"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid path"))
 	}
 
 	// Validate the cert+key pair before persisting.
 	if _, err := tls.LoadX509KeyPair(req.CertPath, req.KeyPath); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid cert/key pair: %w", err), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid cert/key pair: %w", err))
 	}
 
-	out, err := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
+	out, err := h.runOp(ctx, "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   req.CertPath,
 		"key_path":    req.KeyPath,
 		"enabled":     "true",
 	})
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 
 	h.authMu.Lock()
@@ -166,56 +153,51 @@ func (h *Handler) tlsSetConfig(w http.ResponseWriter, r *http.Request) {
 	h.authCfg.TLSEnabled = true
 	h.authMu.Unlock()
 
-	auditLog(r.Context(), r, "tls.set_config", req.CertPath, nil)
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	auditLog(ctx, "tls.set_config", req.CertPath, nil)
+	return TaskResult{Tasks: out.Steps()}, nil
+}
+
+// TLSConfigRequest is the PATCH /api/tls/config body.
+type TLSConfigRequest struct {
+	CertPath string `json:"cert_path"`
+	KeyPath  string `json:"key_path"`
 }
 
 // tlsAcmeIssue issues a certificate via ACME using lego.
-func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email   string `json:"email"`
-		Domain  string `json:"domain"`
-		CertDir string `json:"cert_dir"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid request body"), nil)
-		return
-	}
+func (h *Handler) tlsAcmeIssue(ctx context.Context, in struct {
+	Body ACMEIssueRequest `body:""`
+}) (TaskResult, error) {
+	req := in.Body
 	if req.Email == "" || req.Domain == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("email and domain are required"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("email and domain are required"))
 	}
 	if !reEmail.MatchString(req.Email) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid email address"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid email address"))
 	}
 	if !reDomain.MatchString(req.Domain) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid domain name"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid domain name"))
 	}
 	if req.CertDir == "" {
 		req.CertDir = filepath.Dir(h.configPath) + "/tls/acme"
 	}
 	if !reTLSPath.MatchString(req.CertDir) {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("invalid cert_dir"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("invalid cert_dir"))
 	}
 
-	out, err := h.runOp(r.Context(), "tls_acme_issue.yml", map[string]string{
+	out, err := h.runOp(ctx, "tls_acme_issue.yml", map[string]string{
 		"email":    req.Email,
 		"domain":   req.Domain,
 		"cert_dir": req.CertDir,
 	})
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 
 	// lego stores certs at <cert_dir>/certificates/<domain>.crt and .key
 	certPath := req.CertDir + "/certificates/" + req.Domain + ".crt"
 	keyPath := req.CertDir + "/certificates/" + req.Domain + ".key"
 
-	cfgOut, cfgErr := h.runOp(r.Context(), "tls_set_config.yml", map[string]string{
+	cfgOut, cfgErr := h.runOp(ctx, "tls_set_config.yml", map[string]string{
 		"config_path": h.configPath,
 		"cert_path":   certPath,
 		"key_path":    keyPath,
@@ -226,8 +208,7 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 		if cfgOut != nil {
 			steps = append(steps, cfgOut.Steps()...)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, cfgErr, steps)
-		return
+		return TaskResult{}, opError(cfgErr, steps)
 	}
 
 	h.authMu.Lock()
@@ -239,15 +220,22 @@ func (h *Handler) tlsAcmeIssue(w http.ResponseWriter, r *http.Request) {
 	h.authCfg.ACMEDomain = req.Domain
 	h.authMu.Unlock()
 
-	auditLog(r.Context(), r, "tls.acme_issue", req.Domain, nil)
+	auditLog(ctx, "tls.acme_issue", req.Domain, nil)
 
 	steps := out.Steps()
 	steps = append(steps, cfgOut.Steps()...)
-	writeJSON(r.Context(), w, map[string]any{"tasks": steps})
+	return TaskResult{Tasks: steps}, nil
+}
+
+// ACMEIssueRequest is the POST /api/tls/acme/issue body.
+type ACMEIssueRequest struct {
+	Email   string `json:"email"`
+	Domain  string `json:"domain"`
+	CertDir string `json:"cert_dir,omitempty" doc:"Default: <config dir>/tls/acme"`
 }
 
 // tlsAcmeRenew renews the ACME certificate using stored config.
-func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) tlsAcmeRenew(ctx context.Context, _ struct{}) (TaskResult, error) {
 	h.authMu.RLock()
 	acmeEnabled := h.authCfg.ACMEEnabled
 	acmeEmail := h.authCfg.ACMEEmail
@@ -256,12 +244,10 @@ func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
 	h.authMu.RUnlock()
 
 	if !acmeEnabled {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("ACME is not configured"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("ACME is not configured"))
 	}
 	if acmeEmail == "" || acmeDomain == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("ACME email and domain are not set"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, errors.New("ACME email and domain are not set"))
 	}
 
 	// Derive cert_dir from stored cert path (parent of certificates/<domain>.crt)
@@ -271,18 +257,17 @@ func (h *Handler) tlsAcmeRenew(w http.ResponseWriter, r *http.Request) {
 		certDir = certDirFromCertPath(certPath, h.configPath)
 	}
 
-	out, err := h.runOp(r.Context(), "tls_acme_renew.yml", map[string]string{
+	out, err := h.runOp(ctx, "tls_acme_renew.yml", map[string]string{
 		"email":    acmeEmail,
 		"domain":   acmeDomain,
 		"cert_dir": certDir,
 	})
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 
-	auditLog(r.Context(), r, "tls.acme_renew", acmeDomain, nil)
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	auditLog(ctx, "tls.acme_renew", acmeDomain, nil)
+	return TaskResult{Tasks: out.Steps()}, nil
 }
 
 // certDirFromCertPath derives the lego root dir from a cert path of the form

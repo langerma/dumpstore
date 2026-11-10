@@ -26,7 +26,7 @@ func newOpsTestHandler() (*Handler, http.Handler) {
 	mux.HandleFunc("GET /api/thing", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(r.Context(), w, map[string]string{"op": operations.IDFromContext(r.Context())})
 	})
-	mux.Handle("GET /api/operations/{id}", typed(h.getOperation))
+	mux.Handle("GET /api/operations/{id}", typed(h.getOperation, 0))
 	return h, h.Operations(mux)
 }
 

@@ -36,78 +36,75 @@ func (h *Handler) getDevices(context.Context, struct{}) ([]blockdev.Device, erro
 // replaceDevice handles POST /api/pools/{pool}/replace
 // Body: { "old_device": "...", "new_device": "..." }
 // Runs `zpool replace`, which starts a resilver onto the new device.
-func (h *Handler) replaceDevice(w http.ResponseWriter, r *http.Request) {
-	pool := r.PathValue("pool")
+func (h *Handler) replaceDevice(ctx context.Context, in struct {
+	poolParam
+	Body ReplaceDeviceRequest `body:""`
+}) (PoolResult, error) {
+	pool, req := in.Pool, in.Body
 	if !validPoolName(pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
-	}
-	var req struct {
-		OldDevice string `json:"old_device"`
-		NewDevice string `json:"new_device"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
 	if !validVdevName(req.OldDevice) || !validVdevName(req.NewDevice) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid device identifier"))
 	}
 	if req.OldDevice == req.NewDevice {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("replacement device must differ from the old device"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("replacement device must differ from the old device"))
 	}
-	out, err := h.runLocal(r.Context(), ops.Step{
+	out, err := h.runLocal(ctx, ops.Step{
 		Name: "Replace " + req.OldDevice + " with " + req.NewDevice + " in " + pool,
 		Argv: []string{"zpool", "replace", pool, req.OldDevice, req.NewDevice},
 	})
-	auditLog(r.Context(), r, "pool.replace_device", pool+" "+req.OldDevice+" -> "+req.NewDevice, err)
+	auditLog(ctx, "pool.replace_device", pool+" "+req.OldDevice+" -> "+req.NewDevice, err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
-	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	return PoolResult{Pool: pool, Tasks: out.Steps()}, nil
+}
+
+// ReplaceDeviceRequest is the POST /api/pools/{pool}/replace body.
+type ReplaceDeviceRequest struct {
+	OldDevice string `json:"old_device"`
+	NewDevice string `json:"new_device"`
+}
+
+// DeviceRequest names one device of a pool (offline/online).
+type DeviceRequest struct {
+	Device string `json:"device"`
+}
+
+type deviceStateIn struct {
+	poolParam
+	Body DeviceRequest `body:""`
 }
 
 // offlineDevice handles POST /api/pools/{pool}/offline — body { "device": "..." }.
-func (h *Handler) offlineDevice(w http.ResponseWriter, r *http.Request) {
-	h.setDeviceState(w, r, "offline", "pool.device_offline")
+func (h *Handler) offlineDevice(ctx context.Context, in deviceStateIn) (PoolResult, error) {
+	return h.setDeviceState(ctx, in, "offline", "pool.device_offline")
 }
 
 // onlineDevice handles POST /api/pools/{pool}/online — body { "device": "..." }.
-func (h *Handler) onlineDevice(w http.ResponseWriter, r *http.Request) {
-	h.setDeviceState(w, r, "online", "pool.device_online")
+func (h *Handler) onlineDevice(ctx context.Context, in deviceStateIn) (PoolResult, error) {
+	return h.setDeviceState(ctx, in, "online", "pool.device_online")
 }
 
 // setDeviceState is the shared implementation of offlineDevice/onlineDevice.
-func (h *Handler) setDeviceState(w http.ResponseWriter, r *http.Request, subcmd, action string) {
-	pool := r.PathValue("pool")
+func (h *Handler) setDeviceState(ctx context.Context, in deviceStateIn, subcmd, action string) (PoolResult, error) {
+	pool, device := in.Pool, in.Body.Device
 	if !validPoolName(pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
-	var req struct {
-		Device string `json:"device"`
+	if !validVdevName(device) {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid device identifier"))
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
-	if !validVdevName(req.Device) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
-		return
-	}
-	out, err := h.runLocal(r.Context(), ops.Step{
-		Name: "Take " + req.Device + " " + subcmd + " in " + pool,
-		Argv: []string{"zpool", subcmd, pool, req.Device},
+	out, err := h.runLocal(ctx, ops.Step{
+		Name: "Take " + device + " " + subcmd + " in " + pool,
+		Argv: []string{"zpool", subcmd, pool, device},
 	})
-	auditLog(r.Context(), r, action, pool+" "+req.Device, err)
+	auditLog(ctx, action, pool+" "+device, err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
-	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	return PoolResult{Pool: pool, Tasks: out.Steps()}, nil
 }

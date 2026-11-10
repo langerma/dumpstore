@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"dumpstore/internal/ansible"
 	"dumpstore/internal/zfs"
 )
 
@@ -100,53 +101,40 @@ func (h *Handler) getDatasetACL(_ context.Context, p datasetParam) (*zfs.Dataset
 // Body: {"ace":"user:alice:rwx","recursive":false}  (POSIX)
 //
 //	{"ace":"A::alice@localdomain:rwaDxtTnNcCoy"}       (NFSv4)
-func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("dataset")
+func (h *Handler) setACLEntry(ctx context.Context, in struct {
+	datasetParam
+	Body SetACLEntryRequest `body:""`
+}) (ACLEntryResult, error) {
+	name := in.Dataset
 	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
 	}
 	if !validZFSName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
 	if ok, err := datasetExists(name); err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ACLEntryResult{}, err
 	} else if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusNotFound, fmt.Errorf("dataset %q not found", name))
 	}
 
-	var req struct {
-		ACE       string `json:"ace"`
-		Recursive bool   `json:"recursive"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+	req := in.Body
 	if req.ACE == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace is required"), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("ace is required"))
 	}
 	if !aclSafeRe(req.ACE) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace contains invalid characters"), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("ace contains invalid characters"))
 	}
 
 	acl, err := zfs.GetDatasetACL(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ACLEntryResult{}, err
 	}
 	if acl.ACLType == "off" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name))
 	}
 	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 
 	recursive := "false"
@@ -169,28 +157,44 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		if runtime.GOOS == "freebsd" {
 			e, ok := zfs.ParseNFSv4ACE(req.ACE)
 			if !ok {
-				writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ace must be type:flags:principal:perms"), nil)
-				return
+				return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("ace must be type:flags:principal:perms"))
 			}
 			spec, err := zfs.FreeBSDACESpec(e)
 			if err != nil {
-				writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-				return
+				return ACLEntryResult{}, errStatus(http.StatusBadRequest, err)
 			}
 			vars["ace"] = spec
 		}
 	default:
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
-		return
+		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType))
 	}
 
-	out, err := h.runOp(r.Context(), playbook, vars)
-	auditLog(r.Context(), r, "acl.set", name, err)
+	out, err := h.runOp(ctx, playbook, vars)
+	auditLog(ctx, "acl.set", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ACLEntryResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"dataset": name, "ace": req.ACE, "tasks": out.Steps()})
+	return ACLEntryResult{Dataset: name, ACE: req.ACE, Tasks: out.Steps()}, nil
+}
+
+// SetACLEntryRequest is the POST /api/acl/{dataset...} body.
+type SetACLEntryRequest struct {
+	ACE       string `json:"ace" doc:"POSIX (user:alice:rwx) or NFSv4 (A::alice@localdomain:rwaDxtTnNcCoy) entry"`
+	Recursive bool   `json:"recursive,omitempty" doc:"Apply to all files below the mountpoint"`
+}
+
+// ACLEntryResult is the POST /api/acl/{dataset...} response.
+type ACLEntryResult struct {
+	Dataset string             `json:"dataset"`
+	ACE     string             `json:"ace"`
+	Tasks   []ansible.TaskStep `json:"tasks"`
+}
+
+// ACLRemoveResult is the DELETE /api/acl/{dataset...} response.
+type ACLRemoveResult struct {
+	Dataset string             `json:"dataset"`
+	Entry   string             `json:"entry"`
+	Tasks   []ansible.TaskStep `json:"tasks"`
 }
 
 // findACLEntry returns the first entry in the dataset's current ACL matched by
@@ -237,49 +241,40 @@ func findACLEntry(acl *zfs.DatasetACL, entry string) (zfs.ACLEntry, bool) {
 // removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
 // For POSIX: entry is the removal spec (e.g. "user:alice", "default:group:storage")
 // For NFSv4: entry is the full ACE string to remove
-func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("dataset")
+func (h *Handler) removeACLEntry(ctx context.Context, in removeACLParams) (ACLRemoveResult, error) {
+	name := in.Dataset
 	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
 	}
 	if !validZFSName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
 
-	entry := r.URL.Query().Get("entry")
+	entry := in.Entry
 	if entry == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("entry query parameter required"), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("entry query parameter required"))
 	}
 	if !aclSafeRe(entry) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"))
 	}
 	if ok, err := datasetExists(name); err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ACLRemoveResult{}, err
 	} else if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusNotFound, fmt.Errorf("dataset %q not found", name))
 	}
 
-	recursive := r.URL.Query().Get("recursive") == "true"
+	recursive := in.Recursive == "true"
 
 	acl, err := zfs.GetDatasetACL(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ACLRemoveResult{}, err
 	}
 	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 	match, ok := findACLEntry(acl, entry)
 	if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("ACL entry %q not found on dataset %s", entry, name), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusNotFound, fmt.Errorf("ACL entry %q not found on dataset %s", entry, name))
 	}
 
 	recursiveStr := "false"
@@ -302,21 +297,18 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 			// setfacl -x needs the entry exactly as stored: remove the matched one.
 			spec, err := zfs.FreeBSDACESpec(match)
 			if err != nil {
-				writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-				return
+				return ACLRemoveResult{}, err
 			}
 			vars["ace"] = spec
 		}
 	default:
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType), nil)
-		return
+		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("unsupported acltype: %s", acl.ACLType))
 	}
 
-	out, err := h.runOp(r.Context(), playbook, vars)
-	auditLog(r.Context(), r, "acl.remove", name, err)
+	out, err := h.runOp(ctx, playbook, vars)
+	auditLog(ctx, "acl.remove", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ACLRemoveResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"dataset": name, "entry": entry, "tasks": out.Steps()})
+	return ACLRemoveResult{Dataset: name, Entry: entry, Tasks: out.Steps()}, nil
 }

@@ -169,7 +169,7 @@ func (g *generator) ref(t reflect.Type) (Schema, error) {
 type field struct {
 	name      string
 	typ       reflect.Type
-	omitEmpty bool
+	omitEmpty bool // omitempty/omitzero, or promoted through a nil-able embedded pointer
 	asString  bool
 	tagged    bool
 	depth     int
@@ -182,8 +182,8 @@ type field struct {
 // are dropped.
 func jsonFields(t reflect.Type) []field {
 	var all []field
-	var walk func(t reflect.Type, depth int, seen map[reflect.Type]bool)
-	walk = func(t reflect.Type, depth int, seen map[reflect.Type]bool) {
+	var walk func(t reflect.Type, depth int, optional bool, seen map[reflect.Type]bool)
+	walk = func(t reflect.Type, depth int, optional bool, seen map[reflect.Type]bool) {
 		if seen[t] {
 			return
 		}
@@ -202,7 +202,8 @@ func jsonFields(t reflect.Type) []field {
 					et = et.Elem()
 				}
 				if name == "" && et.Kind() == reflect.Struct {
-					walk(et, depth+1, seen)
+					// encoding/json omits all fields of a nil embedded pointer.
+					walk(et, depth+1, optional || ft.Kind() == reflect.Pointer, seen)
 					continue
 				}
 				if !sf.IsExported() {
@@ -211,7 +212,7 @@ func jsonFields(t reflect.Type) []field {
 			} else if !sf.IsExported() {
 				continue
 			}
-			f := field{name: name, typ: ft, depth: depth, tag: sf.Tag, tagged: name != ""}
+			f := field{name: name, typ: ft, depth: depth, tag: sf.Tag, tagged: name != "", omitEmpty: optional}
 			if f.name == "" {
 				f.name = sf.Name
 			}
@@ -226,7 +227,7 @@ func jsonFields(t reflect.Type) []field {
 			all = append(all, f)
 		}
 	}
-	walk(t, 0, map[reflect.Type]bool{})
+	walk(t, 0, false, map[reflect.Type]bool{})
 
 	byName := map[string][]field{}
 	var order []string

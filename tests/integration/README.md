@@ -42,6 +42,7 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestSendReceiveJob` | `zfs send \| recv` pipeline through the jobs manager, job polling, job removal |
 | `TestPoolLifecycle` | pool create (mirror), duplicate-name refusal, device offline/online, `zpool replace` + resilver, spare add/remove, export, importable discovery, import |
 | `TestReadEndpoints` | 200 + top-level shape of every read endpoint (sysinfo incl. `otel`, network, version, schema, smart, iostat, poolstatus, devices, dataset-props, whoami, auth/config, tls/status, acl-status, importable pools, scrub/auto-snapshot schedules, jobs, services, users, groups, smb/status, iscsi-targets, replication) + unauthenticated `/metrics` |
+| *OpenAPI conformance* (after all tests, in `TestMain`) | #181: every JSON response the suite received validates against the served spec's schema for its operation and status, and every 4xx status is documented for that operation; `DUMPSTORE_RECORD=<file>` also writes the recordings as NDJSON |
 | `TestOpenAPISpec` / `TestSchemaValidatorRejects` | #181: `GET /api/v1/openapi.json` is OpenAPI 3.1 with every operation; the live response of every parameterless GET with a declared schema validates against it (types, nullability, required fields, no undocumented properties, enums, minimums); the validator itself rejects mismatches |
 | `TestReadNegatives` | invalid dataset name 400, unknown job 404, SSE with no valid topic 400 |
 | `TestSSEEvents` | `/api/events` stream headers + cached `user.query` replay on connect |

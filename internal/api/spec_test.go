@@ -11,11 +11,11 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"dumpstore/internal/ansible"
 	"dumpstore/internal/apispec"
 	"dumpstore/internal/auth"
 )
@@ -56,148 +56,25 @@ func TestOpenAPISpec(t *testing.T) {
 	}
 }
 
-// untypedResponses are JSON routes whose success body has no schema yet
-// (map[string]any responses). Phase 2 of #181 burns this list down to zero;
-// a route may only leave it, never join it.
-var untypedResponses = []string{
-	"DELETE /api/acl/{dataset...}",
-	"DELETE /api/datasets/{name...}",
-	"DELETE /api/groups/{name}",
-	"DELETE /api/iscsi-targets",
-	"DELETE /api/pools/{pool}/devices/{device...}",
-	"DELETE /api/scrub-schedule/{pool}",
-	"DELETE /api/scrub/{pool}",
-	"DELETE /api/smb-share/{dataset...}",
-	"DELETE /api/smb-users/{name}",
-	"DELETE /api/smb/homes",
-	"DELETE /api/smb/timemachine/{sharename}",
-	"DELETE /api/snapshots/{snapshot...}",
-	"DELETE /api/users/{name}",
-	"DELETE /api/users/{name}/sshkeys",
-	"GET /api/chown/{dataset...}",
-	"GET /api/iscsi/status",
-	"GET /api/schema",
-	"GET /api/smb-users",
-	"GET /api/smb/homes",
-	"GET /api/smb/status",
-	"GET /api/snapshots/diff",
-	"GET /api/users/{name}/sshkeys",
-	"GET /api/userspace/{name...}",
-	"GET /api/version",
-	"PATCH /api/datasets/{name...}",
-	"PATCH /api/tls/config",
-	"POST /api/acl/{dataset...}",
-	"POST /api/auth/change-password",
-	"POST /api/auth/change-username",
-	"POST /api/auto-snapshot/release",
-	"POST /api/auto-snapshot/takeover",
-	"POST /api/chown/{dataset...}",
-	"POST /api/datasets",
-	"POST /api/datasets/rename",
-	"POST /api/groups",
-	"POST /api/iscsi-targets",
-	"POST /api/iscsi/init",
-	"POST /api/pools",
-	"POST /api/pools/import",
-	"POST /api/pools/{pool}/cache",
-	"POST /api/pools/{pool}/export",
-	"POST /api/pools/{pool}/log",
-	"POST /api/pools/{pool}/offline",
-	"POST /api/pools/{pool}/online",
-	"POST /api/pools/{pool}/replace",
-	"POST /api/pools/{pool}/spare",
-	"POST /api/pools/{pool}/vdevs",
-	"POST /api/replication/{id}/run",
-	"POST /api/rewrite/{name...}",
-	"POST /api/scrub/{pool}",
-	"POST /api/services/{service}/{action}",
-	"POST /api/smb-share/{dataset...}",
-	"POST /api/smb-users/{name}",
-	"POST /api/smb/homes",
-	"POST /api/smb/init",
-	"POST /api/smb/timemachine",
-	"POST /api/smb/wsdd",
-	"POST /api/snapshots",
-	"POST /api/snapshots/clone",
-	"POST /api/snapshots/delete-batch",
-	"POST /api/snapshots/send",
-	"POST /api/tls/acme/issue",
-	"POST /api/tls/acme/renew",
-	"POST /api/tls/gencert",
-	"POST /api/userquota/{name...}",
-	"POST /api/users",
-	"POST /api/users/{name}/sshkeys",
-	"PUT /api/auto-snapshot/{name...}",
-	"PUT /api/groups/{name}",
-	"PUT /api/scrub-schedule/{pool}",
-	"PUT /api/users/{name}",
-}
-
-// untypedBodies are routes whose request body is still an anonymous struct,
-// documented as a generic JSON object. Phase 2 of #181 burns this down.
-var untypedBodies = []string{
-	"DELETE /api/users/{name}/sshkeys",
-	"PATCH /api/tls/config",
-	"POST /api/acl/{dataset...}",
-	"POST /api/auth/change-password",
-	"POST /api/auth/change-username",
-	"POST /api/chown/{dataset...}",
-	"POST /api/datasets",
-	"POST /api/datasets/rename",
-	"POST /api/groups",
-	"POST /api/iscsi-targets",
-	"POST /api/pools",
-	"POST /api/pools/import",
-	"POST /api/pools/{pool}/cache",
-	"POST /api/pools/{pool}/log",
-	"POST /api/pools/{pool}/offline",
-	"POST /api/pools/{pool}/online",
-	"POST /api/pools/{pool}/replace",
-	"POST /api/pools/{pool}/spare",
-	"POST /api/pools/{pool}/vdevs",
-	"POST /api/rewrite/{name...}",
-	"POST /api/smb-share/{dataset...}",
-	"POST /api/smb-users/{name}",
-	"POST /api/smb/homes",
-	"POST /api/smb/timemachine",
-	"POST /api/snapshots",
-	"POST /api/snapshots/clone",
-	"POST /api/snapshots/delete-batch",
-	"POST /api/snapshots/send",
-	"POST /api/tls/acme/issue",
-	"POST /api/tls/gencert",
-	"POST /api/userquota/{name...}",
-	"POST /api/users",
-	"POST /api/users/{name}/sshkeys",
-	"PUT /api/groups/{name}",
-	"PUT /api/scrub-schedule/{pool}",
-	"PUT /api/users/{name}",
-}
-
-// TestRouteTypingBurnDown pins exactly which routes still lack typed
-// schemas, so typing can only improve.
-func TestRouteTypingBurnDown(t *testing.T) {
-	var gotResp, gotBody []string
+// TestNoUntypedRoutes: every JSON route documents named request and
+// response types (#181 Phase 2). Only the spec document itself is a
+// generic object.
+func TestNoUntypedRoutes(t *testing.T) {
 	for _, r := range fullRegistry(t).Routes() {
 		key := r.Method + " " + r.Path
 		if r.Untyped() {
-			gotResp = append(gotResp, key)
+			t.Errorf("%s has no response type — register it with handle() and a typed handler", key)
 		}
-		if r.Request == reflect.TypeFor[jsonObject]() {
-			gotBody = append(gotBody, key)
+		generic := func(t reflect.Type) bool {
+			return t != nil && t.Kind() == reflect.Map && t.Elem().Kind() == reflect.Interface
 		}
-	}
-	slices.Sort(gotResp)
-	slices.Sort(gotBody)
-	check := func(what string, got, want []string) {
-		t.Helper()
-		if !slices.Equal(got, want) {
-			t.Errorf("%s changed; update the list in spec_test.go (only removals are expected):\n%s",
-				what, "\t\""+strings.Join(got, "\",\n\t\"")+"\",")
+		if generic(r.Request) {
+			t.Errorf("%s documents its request body as a generic object — use a named request type", key)
+		}
+		if generic(r.Response) && key != "GET /api/v1/openapi.json" {
+			t.Errorf("%s documents its response as a generic object — use a named response type", key)
 		}
 	}
-	check("untypedResponses", gotResp, untypedResponses)
-	check("untypedBodies", gotBody, untypedBodies)
 }
 
 // TestSpecPathsResolve serves every route's pattern and requests its
@@ -263,7 +140,7 @@ type adapterReq struct {
 
 func serveTyped[Req, Resp any](fn func(r Req) (Resp, error), pattern, method, target, body string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
-	mux.Handle(pattern, typed(func(_ context.Context, r Req) (Resp, error) { return fn(r) }))
+	mux.Handle(pattern, typed(func(_ context.Context, r Req) (Resp, error) { return fn(r) }, 0))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(method, target, strings.NewReader(body)))
 	return rec
@@ -348,5 +225,50 @@ func TestConvertedHandlerParity(t *testing.T) {
 		if rec.Code != 400 || rec.Body.String() != c.body+"\n" {
 			t.Errorf("%s: %d %q", c.target, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestTypedAdapterStatusAndOpErrors(t *testing.T) {
+	serve := func(status int, fn func(context.Context, struct{}) (map[string]int, error)) *httptest.ResponseRecorder {
+		mux := http.NewServeMux()
+		mux.Handle("POST /x", withRemoteAddr(typed(fn, status)))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/x", nil)
+		req.RemoteAddr = "192.0.2.7:4242"
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	ok := func(context.Context, struct{}) (map[string]int, error) { return map[string]int{"a": 1}, nil }
+
+	for _, status := range []int{http.StatusCreated, http.StatusAccepted} {
+		rec := serve(status, ok)
+		if rec.Code != status || rec.Header().Get("Content-Type") != "application/json" || rec.Body.String() != "{\"a\":1}\n" {
+			t.Errorf("status %d: %d %q %q", status, rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+		}
+	}
+	if rec := serve(http.StatusNoContent, ok); rec.Code != 204 || rec.Body.Len() != 0 {
+		t.Errorf("204: %d %q", rec.Code, rec.Body.String())
+	}
+
+	steps := []ansible.TaskStep{{Name: "zfs destroy", Status: "failed", Msg: "busy"}}
+	rec := serve(0, func(context.Context, struct{}) (map[string]int, error) {
+		return nil, opError(errors.New("1 of 1 step(s) failed"), steps)
+	})
+	if rec.Code != 500 || rec.Body.String() != `{"error":"1 of 1 step(s) failed","tasks":[{"name":"zfs destroy","status":"failed","msg":"busy"}]}`+"\n" {
+		t.Errorf("opError: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := serve(0, func(context.Context, struct{}) (map[string]int, error) {
+		return nil, playbookError(errors.New("no output"), nil)
+	}); rec.Code != 500 || rec.Body.String() != "{\"error\":\"no output\"}\n" {
+		t.Errorf("playbookError(nil): %d %q", rec.Code, rec.Body.String())
+	}
+
+	var addr string
+	serve(0, func(ctx context.Context, _ struct{}) (map[string]int, error) {
+		addr = remoteAddr(ctx)
+		return nil, nil
+	})
+	if addr != "192.0.2.7:4242" {
+		t.Errorf("remote addr in context = %q", addr)
 	}
 }

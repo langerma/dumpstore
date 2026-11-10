@@ -73,6 +73,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	client.Jar = jar
+	client.Transport = recorder{next: http.DefaultTransport}
 
 	// Wait for the server to listen: deploys restart the service right
 	// before the suite runs, and systemd reports the unit active before
@@ -92,7 +93,15 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Second)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	if violations := checkConformance(); len(violations) > 0 {
+		fmt.Fprintf(os.Stderr, "\nOpenAPI conformance: %d violation(s) in recorded responses:\n  %s\n",
+			len(violations), strings.Join(violations, "\n  "))
+		code = 1
+	} else {
+		fmt.Fprintf(os.Stderr, "OpenAPI conformance: %d recorded responses match the served spec\n", len(recordings))
+	}
+	os.Exit(code)
 }
 
 // login authenticates the shared client once per test run.

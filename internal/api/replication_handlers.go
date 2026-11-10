@@ -117,15 +117,12 @@ func (req replicationRequest) applyTo(t *replication.Task) {
 }
 
 // createReplication handles POST /api/replication.
-func (h *Handler) createReplication(w http.ResponseWriter, r *http.Request) {
-	var req replicationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) createReplication(ctx context.Context, in struct {
+	Body replicationRequest `body:""`
+}) (replication.Task, error) {
+	req := in.Body
 	if err := req.validate(true); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+		return replication.Task{}, errStatus(http.StatusBadRequest, err)
 	}
 	// Default Enabled=true if caller didn't specify.
 	if req.Enabled == nil {
@@ -143,105 +140,88 @@ func (h *Handler) createReplication(w http.ResponseWriter, r *http.Request) {
 	defer h.refMu.Unlock()
 	stored, err := h.repl.Store().Create(task)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("persist task: %w", err), nil)
-		return
+		return replication.Task{}, fmt.Errorf("persist task: %w", err)
 	}
 	if err := h.repl.RegisterEnabled(stored); err != nil {
 		// Roll back the persisted task — an invalid schedule must not silently leave a broken task.
 		_ = h.repl.Store().Delete(stored.ID)
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+		return replication.Task{}, errStatus(http.StatusBadRequest, err)
 	}
-	auditLog(r.Context(), r, "replication.create", stored.ID, nil)
+	auditLog(ctx, "replication.create", stored.ID, nil)
 	h.broker.Publish("replication.update", h.repl.Store().List())
-	w.WriteHeader(http.StatusCreated)
-	writeJSON(r.Context(), w, stored)
+	return stored, nil
 }
 
 // updateReplication handles PATCH /api/replication/{id}.
-func (h *Handler) updateReplication(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+func (h *Handler) updateReplication(ctx context.Context, in struct {
+	idParam
+	Body replicationRequest `body:""`
+}) (replication.Task, error) {
+	id, req := in.ID, in.Body
 	if id == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("id required"), nil)
-		return
-	}
-	var req replicationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
+		return replication.Task{}, errStatus(http.StatusBadRequest, errors.New("id required"))
 	}
 	if err := req.validate(false); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+		return replication.Task{}, errStatus(http.StatusBadRequest, err)
 	}
 	h.refMu.Lock() // source/target must not be destroyed or renamed meanwhile (#183)
 	defer h.refMu.Unlock()
 	updated, err := h.repl.Store().Update(id, func(t *replication.Task) { req.applyTo(t) })
 	if err != nil {
 		if errors.Is(err, replication.ErrNotFound) {
-			writeError(r.Context(), w, http.StatusNotFound, err, nil)
-			return
+			return replication.Task{}, errStatus(http.StatusNotFound, err)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return replication.Task{}, err
 	}
 	if err := h.repl.RegisterEnabled(updated); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+		return replication.Task{}, errStatus(http.StatusBadRequest, err)
 	}
-	auditLog(r.Context(), r, "replication.update", id, nil)
+	auditLog(ctx, "replication.update", id, nil)
 	h.broker.Publish("replication.update", h.repl.Store().List())
-	writeJSON(r.Context(), w, updated)
+	return updated, nil
 }
 
 // deleteReplication handles DELETE /api/replication/{id}.
-func (h *Handler) deleteReplication(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("id required"), nil)
-		return
+func (h *Handler) deleteReplication(ctx context.Context, in idParam) (struct{}, error) {
+	if in.ID == "" {
+		return struct{}{}, errStatus(http.StatusBadRequest, errors.New("id required"))
 	}
-	h.repl.Unregister(id)
-	if err := h.repl.Store().Delete(id); err != nil {
+	h.repl.Unregister(in.ID)
+	if err := h.repl.Store().Delete(in.ID); err != nil {
 		if errors.Is(err, replication.ErrNotFound) {
-			writeError(r.Context(), w, http.StatusNotFound, err, nil)
-			return
+			return struct{}{}, errStatus(http.StatusNotFound, err)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return struct{}{}, err
 	}
-	auditLog(r.Context(), r, "replication.delete", id, nil)
+	auditLog(ctx, "replication.delete", in.ID, nil)
 	h.broker.Publish("replication.update", h.repl.Store().List())
-	w.WriteHeader(http.StatusNoContent)
+	return struct{}{}, nil
 }
 
 // runReplication handles POST /api/replication/{id}/run.
-func (h *Handler) runReplication(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("id required"), nil)
-		return
+func (h *Handler) runReplication(ctx context.Context, in idParam) (ReplicationRunStarted, error) {
+	if in.ID == "" {
+		return ReplicationRunStarted{}, errStatus(http.StatusBadRequest, errors.New("id required"))
 	}
 	// Detach from the request: RunOnce starts a goroutine that waits for the
 	// job to finish, then releases the hold, prunes, and records history.
 	// The request context is cancelled as soon as this handler returns.
-	snap, jobID, err := h.repl.RunOnce(context.WithoutCancel(r.Context()), id)
+	snap, jobID, err := h.repl.RunOnce(context.WithoutCancel(ctx), in.ID)
 	if err != nil {
 		if errors.Is(err, replication.ErrNotFound) {
-			writeError(r.Context(), w, http.StatusNotFound, err, nil)
-			return
+			return ReplicationRunStarted{}, errStatus(http.StatusNotFound, err)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ReplicationRunStarted{}, err
 	}
-	auditLog(r.Context(), r, "replication.run", id, nil)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	writeJSON(r.Context(), w, map[string]any{
-		"task_id":  id,
-		"job_id":   jobID,
-		"snapshot": snap,
-	})
+	auditLog(ctx, "replication.run", in.ID, nil)
+	return ReplicationRunStarted{TaskID: in.ID, JobID: jobID, Snapshot: snap}, nil
+}
+
+// ReplicationRunStarted is the 202 response of a manual replication run.
+type ReplicationRunStarted struct {
+	TaskID   string `json:"task_id"`
+	JobID    string `json:"job_id" doc:"Background job carrying the transfer; poll GET /api/jobs/{id}"`
+	Snapshot string `json:"snapshot" doc:"Snapshot taken for this run"`
 }
 
 // getReplicationHistory handles GET /api/replication/{id}/history.
