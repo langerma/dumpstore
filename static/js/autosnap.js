@@ -23,7 +23,7 @@ export function renderAutoSnapStatus() {
     el.innerHTML = `
       <div class="autosnap-banner ${cronFiles ? 'autosnap-banner-warn' : 'autosnap-banner-ok'}">
         <span class="health-badge ${cronFiles ? 'badge-yellow' : 'badge-green'}">auto-snapshot</span>
-        Managed by dumpstore — bucket snapshots run via the built-in scheduler.${both}
+        <span>Managed by dumpstore — bucket snapshots run via the built-in scheduler.${both}</span>
         <button class="btn-secondary btn-small" id="autosnapReleaseBtn">Release to OS daemon</button>
       </div>`;
     document.getElementById('autosnapReleaseBtn').addEventListener('click', doRelease);
@@ -33,9 +33,9 @@ export function renderAutoSnapStatus() {
     el.innerHTML = `
       <div class="autosnap-banner autosnap-banner-warn">
         <span class="health-badge badge-yellow">auto-snapshot</span>
-        Managed by <code>zfstools</code> from cron (${cronFiles}). To let dumpstore
+        <span>Managed by <code>zfstools</code> from cron (${cronFiles}). To let dumpstore
         take over, remove the <code>zfs-auto-snapshot</code> lines there — dumpstore
-        doesn't edit crontabs.
+        doesn't edit crontabs.</span>
       </div>`;
     return;
   }
@@ -43,8 +43,8 @@ export function renderAutoSnapStatus() {
     el.innerHTML = `
       <div class="autosnap-banner autosnap-banner-warn">
         <span class="health-badge badge-yellow">auto-snapshot</span>
-        Managed by <code>${esc(s.os_daemon)}</code>. Take over to fix property
-        inheritance and remove the OS dependency.
+        <span>Managed by <code>${esc(s.os_daemon)}</code>. Take over to fix property
+        inheritance and remove the OS dependency.</span>
         <button class="btn-primary btn-small" id="autosnapTakeoverBtn">Take over</button>
       </div>`;
     document.getElementById('autosnapTakeoverBtn').addEventListener('click', doTakeover);
@@ -53,7 +53,7 @@ export function renderAutoSnapStatus() {
   el.innerHTML = `
     <div class="autosnap-banner autosnap-banner-warn">
       <span class="health-badge badge-yellow">auto-snapshot</span>
-      No auto-snapshot daemon detected and dumpstore's scheduler is not registered. Bucket snapshots will not run.
+      <span>No auto-snapshot daemon detected and dumpstore's scheduler is not registered. Bucket snapshots will not run.</span>
       <button class="btn-primary btn-small" id="autosnapTakeoverBtn">Enable dumpstore scheduler</button>
     </div>`;
   document.getElementById('autosnapTakeoverBtn').addEventListener('click', doTakeover);

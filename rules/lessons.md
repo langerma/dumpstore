@@ -60,3 +60,14 @@ A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/a
 1. Verify on the Linux VM (`dpkg -S <file>`, `apt-cache show/depends <pkg>`, the daemon's own paths, e.g. `smbd -b`).
 2. For other platforms, check the packaging source (Fedora spec `%files`, FreeBSD port `Makefile`/`pkg-plist`) — and if it can't be confirmed, word the claim only as strongly as what was verified.
 3. Text already in the repo (README, stashes, old commits) is a lead, not evidence.
+
+## 7. Any change to rendered UI markup gets a browser check, not just new buttons
+
+**Mistake:** #208 changed the auto-snapshot banner (new text with `<strong>`/`<code>` and a new state) and shipped with "not checked in a browser", reading the CLAUDE.md rule as covering only new buttons. The banner is `display: flex`, so every bare text node and inline element became its own column — the new state was unreadable, and the existing *Take over* state had the same latent bug.
+
+**Rule:** Whenever a render function's HTML changes (new state, new inline elements, changed text structure), render it in the deployed VM and look at it before reporting done:
+
+1. Put the VM into each changed state (fixture via `limactl shell`, restore afterwards).
+2. Screenshot the element with headless Chrome — `puppeteer-core` from `dev/screenshots/node_modules` (log in via `/login`, `page.$(sel).screenshot()`), then read the PNG.
+3. In flex containers, wrap mixed text + inline markup in one `<span>` so it stays a single flex item.
+4. "Not checked in a browser" in a summary is a TODO, not a status — do the check instead.
