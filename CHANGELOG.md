@@ -174,6 +174,9 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **HTTP→HTTPS redirect dropped a non-default TLS port.** With `--tls --tls-port 8443`, `http://host:<http-port>/x` redirected to `https://host/x`, i.e. port 443, where nothing listens. The redirect now targets `https://host:8443/x`; with the default port 443 it stays `https://host/x`. IPv6 hosts keep their brackets.
+- **FreeBSD: dumpstore flags could not be set from `rc.conf`** (#191). The rc.d script built a fixed argument list, so `--tls`, `--tls-port`, `--http-port`, `-debug` and `-log-stdout=false` could not be enabled; `dumpstore_flags` doesn't help because rc.subr hands it to `daemon(8)`. New `dumpstore_args` variable, appended to dumpstore's own arguments: `sysrc dumpstore_args="--tls"`.
+
 - **FreeBSD: SMB config writes failed while Samba was stopped** (#196). `service samba_server reload` fails when Samba isn't running, so every share, homes or Time Machine write and `POST /api/v1/smb/init` failed until Samba was started from the Services tab. `smb_apply.yml` now checks each service with the OS's own status command (`systemctl is-active` / `service … status`), reloads the ones that are running and starts the ones that are stopped. Ansible's `service` module is no longer used for this. On FreeBSD it probes with `onestatus` and starts with `onestart`, which for `samba_server` force-starts `winbindd` (not enabled without `idmap uid`), misreads a running Samba as stopped and leaves an orphaned `winbindd` that blocks every later start.
 
 - **Security: no-password loopback safeguard bypassed with `--tls`** (#192). Without a password dumpstore binds `127.0.0.1:8080`, but with `--tls` the HTTPS and redirect listeners bound all interfaces. They now stay on loopback too until a password is set.

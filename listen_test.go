@@ -20,3 +20,21 @@ func TestTLSAddrs(t *testing.T) {
 		}
 	}
 }
+
+// TestRedirectTarget: the HTTP→HTTPS redirect must point at the TLS port.
+func TestRedirectTarget(t *testing.T) {
+	for _, c := range []struct{ host, tlsPort, want string }{
+		{"nas.local:8082", "8443", "https://nas.local:8443/login?x=1"},
+		{"nas.local", "8443", "https://nas.local:8443/login?x=1"},
+		{"nas.local:80", "443", "https://nas.local/login?x=1"},
+		{"nas.local", "443", "https://nas.local/login?x=1"},
+		{"192.0.2.1:8080", "8443", "https://192.0.2.1:8443/login?x=1"},
+		{"[2001:db8::1]:8080", "8443", "https://[2001:db8::1]:8443/login?x=1"},
+		{"[2001:db8::1]:80", "443", "https://[2001:db8::1]/login?x=1"},
+		{"[2001:db8::1]", "443", "https://[2001:db8::1]/login?x=1"},
+	} {
+		if got := redirectTarget(c.host, c.tlsPort, "/login?x=1"); got != c.want {
+			t.Errorf("redirectTarget(%q, %q) = %q, want %q", c.host, c.tlsPort, got, c.want)
+		}
+	}
+}
