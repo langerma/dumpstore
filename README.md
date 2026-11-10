@@ -29,7 +29,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - Per-pool dataset browser with a detail drawer for inline property editing, sharing, permissions, and snapshots
 - Create, rename, and destroy datasets and volumes; per-user/group space usage and quotas; `zfs rewrite` as a background job
 - Snapshot create, clone, diff, and (batch) delete
-- Native auto-snapshot scheduling for `com.sun:auto-snapshot*`, with takeover from / release back to the OS daemon
+- Native auto-snapshot scheduling for `com.sun:auto-snapshot*`, with takeover from / release back to the OS daemon (zfs-auto-snapshot timers or cron on Linux, zfs-periodic switches on FreeBSD); release restores exactly what takeover disabled
 
 **Replication & jobs**
 - One-shot `zfs send | zfs recv` to a local pool or over SSH, incremental and `--raw`
@@ -49,7 +49,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - POSIX and NFSv4 ACLs (NFSv4 on FreeBSD), dataset owner/group
 
 **Operations**
-- Session login with argon2id, reverse-proxy delegation (`X-Remote-User`), TLS with self-signed, existing, or ACME certificates
+- Session login with argon2id and per-IP limiting of failed logins (`429` for API clients), reverse-proxy delegation (`X-Remote-User`), TLS with self-signed, existing, or ACME certificates
 - Live UI updates over Server-Sent Events; every write streams its own progress to the tab that started it, and its result survives a dropped connection (operation IDs)
 - Prometheus `/metrics` and optional OpenTelemetry export (traces, logs, metrics) — one OTEL meter backs both, so OTLP carries the same metrics as `/metrics`
 - Per-request `req_id` log correlation and an audit line for every mutating operation
