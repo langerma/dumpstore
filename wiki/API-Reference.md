@@ -72,7 +72,7 @@ Deletes the session server-side, expires the cookie (`Max-Age=-1`), and redirect
 { "user": "admin" }
 ```
 
-`user` is the `X-Remote-User` header when present, otherwise the configured username (for a session cookie). `401 {"error":"unauthorized"}` without either.
+`user` is the `X-Remote-User` header when the request comes from a `trusted_proxies` CIDR, otherwise the configured username for a valid session cookie. The header is ignored from any other address. `401 {"error":"unauthorized"}` without either. The auth middleware uses the same rule.
 
 ### GET /api/v1/auth/config
 
@@ -1782,7 +1782,7 @@ Generate a self-signed certificate and point the config at it.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `hostname` | yes | Becomes CN and DNS SAN |
-| `cert_dir` | no | Default `<config dir>/tls` (e.g. `/etc/dumpstore/tls`, `/usr/local/etc/dumpstore/tls`) |
+| `cert_dir` | no | Default `<config dir>/tls` (e.g. `/etc/dumpstore/tls`, `/usr/local/etc/dumpstore/tls`). Must be an absolute path of `A-Z a-z 0-9 . _ / -` only |
 
 Runs `tls_gencert.yml`: creates `cert_dir` (`0700`), then `openssl req -x509` with an ECDSA P-256 key, valid 3650 days, SAN `IP:127.0.0.1,DNS:<hostname>`, written to `cert.pem` / `key.pem` (key `0600`). **If `cert.pem` already exists it is not regenerated**, even if `hostname` is different. Then `tls_set_config.yml` stores both paths and `tls_enabled: true`. Returns the Ansible task steps of both playbooks.
 
@@ -1801,6 +1801,8 @@ Use an existing certificate + key from disk (e.g. from certbot or acme.sh).
 |-------|----------|-------------|
 | `cert_path` | yes | PEM certificate (chain) |
 | `key_path` | yes | PEM private key matching the certificate |
+
+Both paths must be absolute and consist of `A-Z a-z 0-9 . _ / -` only (`400` otherwise); the same rule applies to `cert_dir` for self-signed and ACME certificates.
 
 Before anything is written, the pair is loaded in Go (`tls.LoadX509KeyPair`), so files that are missing, unreadable or don't match are rejected. Then `tls_set_config.yml` stores the paths and `tls_enabled: true`. Files are not copied. Returns Ansible task steps.
 
