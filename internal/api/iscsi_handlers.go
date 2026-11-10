@@ -191,13 +191,8 @@ func (h *Handler) initISCSI(w http.ResponseWriter, r *http.Request) {
 
 // getISCSITargets handles GET /api/iscsi-targets
 // Returns all active iSCSI targets from the platform backend (targetcli or ctld).
-func (h *Handler) getISCSITargets(w http.ResponseWriter, r *http.Request) {
-	targets, err := iscsi.ListTargets()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, targets)
+func (h *Handler) getISCSITargets(context.Context, struct{}) ([]iscsi.Target, error) {
+	return iscsi.ListTargets()
 }
 
 // createISCSITarget handles POST /api/iscsi-targets

@@ -85,6 +85,7 @@ External Go dependencies:
 - `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format); official golang.org/x package
 - `golang.org/x/term` — echo-disabled password prompting in `--set-password`; official golang.org/x package
 - `go.opentelemetry.io/otel` + SDK/contrib modules — traces, metrics, and the log pipeline (#49); CNCF-governed. All OTLP exporters are env-gated (`OTEL_EXPORTER_OTLP_*`) and no-op by default. The log SDK always runs: `internal/logging.JournalExporter` is the single producer for journald output, and the OTLP log branch attaches to the same provider when enabled — never tee logs at the slog level. The meter provider always runs too (#168): record every metric once on `otel.Meter("dumpstore")`; never write Prometheus text by hand.
+- No Go dependency for OpenAPI (#181): `internal/apispec` is stdlib reflection. The spec linter (`@redocly/cli`, pinned in `ci.yml`, config `redocly.yaml` + `.redocly.lint-ignore.yaml`) is CI-only Node tooling, never a runtime dependency.
 - `go.opentelemetry.io/otel/exporters/prometheus` + `github.com/prometheus/client_golang` (`prometheus`, `promhttp`) + `github.com/prometheus/otlptranslator` — the meter's Prometheus reader that serves `/metrics` from a private registry (#168); CNCF projects. New metrics keep Prometheus-compatible names: counters without `_total` (the exporter adds it), durations as unit `s` (the exporter adds `_seconds`).
 
 ---
@@ -136,11 +137,11 @@ Do not change this split without a good reason — the ops side keeps single-sho
 
 ### Adding a new operation
 
-1. **Read**: add a function to `internal/zfs/zfs.go` and a handler in `internal/api/handlers.go`.
+1. **Read**: add a function to `internal/zfs/zfs.go` and a typed handler `func (h *Handler) getX(ctx context.Context, p xParams) (X, error)` — return `errStatus(code, err)` for 4xx, any other error is a 500.
 2. **Single-command write**: validate inputs in the handler, build the argv, run it via `h.runLocal(ops.Step{Name: ..., Argv: ...})`; on error use `writeOpsError`.
 3. **Configuration write** (owned config file / OS resource): add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(...)`.
 4. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
-5. Register the route in `handlers.go:RegisterRoutes`.
+5. Register the route in `internal/api/routes.go:RegisterRoutes` with its OpenAPI metadata: `handle(reg, route("GET /api/x", "group.method", "Summary"), h.getX)` for typed handlers (preferred — spec types come from the signature), or `raw(reg, route(..., params[P](), body[B](), reply[R]()), h.x)` for plain ones. SDK names follow the #181 mapping. Then run `make openapi` and commit `api/openapi.json` (CI fails when it is stale). New routes must not join the `untypedResponses` / `untypedBodies` lists in `internal/api/spec_test.go`.
 6. Add the UI in `static/app.js` (render function + fetch call) and `static/index.html` (button + dialog if needed).
 
 ---
@@ -193,7 +194,12 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/ansible/metrics.go` | OTEL counter/histogram for Ansible playbook runs (`ansible_runs_total`, `ansible_run_duration_seconds`) |
 | `internal/operations/operations.go` | Write-operation registry (#184): `Begin`/`Step`/`Finish`/`Get`, per-op `seq`, tagged `ansible.progress` publish, bounded in-memory retention; `api/operations.go` holds the `Operations` middleware (`X-Operation-ID`) and `GET /api/operations/{id}` |
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
-| `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
+| `internal/apispec/` | Route registry + OpenAPI 3.1 generator (#181): `Registry.Handle` (route + metadata), `Spec()`, reflection schemas (`schema.go`) |
+| `internal/api/routes.go` | `RegisterRoutes` — every API route with SDK group/method, summary and types; shared param types; `NewRegistry` (error type, tag descriptions, schema names) |
+| `internal/api/route.go` | Typed handler adapter `handle`/`typed` (binds `path:`/`query:`/`body:` fields), `errStatus` |
+| `internal/api/spec_test.go` | Spec staleness (`make openapi`), typing burn-down lists, path/percent-encoding resolution, adapter tests |
+| `api/openapi.json` | Generated OpenAPI spec — never edit by hand; `make openapi` |
+| `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
 | `internal/logging/handler.go` | `NewJournalHandler` — legacy slog handler with systemd journal priority prefixes (fallback path only) |
 | `internal/logging/journal_exporter.go` | `JournalExporter` — OTEL log exporter reproducing the journald format (single producer for journald + OTLP logs, #49) |
 | `internal/logging/apphandler.go` | `NewAppHandler` — process-wide slog handler: otelslog bridge + level gate + req_id injection |

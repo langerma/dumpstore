@@ -26,7 +26,7 @@ func newOpsTestHandler() (*Handler, http.Handler) {
 	mux.HandleFunc("GET /api/thing", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(r.Context(), w, map[string]string{"op": operations.IDFromContext(r.Context())})
 	})
-	mux.HandleFunc("GET /api/operations/{id}", h.getOperation)
+	mux.Handle("GET /api/operations/{id}", typed(h.getOperation))
 	return h, h.Operations(mux)
 }
 
@@ -119,10 +119,14 @@ func TestGetOperationEndpoint(t *testing.T) {
 	if len(op.Steps) != 0 {
 		t.Errorf("after=1 steps = %+v", op.Steps)
 	}
-	if rec := do(t, srv, "GET", "/api/operations/client-id-0001?after=x", ""); rec.Code != 400 {
-		t.Errorf("bad after: code=%d", rec.Code)
+	for _, after := range []string{"x", "-1"} {
+		rec := do(t, srv, "GET", "/api/operations/client-id-0001?after="+after, "")
+		if rec.Code != 400 || rec.Body.String() != `{"error":"after must be a non-negative integer"}`+"\n" {
+			t.Errorf("after=%s: code=%d body=%q", after, rec.Code, rec.Body.String())
+		}
 	}
-	if rec := do(t, srv, "GET", "/api/operations/unknown-0001", ""); rec.Code != 404 {
-		t.Errorf("unknown: code=%d", rec.Code)
+	if rec := do(t, srv, "GET", "/api/operations/unknown-0001", ""); rec.Code != 404 ||
+		rec.Body.String() != `{"error":"operation not found or expired"}`+"\n" {
+		t.Errorf("unknown: code=%d body=%q", rec.Code, rec.Body.String())
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -545,17 +546,16 @@ func (h *Handler) deleteSMBHomes(w http.ResponseWriter, r *http.Request) {
 }
 
 // getTimeMachineShares handles GET /api/smb/timemachine
-func (h *Handler) getTimeMachineShares(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getTimeMachineShares(context.Context, struct{}) ([]smb.TimeMachineShare, error) {
 	cfg, err := smb.ParseSMBConfig(runtime.GOOS)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return nil, err
 	}
 	shares := cfg.TimeMachine
 	if shares == nil {
 		shares = []smb.TimeMachineShare{}
 	}
-	writeJSON(r.Context(), w, shares)
+	return shares, nil
 }
 
 // createTimeMachineShare handles POST /api/smb/timemachine

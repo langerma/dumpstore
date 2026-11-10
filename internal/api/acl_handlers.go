@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,11 +61,10 @@ var aclSafeRe = func() func(string) bool {
 // getACLStatus handles GET /api/acl-status
 // Returns a map of dataset name → bool indicating whether the dataset has
 // non-trivial ACL entries on its mountpoint.
-func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getACLStatus(ctx context.Context, _ struct{}) (map[string]bool, error) {
 	datasets, err := zfs.ListDatasets()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return nil, err
 	}
 	status := make(map[string]bool, len(datasets))
 	for _, d := range datasets {
@@ -75,33 +75,25 @@ func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
 		// when getfacl / nfs4_getfacl are not available.
 		hasACL, aclErr := zfs.DatasetHasACL(d.Mountpoint)
 		if aclErr != nil {
-			slog.WarnContext(r.Context(), "DatasetHasACL failed, falling back to acltype", "dataset", d.Name, "err", aclErr)
+			slog.WarnContext(ctx, "DatasetHasACL failed, falling back to acltype", "dataset", d.Name, "err", aclErr)
 			hasACL = d.ACLType != "" && d.ACLType != "off"
 		} else if !hasACL {
 			hasACL = d.ACLType != "" && d.ACLType != "off"
 		}
 		status[d.Name] = hasACL
 	}
-	writeJSON(r.Context(), w, status)
+	return status, nil
 }
 
 // getDatasetACL handles GET /api/acl/{dataset...}
-func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("dataset")
-	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
-		return
+func (h *Handler) getDatasetACL(_ context.Context, p datasetParam) (*zfs.DatasetACL, error) {
+	if p.Dataset == "" {
+		return nil, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
 	}
-	if !validZFSName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
-		return
+	if !validZFSName(p.Dataset) {
+		return nil, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
-	acl, err := zfs.GetDatasetACL(name)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, acl)
+	return zfs.GetDatasetACL(p.Dataset)
 }
 
 // setACLEntry handles POST /api/acl/{dataset...}

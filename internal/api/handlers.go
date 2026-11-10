@@ -278,141 +278,24 @@ func (h *Handler) runLocal(ctx context.Context, steps ...ops.Step) (*ops.Result,
 	})
 }
 
-// RegisterRoutes attaches all API routes to mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/sysinfo", h.getSysInfo)
-	mux.HandleFunc("GET /api/network", h.getNetwork)
-	mux.HandleFunc("GET /api/version", h.getVersion)
-	mux.HandleFunc("GET /api/operations/{id}", h.getOperation)
-	mux.HandleFunc("GET /api/poolstatus", h.getPoolStatuses)
-	mux.HandleFunc("GET /api/pools", h.getPools)
-	mux.HandleFunc("POST /api/pools", h.createPool)
-	mux.HandleFunc("GET /api/pools/importable", h.getImportablePools)
-	mux.HandleFunc("POST /api/pools/import", h.importPool)
-	mux.HandleFunc("POST /api/pools/{pool}/export", h.exportPool)
-	mux.HandleFunc("POST /api/pools/{pool}/vdevs", h.addDataVdev)
-	mux.HandleFunc("POST /api/pools/{pool}/cache", h.addCacheDevice)
-	mux.HandleFunc("POST /api/pools/{pool}/log", h.addLogDevice)
-	mux.HandleFunc("POST /api/pools/{pool}/spare", h.addSpareDevice)
-	mux.HandleFunc("DELETE /api/pools/{pool}/devices/{device...}", h.removePoolDevice)
-	mux.HandleFunc("GET /api/datasets", h.getDatasets)
-	mux.HandleFunc("POST /api/datasets", h.createDataset)
-	mux.HandleFunc("POST /api/datasets/rename", h.renameDataset)
-	mux.HandleFunc("DELETE /api/datasets/{name...}", h.deleteDataset)
-	mux.HandleFunc("GET /metrics", h.getMetrics)
-	mux.HandleFunc("GET /api/smart", h.getSMART)
-	mux.HandleFunc("GET /api/dataset-props/{name...}", h.getDatasetProps)
-	mux.HandleFunc("PATCH /api/datasets/{name...}", h.setDatasetProps)
-	mux.HandleFunc("POST /api/rewrite/{name...}", h.rewriteDataset)
-	mux.HandleFunc("GET /api/userspace/{name...}", h.getUserSpace)
-	mux.HandleFunc("POST /api/userquota/{name...}", h.setUserQuota)
-	mux.HandleFunc("GET /api/snapshots", h.getSnapshots)
-	mux.HandleFunc("GET /api/snapshots/diff", h.getSnapshotDiff)
-	mux.HandleFunc("GET /api/iostat", h.getIOStat)
-	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
-	mux.HandleFunc("POST /api/snapshots/clone", h.cloneSnapshot)
-	mux.HandleFunc("POST /api/snapshots/send", h.sendSnapshot)
-	mux.HandleFunc("GET /api/jobs", h.listJobs)
-	mux.HandleFunc("GET /api/jobs/{id}", h.getJob)
-	mux.HandleFunc("POST /api/jobs/{id}/cancel", h.cancelJob)
-	mux.HandleFunc("DELETE /api/jobs/{id}", h.removeJob)
-	mux.HandleFunc("POST /api/snapshots/delete-batch", h.deleteSnapshotBatch)
-	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
-	mux.HandleFunc("GET /api/events", h.getEvents)
-	mux.HandleFunc("GET /api/chown/{dataset...}", h.getDatasetOwnership)
-	mux.HandleFunc("POST /api/chown/{dataset...}", h.setDatasetOwnership)
-	mux.HandleFunc("GET /api/acl-status", h.getACLStatus)
-	mux.HandleFunc("GET /api/acl/{dataset...}", h.getDatasetACL)
-	mux.HandleFunc("POST /api/acl/{dataset...}", h.setACLEntry)
-	mux.HandleFunc("DELETE /api/acl/{dataset...}", h.removeACLEntry)
-	mux.HandleFunc("GET /api/users", h.getUsers)
-	mux.HandleFunc("POST /api/users", h.createUser)
-	mux.HandleFunc("PUT /api/users/{name}", h.modifyUser)
-	mux.HandleFunc("DELETE /api/users/{name}", h.deleteUser)
-	mux.HandleFunc("GET /api/users/{name}/sshkeys", h.listSSHKeys)
-	mux.HandleFunc("POST /api/users/{name}/sshkeys", h.addSSHKey)
-	mux.HandleFunc("DELETE /api/users/{name}/sshkeys", h.removeSSHKey)
-	mux.HandleFunc("GET /api/groups", h.getGroups)
-	mux.HandleFunc("POST /api/groups", h.createGroup)
-	mux.HandleFunc("PUT /api/groups/{name}", h.modifyGroup)
-	mux.HandleFunc("DELETE /api/groups/{name}", h.deleteGroup)
-	mux.HandleFunc("GET /api/smb/status", h.getSMBStatus)
-	mux.HandleFunc("POST /api/smb/init", h.initSamba)
-	mux.HandleFunc("POST /api/smb/wsdd", h.applyWSDD)
-	mux.HandleFunc("GET /api/smb-users", h.getSambaUsers)
-	mux.HandleFunc("POST /api/smb-users/{name}", h.addSambaUser)
-	mux.HandleFunc("DELETE /api/smb-users/{name}", h.removeSambaUser)
-	mux.HandleFunc("GET /api/smb-shares", h.getSMBShares)
-	mux.HandleFunc("POST /api/smb-share/{dataset...}", h.setSMBShare)
-	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)
-	mux.HandleFunc("GET /api/smb/homes", h.getSMBHomes)
-	mux.HandleFunc("POST /api/smb/homes", h.setSMBHomes)
-	mux.HandleFunc("DELETE /api/smb/homes", h.deleteSMBHomes)
-	mux.HandleFunc("GET /api/smb/timemachine", h.getTimeMachineShares)
-	mux.HandleFunc("POST /api/smb/timemachine", h.createTimeMachineShare)
-	mux.HandleFunc("DELETE /api/smb/timemachine/{sharename}", h.deleteTimeMachineShare)
-	mux.HandleFunc("GET /api/devices", h.getDevices)
-	mux.HandleFunc("POST /api/pools/{pool}/replace", h.replaceDevice)
-	mux.HandleFunc("POST /api/pools/{pool}/offline", h.offlineDevice)
-	mux.HandleFunc("POST /api/pools/{pool}/online", h.onlineDevice)
-	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
-	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
-	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
-	mux.HandleFunc("PUT /api/scrub-schedule/{pool}", h.setScrubSchedule)
-	mux.HandleFunc("DELETE /api/scrub-schedule/{pool}", h.deleteScrubSchedule)
-	mux.HandleFunc("GET /api/auto-snapshot-schedules", h.listAutoSnapshotSchedules)
-	mux.HandleFunc("GET /api/auto-snapshot/{name...}", h.getAutoSnapshotProps)
-	mux.HandleFunc("PUT /api/auto-snapshot/{name...}", h.setAutoSnapshotProps)
-	mux.HandleFunc("GET /api/iscsi-targets", h.getISCSITargets)
-	mux.HandleFunc("POST /api/iscsi-targets", h.createISCSITarget)
-	mux.HandleFunc("DELETE /api/iscsi-targets", h.deleteISCSITarget)
-	mux.HandleFunc("GET /api/iscsi/status", h.getISCSIStatus)
-	mux.HandleFunc("POST /api/iscsi/init", h.initISCSI)
-	mux.HandleFunc("GET /api/schema", h.getSchema)
-	mux.HandleFunc("POST /api/auth/change-password", h.changePassword)
-	mux.HandleFunc("POST /api/auth/change-username", h.changeUsername)
-	mux.HandleFunc("GET /api/services", h.getServices)
-	mux.HandleFunc("POST /api/services/{service}/{action}", h.mutateService)
-
-	mux.HandleFunc("GET /api/tls/status", h.getTLSStatus)
-	mux.HandleFunc("POST /api/tls/gencert", h.tlsGenCert)
-	mux.HandleFunc("PATCH /api/tls/config", h.tlsSetConfig)
-	mux.HandleFunc("POST /api/tls/acme/issue", h.tlsAcmeIssue)
-	mux.HandleFunc("POST /api/tls/acme/renew", h.tlsAcmeRenew)
-
-	mux.HandleFunc("GET /api/auto-snapshot/status", h.getAutoSnapshotStatus)
-	mux.HandleFunc("POST /api/auto-snapshot/takeover", h.takeoverAutoSnapshot)
-	mux.HandleFunc("POST /api/auto-snapshot/release", h.releaseAutoSnapshot)
-
-	mux.HandleFunc("GET /api/replication", h.listReplication)
-	mux.HandleFunc("POST /api/replication", h.createReplication)
-	mux.HandleFunc("PATCH /api/replication/{id}", h.updateReplication)
-	mux.HandleFunc("DELETE /api/replication/{id}", h.deleteReplication)
-	mux.HandleFunc("POST /api/replication/{id}/run", h.runReplication)
-	mux.HandleFunc("GET /api/replication/{id}/history", h.getReplicationHistory)
-}
-
 // SetOtelInfo injects the effective OpenTelemetry status for the sysinfo
 // response. Set once at startup by main; this package cannot import
 // internal/otel (cycle via internal/logging).
 func (h *Handler) SetOtelInfo(v any) { h.otelInfo = v }
 
-func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
-	type response struct {
-		AppVersion string `json:"app_version"`
-		Otel       any    `json:"otel,omitempty"`
-		system.Info
-	}
-	writeJSON(r.Context(), w, response{AppVersion: h.version, Otel: h.otelInfo, Info: system.Get()})
+// SysInfo is the GET /api/sysinfo response.
+type SysInfo struct {
+	AppVersion string `json:"app_version"`
+	Otel       any    `json:"otel,omitempty"`
+	system.Info
 }
 
-func (h *Handler) getNetwork(w http.ResponseWriter, r *http.Request) {
-	ifaces, err := system.GetNetworkInterfaces()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, ifaces)
+func (h *Handler) getSysInfo(context.Context, struct{}) (SysInfo, error) {
+	return SysInfo{AppVersion: h.version, Otel: h.otelInfo, Info: system.Get()}, nil
+}
+
+func (h *Handler) getNetwork(context.Context, struct{}) ([]system.NetworkInterface, error) {
+	return system.GetNetworkInterfaces()
 }
 
 func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) {

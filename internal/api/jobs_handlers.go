@@ -1,24 +1,24 @@
 package api
 
 import (
+	"context"
+	"dumpstore/internal/jobs"
 	"fmt"
 	"net/http"
 )
 
 // listJobs handles GET /api/jobs
-func (h *Handler) listJobs(w http.ResponseWriter, r *http.Request) {
-	writeJSON(r.Context(), w, h.jobs.List())
+func (h *Handler) listJobs(context.Context, struct{}) ([]jobs.Job, error) {
+	return h.jobs.List(), nil
 }
 
 // getJob handles GET /api/jobs/{id}
-func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	j, ok := h.jobs.Get(id)
+func (h *Handler) getJob(_ context.Context, p idParam) (jobs.Job, error) {
+	j, ok := h.jobs.Get(p.ID)
 	if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("job %q not found", id), nil)
-		return
+		return j, errStatus(http.StatusNotFound, fmt.Errorf("job %q not found", p.ID))
 	}
-	writeJSON(r.Context(), w, j)
+	return j, nil
 }
 
 // cancelJob handles POST /api/jobs/{id}/cancel

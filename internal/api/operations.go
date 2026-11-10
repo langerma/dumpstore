@@ -2,11 +2,11 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"dumpstore/internal/operations"
@@ -90,20 +90,15 @@ func (o *opRecorder) body() []byte { return o.buf.Bytes() }
 
 // getOperation handles GET /api/operations/{id}?after=<seq>.
 // Returns the operation record with steps whose seq > after.
-func (h *Handler) getOperation(w http.ResponseWriter, r *http.Request) {
-	after := 0
-	if s := r.URL.Query().Get("after"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n < 0 {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("after must be a non-negative integer"), nil)
-			return
-		}
-		after = n
-	}
-	op, ok := h.operations.Get(r.PathValue("id"), after)
+type operationParams struct {
+	ID    string `path:"id" doc:"Operation ID (the X-Operation-ID of the write)"`
+	After uint   `query:"after" doc:"Return only steps with seq greater than this"`
+}
+
+func (h *Handler) getOperation(_ context.Context, p operationParams) (operations.Op, error) {
+	op, ok := h.operations.Get(p.ID, int(p.After))
 	if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("operation not found or expired"), nil)
-		return
+		return op, errStatus(http.StatusNotFound, fmt.Errorf("operation not found or expired"))
 	}
-	writeJSON(r.Context(), w, op)
+	return op, nil
 }

@@ -12,14 +12,14 @@ import (
 )
 
 // listReplication handles GET /api/replication.
-func (h *Handler) listReplication(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listReplication(context.Context, struct{}) ([]replication.Task, error) {
 	tasks := h.repl.Store().List()
 	// Strip LastRuns from the list view for brevity; clients fetch history
 	// per-task via /api/replication/{id}/history.
 	for i := range tasks {
 		tasks[i].LastRuns = nil
 	}
-	writeJSON(r.Context(), w, tasks)
+	return tasks, nil
 }
 
 // replicationRequest is the shared body shape for POST and PATCH. All fields
@@ -245,24 +245,20 @@ func (h *Handler) runReplication(w http.ResponseWriter, r *http.Request) {
 }
 
 // getReplicationHistory handles GET /api/replication/{id}/history.
-func (h *Handler) getReplicationHistory(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, errors.New("id required"), nil)
-		return
+func (h *Handler) getReplicationHistory(_ context.Context, p idParam) ([]replication.RunRecord, error) {
+	if p.ID == "" {
+		return nil, errStatus(http.StatusBadRequest, errors.New("id required"))
 	}
-	t, err := h.repl.Store().Get(id)
+	t, err := h.repl.Store().Get(p.ID)
 	if err != nil {
 		if errors.Is(err, replication.ErrNotFound) {
-			writeError(r.Context(), w, http.StatusNotFound, err, nil)
-			return
+			return nil, errStatus(http.StatusNotFound, err)
 		}
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return nil, err
 	}
 	runs := t.LastRuns
 	if runs == nil {
 		runs = []replication.RunRecord{}
 	}
-	writeJSON(r.Context(), w, runs)
+	return runs, nil
 }

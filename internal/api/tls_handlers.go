@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -33,7 +34,7 @@ type tlsStatusResponse struct {
 }
 
 // getTLSStatus returns the current TLS configuration and cert metadata.
-func (h *Handler) getTLSStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getTLSStatus(context.Context, struct{}) (tlsStatusResponse, error) {
 	h.authMu.RLock()
 	resp := tlsStatusResponse{
 		Enabled:    h.authCfg.TLSEnabled,
@@ -54,8 +55,7 @@ func (h *Handler) getTLSStatus(w http.ResponseWriter, r *http.Request) {
 			resp.SelfSigned = meta.selfSigned
 		}
 	}
-
-	writeJSON(r.Context(), w, resp)
+	return resp, nil
 }
 
 // tlsGenCert generates a self-signed certificate via the tls_gencert.yml playbook.

@@ -91,6 +91,14 @@ Reads call ZFS/system CLI tools directly. Writes are split across three lanes by
 
 Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) and stream live progress on the `ansible.progress` SSE topic — the frontend op-log cannot tell them apart. Each write request is an *operation* (`internal/operations`, #184): the `Handler.Operations` middleware registers it under the client's `X-Operation-ID` (or a generated ID) and records the final status and body; `runOp`/`runLocal` record every step with a per-operation `seq` and publish it tagged with the ID. The frontend shows only its own operation's steps and fills gaps or recovers a lost response from `GET /api/operations/{id}`. Records are in memory and bounded (running always kept; finished: 200 / 1 h). Input validation for ops-lane writes lives solely in the Go handlers. Ansible (and Python) remains a dependency only for the config-file / OS-resource features.
 
+## Route registry and OpenAPI
+
+Routes are not registered on the `ServeMux` directly. Each one goes through `internal/apispec.Registry.Handle` with its metadata: SDK group and method (`x-fern-sdk-group-name` / `x-fern-sdk-method-name`, from which `operationId` and the docs tag are derived), summary, parameter, request and response types, success status, and whether it is public or internal (#181). `Registry.Spec()` builds the OpenAPI 3.1 document from exactly these registrations, reflecting JSON schemas from the Go types, so the spec cannot list a route the server doesn't serve or miss one it does.
+
+New handlers should use the typed adapter `handle(reg, route(...), fn)` with `fn func(ctx, Params) (Resp, error)`: the adapter binds `path:"x"` / `query:"x"` fields and an optional `body:""` field, writes the response or the error (`errStatus(code, err)` for 4xx, anything else is a 500), and the spec takes its parameter, request and response schemas from `Params` and `Resp`, so they can't disagree with the code. Routes still on plain handlers (`raw(...)`) declare their types with route options.
+
+The committed `api/openapi.json` is regenerated with `make openapi`; `TestOpenAPISpec` fails while it is stale, `TestSpecPathsResolve` requests every documented path with percent-encoded names and checks it reaches the same mux pattern, and CI lints the file with Redocly (`redocly.yaml`, `recommended-strict`). The integration suite validates live GET responses against the published schemas.
+
 ## Write operation request flow
 
 ```
@@ -156,7 +164,9 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 | Path | Responsibility |
 |------|----------------|
 | `main.go` | Flags, startup dependency checks, middleware chain, wiring of scheduler/jobs/poller |
-| `internal/api` | HTTP handlers and route registration; input validation for all writes; dataset reference guard (`refguard.go`) |
+| `internal/api` | HTTP handlers and route registration (`routes.go`, typed adapter in `route.go`); input validation for all writes; dataset reference guard (`refguard.go`) |
+| `internal/apispec` | Route registry and OpenAPI 3.1 generator (#181) |
+| `api/openapi.json` | Generated, committed OpenAPI spec (`make openapi`) |
 | `internal/zfs` | Direct `zpool`/`zfs` reads; POSIX/NFSv4 ACL parsing |
 | `internal/ops` | Single-command writes (argv exec, no shell) |
 | `internal/ansible` | Playbook runner (ndjson callback) and its metrics |
@@ -191,4 +201,4 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 - **Integration tests** — `tests/integration` (build tag `integration`) drives a **deployed instance** in the Lima dev VM over HTTP and asserts on real host state: every read endpoint, auth and password change, dataset/snapshot lifecycle, `zfs diff`, quotas, send/recv and replication jobs, users/groups, Samba, ACLs, chown, iSCSI, TLS, service control, auto-snapshot properties, scrub schedules, and a full pool lifecycle (create, offline/online, `zpool replace` + resilver, spares, export/import) on three dedicated scratch disks. Tests skip when a host tool is missing (stale VM, FreeBSD). Run with `make vm-linux-start && make vm-linux-deploy && make test-integration`.
 - **Dev VMs** — `make vm-linux-*` (Ubuntu 24.04, follows the host architecture) and `make vm-freebsd-*` (FreeBSD 15, arm64) run headless under [Lima](https://github.com/lima-vm/lima) via QEMU; targets are `start`, `deploy`, `ssh`, `stop`, `destroy`. Each VM gets a 10 GiB disk with a `tank` pool created at first boot plus three 1 GiB scratch disks for the integration suite. `deploy` packs the source tree, copies it in, and runs `make install` natively — no cross-compilation. Port forwards are fixed (Linux `:8080`, FreeBSD `:8081`) so both can run at once; login `admin` / `admin`. `make dev` instead runs the UI on any machine against the CLI stubs in `dev/bin/`.
 - **Screenshots** — `make screenshots` seeds demo data on the deployed Linux VM (`dev/screenshots/seed.sh up`), drives headless Chrome through every tab and dialog (`dev/screenshots/capture.mjs`, `puppeteer-core` against the installed Chrome; `CHROME_PATH` overrides), writes `screenshots/`, and always removes the demo data again (`seed.sh down`).
-- **CI** — `ci.yml` runs build/vet/unit tests plus a `release-smoke` job (the full `make release` cross-build matrix with a `--version` check) on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.
+- **CI** — `ci.yml` runs build/vet/unit tests (including the OpenAPI staleness check), an `openapi-lint` job (Redocly CLI on `api/openapi.json`), plus a `release-smoke` job (the full `make release` cross-build matrix with a `--version` check) on every PR; `integration-tests.yml` boots the Lima VM on a KVM-enabled runner and runs the integration suite nightly, on manual dispatch, and on PRs labeled `run-integration`.

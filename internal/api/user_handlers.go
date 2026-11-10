@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,23 +11,13 @@ import (
 )
 
 // getUsers handles GET /api/users
-func (h *Handler) getUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := system.ListUsers()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, users)
+func (h *Handler) getUsers(context.Context, struct{}) ([]system.User, error) {
+	return system.ListUsers()
 }
 
 // getGroups handles GET /api/groups
-func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := system.ListGroups()
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	writeJSON(r.Context(), w, groups)
+func (h *Handler) getGroups(context.Context, struct{}) ([]system.Group, error) {
+	return system.ListGroups()
 }
 
 // createUser handles POST /api/users
