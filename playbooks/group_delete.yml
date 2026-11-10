@@ -1,7 +1,8 @@
 ---
 # Required extra vars:
 #   groupname - name of the group to delete
-#   gid       - GID of the group (must be >= 1000, validated in Go before calling)
+#   gid       - GID of the group (must be >= uid_min, validated in Go before calling)
+#   uid_min   - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 
 - name: Delete local group
   hosts: localhost
@@ -12,9 +13,9 @@
         that:
           - groupname is defined and groupname != ""
           - gid is defined
-          - gid | int >= 1000
+          - gid | int >= uid_min | int
           - groupname not in ['nogroup', 'nobody', 'nfsnobody']
-        fail_msg: "groupname is required, gid must be >= 1000, and protected groups (nogroup, nobody, nfsnobody) cannot be deleted"
+        fail_msg: "groupname is required, gid must be >= {{ uid_min }}, and protected groups (nogroup, nobody, nfsnobody) cannot be deleted"
 
     - name: Delete group
       ansible.builtin.group:

@@ -2,6 +2,7 @@
 # Required extra vars:
 #   username    - login name for the new user
 #   shell       - login shell (e.g. /bin/bash, /sbin/nologin)
+#   uid_min     - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 # Optional extra vars:
 #   uid         - explicit UID (omit for auto-assignment)
 #   group       - primary group name (created if it does not exist)
@@ -33,8 +34,8 @@
     - name: Assert uid is safe if provided
       ansible.builtin.assert:
         that:
-          - uid | int >= 1000
-        fail_msg: "uid must be >= 1000 (system UIDs are reserved)"
+          - uid | int >= uid_min | int
+        fail_msg: "uid must be >= {{ uid_min }} (system UIDs are reserved)"
       when: uid != ""
 
     - name: Create primary group matching username
