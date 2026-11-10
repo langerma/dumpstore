@@ -48,7 +48,7 @@ func (h *Handler) changePassword(ctx context.Context, in struct {
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// ChangePasswordRequest is the POST /api/auth/change-password body.
+// ChangePasswordRequest is the PUT /api/v1/auth/password body.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
@@ -79,7 +79,7 @@ func (h *Handler) changeUsername(ctx context.Context, in struct {
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// ChangeUsernameRequest is the POST /api/auth/change-username body.
+// ChangeUsernameRequest is the PUT /api/v1/auth/username body.
 type ChangeUsernameRequest struct {
 	Username string `json:"username"`
 }

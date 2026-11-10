@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 
 	"dumpstore/internal/ansible"
@@ -21,7 +22,7 @@ import (
 func requireSMBInit() error {
 	if !smb.IsInitialized(runtime.GOOS) {
 		return errStatus(http.StatusConflict,
-			fmt.Errorf("Samba not initialised — run POST /api/smb/init first"))
+			fmt.Errorf("Samba not initialised — run POST /api/v1/smb/init first"))
 	}
 	return nil
 }
@@ -86,7 +87,7 @@ func wsddTarget() (st system.ServiceStatus, installed bool, confPath string) {
 	return st, installed, confPath
 }
 
-// WSDDStatus is the wsdd part of GET /api/smb/status. When wsdd is not
+// WSDDStatus is the wsdd part of GET /api/v1/smb/status. When wsdd is not
 // installed only installed and install_hint are present; otherwise
 // install_hint is absent and the WSDDService fields are present.
 type WSDDStatus struct {
@@ -107,7 +108,7 @@ type WSDDService struct {
 	Workgroup  string `json:"workgroup"`
 }
 
-// wsddStatus describes wsdd for GET /api/smb/status.
+// wsddStatus describes wsdd for GET /api/v1/smb/status.
 func wsddStatus(cfg *smb.SMBConfig) *WSDDStatus {
 	st, installed, conf := wsddTarget()
 	if !installed {
@@ -130,7 +131,7 @@ func wsddStatus(cfg *smb.SMBConfig) *WSDDStatus {
 	}
 }
 
-// applyWSDD handles POST /api/smb/wsdd
+// applyWSDD handles POST /api/v1/smb/wsdd/apply
 // Re-applies the current Samba config so wsdd's options file is rendered —
 // for hosts where wsdd was installed after Samba was initialised.
 func (h *Handler) applyWSDD(ctx context.Context, _ struct{}) (TaskResult, error) {
@@ -156,7 +157,7 @@ func (h *Handler) applyWSDD(ctx context.Context, _ struct{}) (TaskResult, error)
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// SMBStatus is the GET /api/smb/status response.
+// SMBStatus is the GET /api/v1/smb/status response.
 type SMBStatus struct {
 	Initialized bool        `json:"initialized"`
 	ConfPath    string      `json:"conf_path"`
@@ -165,7 +166,7 @@ type SMBStatus struct {
 	WSDD        *WSDDStatus `json:"wsdd,omitempty" doc:"Absent if smb.conf cannot be parsed"`
 }
 
-// getSMBStatus handles GET /api/smb/status
+// getSMBStatus handles GET /api/v1/smb/status
 func (h *Handler) getSMBStatus(context.Context, struct{}) (SMBStatus, error) {
 	goos := runtime.GOOS
 	confPath := smb.ConfPath(goos)
@@ -183,13 +184,13 @@ func (h *Handler) getSMBStatus(context.Context, struct{}) (SMBStatus, error) {
 	return resp, nil
 }
 
-// SMBInitResult is the POST /api/smb/init response.
+// SMBInitResult is the POST /api/v1/smb/init response.
 type SMBInitResult struct {
 	Initialized bool               `json:"initialized"`
 	Tasks       []ansible.TaskStep `json:"tasks"`
 }
 
-// initSamba handles POST /api/smb/init
+// initSamba handles POST /api/v1/smb/init
 // Checks smbd is installed, backs up any existing config, creates the
 // usershares directory, then writes dumpstore's own smb.conf from template.
 // Preserves workgroup and server string from an existing config if present.
@@ -238,7 +239,7 @@ func (h *Handler) initSamba(ctx context.Context, _ struct{}) (SMBInitResult, err
 	return SMBInitResult{Initialized: smb.IsInitialized(goos), Tasks: allSteps}, nil
 }
 
-// getSMBShares handles GET /api/smb-shares
+// getSMBShares handles GET /api/v1/smb/shares
 func (h *Handler) getSMBShares(context.Context, struct{}) ([]smb.Usershare, error) {
 	if err := requireSMBInit(); err != nil {
 		return nil, err
@@ -255,27 +256,27 @@ type SMBShareResult struct {
 	Tasks     []ansible.TaskStep `json:"tasks"`
 }
 
-// SetSMBShareRequest is the POST /api/smb-share/{dataset} body.
+// SetSMBShareRequest is the PUT /api/v1/smb/shares/{name} body.
 type SetSMBShareRequest struct {
-	Sharename string `json:"sharename"`
+	Dataset string `json:"dataset" doc:"Dataset whose mountpoint is shared"`
 }
 
-// setSMBShare handles POST /api/smb-share/{dataset...}
+// setSMBShare handles PUT /api/v1/smb/shares/{name}
 func (h *Handler) setSMBShare(ctx context.Context, in struct {
-	datasetParam
+	shareNameParam
 	Body SetSMBShareRequest `body:""`
 }) (SMBShareResult, error) {
 	if err := requireSMBInit(); err != nil {
 		return SMBShareResult{}, err
 	}
-	dataset := in.Dataset
+	dataset := in.Body.Dataset
 	if dataset == "" {
 		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
 	}
 	if !validZFSName(dataset) {
 		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid dataset name"))
 	}
-	req := in.Body
+	req := struct{ Sharename string }{in.Sharename}
 	if req.Sharename == "" {
 		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("sharename is required"))
 	}
@@ -295,39 +296,48 @@ func (h *Handler) setSMBShare(ctx context.Context, in struct {
 	return SMBShareResult{Dataset: dataset, Sharename: req.Sharename, Tasks: out.Steps()}, nil
 }
 
-// deleteSMBShare handles DELETE /api/smb-share/{dataset...}?name=<sharename>
-func (h *Handler) deleteSMBShare(ctx context.Context, in deleteSMBShareParams) (SMBShareResult, error) {
+// deleteSMBShare handles DELETE /api/v1/smb/shares/{name}
+func (h *Handler) deleteSMBShare(ctx context.Context, in deleteSMBShareParams) (SMBShareRemoved, error) {
 	if err := requireSMBInit(); err != nil {
-		return SMBShareResult{}, err
-	}
-	dataset := in.Dataset
-	if dataset == "" {
-		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
+		return SMBShareRemoved{}, err
 	}
 	sharename := in.Name
-	if sharename == "" {
-		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("name query parameter required"))
-	}
 	if !validSMBShare(sharename) {
-		return SMBShareResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid sharename"))
+		return SMBShareRemoved{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid sharename"))
 	}
+	shares, err := smb.ListUsershares(smb.UsershareDir(runtime.GOOS))
+	if err != nil {
+		return SMBShareRemoved{}, err
+	}
+	i := slices.IndexFunc(shares, func(s smb.Usershare) bool { return s.Name == sharename })
+	if i < 0 {
+		return SMBShareRemoved{}, errStatus(http.StatusNotFound, fmt.Errorf("SMB share %q not found", sharename))
+	}
+	path := shares[i].Path
 	out, err := h.runOp(ctx, "smb_usershare_unset.yml", map[string]string{
 		"sharename": sharename,
 	})
-	auditLog(ctx, "smb_share.delete", dataset, err)
+	auditLog(ctx, "smb_share.delete", sharename+" ("+path+")", err)
 	if err != nil {
-		return SMBShareResult{}, playbookError(err, out)
+		return SMBShareRemoved{}, playbookError(err, out)
 	}
-	return SMBShareResult{Dataset: dataset, Sharename: sharename, Tasks: out.Steps()}, nil
+	return SMBShareRemoved{Sharename: sharename, Path: path, Tasks: out.Steps()}, nil
 }
 
-// SambaUserList is the GET /api/smb-users response.
+// SMBShareRemoved is the DELETE /api/v1/smb/shares/{name} response.
+type SMBShareRemoved struct {
+	Sharename string             `json:"sharename"`
+	Path      string             `json:"path" doc:"Path the share pointed to"`
+	Tasks     []ansible.TaskStep `json:"tasks"`
+}
+
+// SambaUserList is the GET /api/v1/smb/users response.
 type SambaUserList struct {
 	Available bool     `json:"available" doc:"false if Samba is not available; users is then empty"`
 	Users     []string `json:"users"`
 }
 
-// getSambaUsers handles GET /api/smb-users
+// getSambaUsers handles GET /api/v1/smb/users
 func (h *Handler) getSambaUsers(context.Context, struct{}) (SambaUserList, error) {
 	users, err := system.ListSambaUsers()
 	if errors.Is(err, system.ErrSambaNotAvailable) {
@@ -342,12 +352,12 @@ func (h *Handler) getSambaUsers(context.Context, struct{}) (SambaUserList, error
 	return SambaUserList{Available: true, Users: users}, nil
 }
 
-// AddSambaUserRequest is the POST /api/smb-users/{name} body.
+// AddSambaUserRequest is the PUT /api/v1/smb/users/{name} body.
 type AddSambaUserRequest struct {
 	Password string `json:"password" doc:"Samba password; must not contain newlines"`
 }
 
-// addSambaUser handles POST /api/smb-users/{name}
+// addSambaUser handles PUT /api/v1/smb/users/{name}
 func (h *Handler) addSambaUser(ctx context.Context, in struct {
 	smbUserParam
 	Body AddSambaUserRequest `body:""`
@@ -382,7 +392,7 @@ func (h *Handler) addSambaUser(ctx context.Context, in struct {
 	return UserResult{Username: name, Tasks: out.Steps()}, nil
 }
 
-// removeSambaUser handles DELETE /api/smb-users/{name}
+// removeSambaUser handles DELETE /api/v1/smb/users/{name}
 func (h *Handler) removeSambaUser(ctx context.Context, in smbUserParam) (UserResult, error) {
 	if err := requireSMBInit(); err != nil {
 		return UserResult{}, err
@@ -415,14 +425,14 @@ type SMBHomesShare struct {
 	DirectoryMask string `json:"directory_mask"`
 }
 
-// SMBHomes is the GET /api/smb/homes response: only enabled when [homes]
+// SMBHomes is the GET /api/v1/smb/homes response: only enabled when [homes]
 // is disabled, otherwise enabled plus the SMBHomesShare fields.
 type SMBHomes struct {
 	Enabled bool `json:"enabled"`
 	*SMBHomesShare
 }
 
-// getSMBHomes handles GET /api/smb/homes
+// getSMBHomes handles GET /api/v1/smb/homes
 func (h *Handler) getSMBHomes(context.Context, struct{}) (SMBHomes, error) {
 	cfg, err := smb.ParseSMBConfig(runtime.GOOS)
 	if err != nil {
@@ -440,7 +450,7 @@ func (h *Handler) getSMBHomes(context.Context, struct{}) (SMBHomes, error) {
 	}}, nil
 }
 
-// SetSMBHomesRequest is the POST /api/smb/homes body.
+// SetSMBHomesRequest is the PUT /api/v1/smb/homes body.
 type SetSMBHomesRequest struct {
 	Dataset       string `json:"dataset,omitempty" doc:"Dataset whose mountpoint + /%U becomes the path (used when path is empty)"`
 	Path          string `json:"path,omitempty" doc:"Share path; required unless dataset is given"`
@@ -450,14 +460,14 @@ type SetSMBHomesRequest struct {
 	DirectoryMask string `json:"directory_mask,omitempty" doc:"3- or 4-digit octal (default 0755)"`
 }
 
-// SetSMBHomesResult is the POST /api/smb/homes response.
+// SetSMBHomesResult is the PUT /api/v1/smb/homes response.
 type SetSMBHomesResult struct {
 	Enabled bool `json:"enabled"`
 	SMBHomesShare
 	Tasks []ansible.TaskStep `json:"tasks"`
 }
 
-// setSMBHomes handles POST /api/smb/homes
+// setSMBHomes handles PUT /api/v1/smb/homes
 func (h *Handler) setSMBHomes(ctx context.Context, in struct {
 	Body SetSMBHomesRequest `body:""`
 }) (SetSMBHomesResult, error) {
@@ -549,7 +559,7 @@ func (h *Handler) setSMBHomes(ctx context.Context, in struct {
 	}, nil
 }
 
-// deleteSMBHomes handles DELETE /api/smb/homes
+// deleteSMBHomes handles DELETE /api/v1/smb/homes
 func (h *Handler) deleteSMBHomes(ctx context.Context, _ struct{}) (TaskResult, error) {
 	if err := requireSMBInit(); err != nil {
 		return TaskResult{}, err
@@ -571,7 +581,7 @@ func (h *Handler) deleteSMBHomes(ctx context.Context, _ struct{}) (TaskResult, e
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// getTimeMachineShares handles GET /api/smb/timemachine
+// getTimeMachineShares handles GET /api/v1/smb/timemachine
 func (h *Handler) getTimeMachineShares(context.Context, struct{}) ([]smb.TimeMachineShare, error) {
 	cfg, err := smb.ParseSMBConfig(runtime.GOOS)
 	if err != nil {
@@ -584,29 +594,32 @@ func (h *Handler) getTimeMachineShares(context.Context, struct{}) ([]smb.TimeMac
 	return shares, nil
 }
 
-// CreateTimeMachineShareRequest is the POST /api/smb/timemachine body.
+// CreateTimeMachineShareRequest is the PUT /api/v1/smb/timemachine/{name} body.
 type CreateTimeMachineShareRequest struct {
-	Sharename  string `json:"sharename"`
 	Dataset    string `json:"dataset,omitempty" doc:"Dataset whose mountpoint becomes the path (used when path is empty)"`
 	Path       string `json:"path,omitempty" doc:"Share path; required unless dataset is given"`
 	MaxSize    string `json:"max_size,omitempty" doc:"Time Machine size limit, e.g. 500G"`
 	ValidUsers string `json:"valid_users,omitempty" doc:"Samba valid users list"`
 }
 
-// TimeMachineSharesResult is the POST /api/smb/timemachine response.
+// TimeMachineSharesResult is the PUT /api/v1/smb/timemachine/{name} response.
 type TimeMachineSharesResult struct {
 	Shares []smb.TimeMachineShare `json:"shares" doc:"All Time Machine shares after the change"`
 	Tasks  []ansible.TaskStep     `json:"tasks"`
 }
 
-// createTimeMachineShare handles POST /api/smb/timemachine
+// createTimeMachineShare handles PUT /api/v1/smb/timemachine/{name}
 func (h *Handler) createTimeMachineShare(ctx context.Context, in struct {
+	shareNameParam
 	Body CreateTimeMachineShareRequest `body:""`
 }) (TimeMachineSharesResult, error) {
 	if err := requireSMBInit(); err != nil {
 		return TimeMachineSharesResult{}, err
 	}
-	req := in.Body
+	req := struct {
+		CreateTimeMachineShareRequest
+		Sharename string
+	}{in.Body, in.Sharename}
 	if req.Sharename == "" {
 		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("sharename is required"))
 	}
@@ -676,7 +689,7 @@ func (h *Handler) createTimeMachineShare(ctx context.Context, in struct {
 	return TimeMachineSharesResult{Shares: shares, Tasks: out.Steps()}, nil
 }
 
-// deleteTimeMachineShare handles DELETE /api/smb/timemachine/{sharename}
+// deleteTimeMachineShare handles DELETE /api/v1/smb/timemachine/{name}
 func (h *Handler) deleteTimeMachineShare(ctx context.Context, in shareNameParam) (TaskResult, error) {
 	if err := requireSMBInit(); err != nil {
 		return TaskResult{}, err

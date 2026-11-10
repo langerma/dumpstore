@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, startOp, toast } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtPct, fmtNum, fmtHours, fmtUptime, fmtSpeed, startOp, toast, v1 } from './utils.js';
 import { loadAll } from './loader.js';
 
 // ── Render: System info ────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ function otelInfoHtml(otel) {
 }
 
 // zfsInfoHtml renders the ZFS version and detected capabilities (#119)
-// inside the sysinfo card. Empty until /api/version and /api/schema load.
+// inside the sysinfo card. Empty until /api/v1/system/version and /api/v1/system/schema load.
 function zfsInfoHtml() {
   const caps = state.schema?.capabilities;
   if (!state.version && !caps) return '';
@@ -340,7 +340,7 @@ async function openReplaceDeviceDialog(pool, oldDev) {
   sel.innerHTML = '<option value="">Loading devices&hellip;</option>';
   document.getElementById('replaceDeviceDialog').showModal();
   try {
-    const devs = await api('GET', '/api/devices');
+    const devs = await api('GET', v1`/devices`);
     const free = (devs || []).filter(d => !d.in_use_by);
     sel.innerHTML = free.length
       ? '<option value="">— select a device —</option>' + free.map(d =>
@@ -359,8 +359,8 @@ async function confirmReplaceDevice() {
   document.getElementById('replaceDeviceDialog').close();
   const op = startOp(`Replace ${old} in ${pool}`);
   try {
-    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/replace`,
-      { old_device: old, new_device: newDev });
+    const data = await op.api('POST', v1`/pools/${pool}/devices/${old}/replace`,
+      { new_device: newDev });
     op.done(`Replace ${old} in ${pool}`, data.tasks, null);
     toast(`Replace started on ${pool} — resilver running`, 'ok');
     await loadAll();
@@ -382,7 +382,9 @@ async function _deviceStateOp(pool, device, action) {
   const title = `${action === 'offline' ? 'Offline' : 'Online'} ${device} (${pool})`;
   const op = startOp(title);
   try {
-    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/${action}`, { device });
+    const data = action === 'offline'
+      ? await op.api('POST', v1`/pools/${pool}/devices/${device}/offline`)
+      : await op.api('POST', v1`/pools/${pool}/devices/${device}/online`);
     op.done(title, data.tasks, null);
     toast(`${device} is now ${action}`, 'ok');
     await loadAll();
@@ -413,7 +415,7 @@ async function openCreatePoolDialog() {
   picker.innerHTML = '<div class="loading">Loading devices&hellip;</div>';
   document.getElementById('createPoolDialog').showModal();
   try {
-    const devs = await api('GET', '/api/devices');
+    const devs = await api('GET', v1`/devices`);
     const free = (devs || []).filter(d => !d.in_use_by);
     picker.innerHTML = free.length
       ? free.map(d => `
@@ -445,7 +447,7 @@ async function confirmCreatePool() {
   document.getElementById('createPoolDialog').close();
   const op = startOp(`Create pool: ${name}`);
   try {
-    const data = await op.api('POST', '/api/pools', {
+    const data = await op.api('POST', v1`/pools`, {
       name,
       vdev_type: vdevType,
       devices,
@@ -474,7 +476,7 @@ async function openImportPoolDialog() {
   list.innerHTML = '<div class="loading">Scanning for importable pools&hellip;</div>';
   document.getElementById('importPoolDialog').showModal();
   try {
-    const pools = await api('GET', '/api/pools/importable');
+    const pools = await api('GET', v1`/pools/importable`);
     if (!pools?.length) {
       list.innerHTML = '<div class="loading">No importable pools found.</div>';
       return;
@@ -509,7 +511,7 @@ async function confirmImportPool() {
   document.getElementById('importPoolDialog').close();
   const op = startOp(`Import pool: ${pool}`);
   try {
-    const data = await op.api('POST', '/api/pools/import', { pool, force });
+    const data = await op.api('POST', v1`/pools/import`, { pool, force });
     op.done(`Import pool: ${pool}`, data.tasks, null);
     toast(`Pool ${pool} imported`, 'ok');
     await loadAll();
@@ -526,7 +528,7 @@ async function exportPool(pool) {
   if (!confirm(`Export pool ${pool}?\n\nAll datasets are unmounted and the pool disappears from this host until it is re-imported. The export fails if the pool is busy (open files, active shares, running jobs).`)) return;
   const op = startOp(`Export pool: ${pool}`);
   try {
-    const data = await op.api('POST', `/api/pools/${encodeURIComponent(pool)}/export`);
+    const data = await op.api('POST', v1`/pools/${pool}/export`);
     op.done(`Export pool: ${pool}`, data.tasks, null);
     toast(`Pool ${pool} exported`, 'ok');
     await loadAll();
@@ -550,7 +552,7 @@ async function openExpandPoolDialog(pool) {
   picker.innerHTML = '<div class="loading">Loading devices&hellip;</div>';
   document.getElementById('expandPoolDialog').showModal();
   try {
-    const devs = await api('GET', '/api/devices');
+    const devs = await api('GET', v1`/devices`);
     const free = (devs || []).filter(d => !d.in_use_by);
     picker.innerHTML = free.length
       ? free.map(d => `
@@ -589,20 +591,21 @@ async function confirmExpandPool() {
   const devices = [...document.querySelectorAll('.expand-pool-dev:checked')].map(cb => cb.value);
   if (!devices.length) { toast('Select at least one device', 'err'); return; }
 
+  const pool = _expandPool;
   let path, body;
   if (kind === 'data') {
     const vdevType = document.getElementById('expandPoolVdevType').value;
     const min = _vdevMinDevices[vdevType] || 1;
     if (devices.length < min) { toast(`${vdevType} needs at least ${min} device${min === 1 ? '' : 's'}`, 'err'); return; }
-    path = 'vdevs';
+    path = v1`/pools/${pool}/vdevs`;
     body = { vdev_type: vdevType, devices };
   } else if (kind === 'log') {
     const mirror = document.getElementById('expandPoolLogMirror').checked;
     if (mirror && devices.length < 2) { toast('A mirrored log needs at least 2 devices', 'err'); return; }
-    path = 'log';
+    path = v1`/pools/${pool}/log`;
     body = { devices, mirror };
   } else {
-    path = kind; // cache | spare
+    path = kind === 'cache' ? v1`/pools/${pool}/cache` : v1`/pools/${pool}/spare`;
     body = { devices };
   }
 
@@ -610,7 +613,7 @@ async function confirmExpandPool() {
   const title = `Add ${kind} to ${_expandPool}`;
   const op = startOp(title);
   try {
-    const data = await op.api('POST', `/api/pools/${encodeURIComponent(_expandPool)}/${path}`, body);
+    const data = await op.api('POST', path, body);
     op.done(title, data.tasks, null);
     toast(`Devices added to ${_expandPool}`, 'ok');
     await loadAll();
@@ -627,8 +630,7 @@ async function removePoolDevice(pool, device) {
   const title = `Remove ${device} from ${pool}`;
   const op = startOp(title);
   try {
-    const encDev = device.split('/').map(encodeURIComponent).join('/');
-    const data = await op.api('DELETE', `/api/pools/${encodeURIComponent(pool)}/devices/${encDev}`);
+    const data = await op.api('DELETE', v1`/pools/${pool}/devices/${device}`);
     op.done(title, data.tasks, null);
     toast(`${device} removed from ${pool}`, 'ok');
     await loadAll();
@@ -649,7 +651,7 @@ function scrubStateOf(scan) {
 async function startScrub(pool) {
   const op = startOp(`Start scrub: ${pool}`);
   try {
-    const data = await op.api('POST', `/api/scrub/${encodeURIComponent(pool)}`);
+    const data = await op.api('POST', v1`/pools/${pool}/scrub`);
     op.done(`Start scrub: ${pool}`, data.tasks, null);
     toast(`Scrub started on ${pool}`, 'ok');
     await loadAll();
@@ -661,7 +663,7 @@ async function startScrub(pool) {
 async function cancelScrub(pool) {
   const op = startOp(`Cancel scrub: ${pool}`);
   try {
-    const data = await op.api('DELETE', `/api/scrub/${encodeURIComponent(pool)}`);
+    const data = await op.api('DELETE', v1`/pools/${pool}/scrub`);
     op.done(`Cancel scrub: ${pool}`, data.tasks, null);
     toast(`Scrub cancelled on ${pool}`, 'ok');
     await loadAll();
@@ -711,7 +713,7 @@ function openScrubScheduleDialog(pool) {
 }
 
 async function _refreshScrubSchedules() {
-  const data = await api('GET', '/api/scrub-schedules').catch(() => null);
+  const data = await api('GET', v1`/pools/scrub-schedules`).catch(() => null);
   if (data) {
     storeBatch(() => {
       storeSet('scrubScheduleMode', data.mode || 'zfsutils');
@@ -728,7 +730,7 @@ async function saveScrubSchedule() {
   document.getElementById('scrubScheduleDialog').close();
   const op = startOp(`Enable scrub: ${_scrubSchedulePool}`);
   try {
-    const data = await op.api('PUT', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`, body);
+    const data = await op.api('PUT', v1`/pools/${_scrubSchedulePool}/scrub-schedule`, body);
     op.done(`Enable scrub: ${_scrubSchedulePool}`, data.tasks, null);
     toast(`Scrub enabled for ${_scrubSchedulePool}`, 'ok');
     await _refreshScrubSchedules();
@@ -741,7 +743,7 @@ async function removeScrubSchedule() {
   document.getElementById('scrubScheduleDialog').close();
   const op = startOp(`Remove scrub: ${_scrubSchedulePool}`);
   try {
-    const data = await op.api('DELETE', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`);
+    const data = await op.api('DELETE', v1`/pools/${_scrubSchedulePool}/scrub-schedule`);
     op.done(`Remove scrub: ${_scrubSchedulePool}`, data.tasks, null);
     toast(`Scrub schedule removed for ${_scrubSchedulePool}`, 'ok');
     await _refreshScrubSchedules();
@@ -778,8 +780,7 @@ export async function openAutoSnapDialog(name) {
   });
   document.getElementById('autoSnapDialog').showModal();
   try {
-    const encodedName = name.split('/').map(encodeURIComponent).join('/');
-    const props = await api('GET', '/api/auto-snapshot/' + encodedName);
+    const props = await api('GET', v1`/datasets/${name}/auto-snapshot`);
     state.autoSnapshot[name] = props;
     _populateAutoSnapDialog(props);
   } catch (e) {
@@ -820,8 +821,7 @@ async function saveAutoSnapSchedule() {
   document.getElementById('autoSnapDialog').close();
   const op = startOp(`Auto-snapshot: ${_autoSnapDataset}`);
   try {
-    const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
-    const result = await op.api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    const result = await op.api('PUT', v1`/datasets/${_autoSnapDataset}/auto-snapshot`, body);
     op.done(`Auto-snapshot saved: ${_autoSnapDataset}`, result.tasks, null);
     toast('Auto-snapshot config saved', 'ok');
   } catch (err) {
@@ -836,8 +836,7 @@ async function removeAutoSnapSchedule() {
   document.getElementById('autoSnapDialog').close();
   const op = startOp(`Remove auto-snapshot: ${_autoSnapDataset}`);
   try {
-    const encodedName = _autoSnapDataset.split('/').map(encodeURIComponent).join('/');
-    const result = await op.api('PUT', '/api/auto-snapshot/' + encodedName, body);
+    const result = await op.api('PUT', v1`/datasets/${_autoSnapDataset}/auto-snapshot`, body);
     op.done(`Auto-snapshot removed: ${_autoSnapDataset}`, result.tasks, null);
     toast('Auto-snapshot config removed', 'ok');
   } catch (err) {

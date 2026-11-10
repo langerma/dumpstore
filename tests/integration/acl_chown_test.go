@@ -29,18 +29,18 @@ func TestPosixACL(t *testing.T) {
 	createUser(t, user)
 
 	// acltype=off (the Linux default) is refused until enabled.
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/acl/"+ds, map[string]string{"ace": "user:" + user + ":rwx"})
-	apiOK(t, "PATCH", "/api/datasets/"+ds, map[string]string{"acltype": "posix"})
+	apiStatus(t, http.StatusBadRequest, "POST", v1("/datasets/%s/acl/entries", ds), map[string]string{"ace": "user:" + user + ":rwx"})
+	apiOK(t, "PATCH", v1("/datasets/%s", ds), map[string]string{"acltype": "posix"})
 
-	if !decode[map[string]bool](t, apiOK(t, "GET", "/api/acl-status", nil))[ds] {
+	if !decode[map[string]bool](t, apiOK(t, "GET", "/api/v1/datasets/acl-status", nil))[ds] {
 		t.Errorf("acl-status does not report ACLs on %s after acltype=posix", ds)
 	}
 
-	assertTasks(t, apiOK(t, "POST", "/api/acl/"+ds, map[string]string{"ace": "user:" + user + ":rwx"}))
+	assertTasks(t, apiOK(t, "POST", v1("/datasets/%s/acl/entries", ds), map[string]string{"ace": "user:" + user + ":rwx"}))
 	acl := decode[struct {
 		ACLType string     `json:"acl_type"`
 		Entries []aclEntry `json:"entries"`
-	}](t, apiOK(t, "GET", "/api/acl/"+ds, nil))
+	}](t, apiOK(t, "GET", v1("/datasets/%s/acl", ds), nil))
 	if acl.ACLType != "posix" || !hasACE(acl.Entries, user) {
 		t.Fatalf("ACL after set: type %q, entries %+v; want posix with user:%s", acl.ACLType, acl.Entries, user)
 	}
@@ -49,17 +49,17 @@ func TestPosixACL(t *testing.T) {
 	}
 
 	entry := url.QueryEscape("user:" + user)
-	assertTasks(t, apiOK(t, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil))
+	assertTasks(t, apiOK(t, "DELETE", v1("/datasets/%s/acl/entries", ds)+"?entry="+entry, nil))
 	if acl := decode[struct {
 		Entries []aclEntry `json:"entries"`
-	}](t, apiOK(t, "GET", "/api/acl/"+ds, nil)); hasACE(acl.Entries, user) {
+	}](t, apiOK(t, "GET", v1("/datasets/%s/acl", ds), nil)); hasACE(acl.Entries, user) {
 		t.Fatalf("entry still present after delete: %+v", acl.Entries)
 	}
-	apiStatus(t, http.StatusNotFound, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil)
+	apiStatus(t, http.StatusNotFound, "DELETE", v1("/datasets/%s/acl/entries", ds)+"?entry="+entry, nil)
 
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/acl/"+ds, map[string]string{"ace": "user:x y:rwx"})
-	apiStatus(t, http.StatusBadRequest, "DELETE", "/api/acl/"+ds, nil)
-	apiStatus(t, http.StatusNotFound, "POST", "/api/acl/"+testPool+"/itest-nonexistent", map[string]string{"ace": "user:root:r"})
+	apiStatus(t, http.StatusBadRequest, "POST", v1("/datasets/%s/acl/entries", ds), map[string]string{"ace": "user:x y:rwx"})
+	apiStatus(t, http.StatusBadRequest, "DELETE", v1("/datasets/%s/acl/entries", ds), nil)
+	apiStatus(t, http.StatusNotFound, "POST", v1("/datasets/%s/acl/entries", testPool+"/itest-nonexistent"), map[string]string{"ace": "user:root:r"})
 }
 
 // TestNFSv4ACL adds and removes an NFSv4 ACE through the API's
@@ -73,7 +73,7 @@ func TestNFSv4ACL(t *testing.T) {
 	const user = "itest-nfsuser"
 	mp := createDataset(t, ds)
 	createUser(t, user)
-	apiOK(t, "PATCH", "/api/datasets/"+ds, map[string]string{"acltype": "nfsv4"})
+	apiOK(t, "PATCH", v1("/datasets/%s", ds), map[string]string{"acltype": "nfsv4"})
 
 	type nfs4ACL struct {
 		ACLType string `json:"acl_type"`
@@ -92,13 +92,13 @@ func TestNFSv4ACL(t *testing.T) {
 		}
 		return "", "", false
 	}
-	acl := decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil))
+	acl := decode[nfs4ACL](t, apiOK(t, "GET", v1("/datasets/%s/acl", ds), nil))
 	if acl.ACLType != "nfsv4" || len(acl.Entries) == 0 {
 		t.Fatalf("fresh ACL: %+v, want nfsv4 with owner@/group@/everyone@", acl)
 	}
 
-	assertTasks(t, apiOK(t, "POST", "/api/acl/"+ds, map[string]string{"ace": "A:fd:" + user + ":rwx"}))
-	flags, perms, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil)))
+	assertTasks(t, apiOK(t, "POST", v1("/datasets/%s/acl/entries", ds), map[string]string{"ace": "A:fd:" + user + ":rwx"}))
+	flags, perms, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", v1("/datasets/%s/acl", ds), nil)))
 	if !ok || flags != "fd" || perms != "rwx" {
 		t.Fatalf("entry after add: flags %q perms %q (found %v), want fd/rwx", flags, perms, ok)
 	}
@@ -107,12 +107,12 @@ func TestNFSv4ACL(t *testing.T) {
 	}
 
 	entry := url.QueryEscape("A:fd:" + user + ":rwx")
-	assertTasks(t, apiOK(t, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil))
-	if _, _, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", "/api/acl/"+ds, nil))); ok {
+	assertTasks(t, apiOK(t, "DELETE", v1("/datasets/%s/acl/entries", ds)+"?entry="+entry, nil))
+	if _, _, ok := find(decode[nfs4ACL](t, apiOK(t, "GET", v1("/datasets/%s/acl", ds), nil))); ok {
 		t.Fatalf("entry still present after delete")
 	}
-	apiStatus(t, http.StatusNotFound, "DELETE", "/api/acl/"+ds+"?entry="+entry, nil)
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/acl/"+ds, map[string]string{"ace": "A::" + user + ":rwq"})
+	apiStatus(t, http.StatusNotFound, "DELETE", v1("/datasets/%s/acl/entries", ds)+"?entry="+entry, nil)
+	apiStatus(t, http.StatusBadRequest, "POST", v1("/datasets/%s/acl/entries", ds), map[string]string{"ace": "A::" + user + ":rwq"})
 }
 
 func hasACE(entries []aclEntry, user string) bool {
@@ -136,12 +136,12 @@ func TestChown(t *testing.T) {
 		Owner string `json:"owner"`
 		Group string `json:"group"`
 	}
-	if o := decode[owner](t, apiOK(t, "GET", "/api/chown/"+ds, nil)); o.Owner != "root" {
+	if o := decode[owner](t, apiOK(t, "GET", v1("/datasets/%s/owner", ds), nil)); o.Owner != "root" {
 		t.Fatalf("fresh dataset owner %q, want root", o.Owner)
 	}
 
-	assertTasks(t, apiOK(t, "POST", "/api/chown/"+ds, map[string]any{"owner": user, "group": user}))
-	if o := decode[owner](t, apiOK(t, "GET", "/api/chown/"+ds, nil)); o.Owner != user || o.Group != user {
+	assertTasks(t, apiOK(t, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": user, "group": user}))
+	if o := decode[owner](t, apiOK(t, "GET", v1("/datasets/%s/owner", ds), nil)); o.Owner != user || o.Group != user {
 		t.Fatalf("owner after chown: %+v, want %s:%s", o, user, user)
 	}
 	// GNU stat on Linux, BSD stat on FreeBSD.
@@ -149,7 +149,7 @@ func TestChown(t *testing.T) {
 		t.Fatalf("stat after chown: %q, want %s:%s", out, user, user)
 	}
 
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/chown/"+ds, map[string]any{"owner": user})
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/chown/"+ds, map[string]any{"owner": "bad name", "group": user})
-	apiStatus(t, http.StatusNotFound, "POST", "/api/chown/"+testPool+"/itest-nonexistent", map[string]any{"owner": user, "group": user})
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": user})
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": "bad name", "group": user})
+	apiStatus(t, http.StatusNotFound, "PUT", v1("/datasets/%s/owner", testPool+"/itest-nonexistent"), map[string]any{"owner": user, "group": user})
 }

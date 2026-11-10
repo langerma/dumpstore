@@ -13,14 +13,14 @@ export const state = {
   sambaUsers: [],
   sambaAvailable: false,
   smbInitialized: false,  // true when smb.conf exists at the OS path
-  smbConfPath: '',        // OS-specific path, from GET /api/smb/status
-  smbOs: '',              // 'linux' or 'freebsd', from GET /api/smb/status
-  smbConfMtime: '',       // RFC3339 mtime of smb.conf, from GET /api/smb/status
-  smbWsdd: null,          // wsdd (Windows discovery) status, from GET /api/smb/status
+  smbConfPath: '',        // OS-specific path, from GET /api/v1/smb/status
+  smbOs: '',              // 'linux' or 'freebsd', from GET /api/v1/smb/status
+  smbConfMtime: '',       // RFC3339 mtime of smb.conf, from GET /api/v1/smb/status
+  smbWsdd: null,          // wsdd (Windows discovery) status, from GET /api/v1/smb/status
   smbShares: [],      // [{name, path}] from net usershare info
   smbHomes: { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' },
   timeMachineShares: [],  // [{name, path, max_size, valid_users}]
-  iscsiTargets: [],   // [{iqn, zvol_name, ...}] from /api/iscsi-targets
+  iscsiTargets: [],   // [{iqn, zvol_name, ...}] from GET /api/v1/iscsi/targets
   activeTab: 'pools',
   collapsedDatasets: new Set(),
   selectedDataset: '',          // dataset shown in the detail drawer ('' = closed)
@@ -35,11 +35,11 @@ export const state = {
   autoSnapshot: {},             // dataset name → AutoSnapshotProps
   selectedSnaps: new Set(),     // full snapshot names checked for batch delete
   collapsedSnapGroups: new Set(), // dataset names whose snapshot group is collapsed
-  schema: null,                 // GET /api/schema response
-  network: null,                // GET /api/network response
-  services: [],                 // GET /api/services — [{name, display_name, unit_name, active, enabled, state}]
-  replication: [],              // GET /api/replication — [Task]
-  autosnapStatus: null,         // GET /api/auto-snapshot/status — { os_daemon, os_daemon_active, dumpstore_managed, last_runs }
+  schema: null,                 // GET /api/v1/system/schema response
+  network: null,                // GET /api/v1/system/network response
+  services: [],                 // GET /api/v1/services — [{name, display_name, unit_name, active, enabled, state}]
+  replication: [],              // GET /api/v1/replication/tasks — [Task]
+  autosnapStatus: null,         // GET /api/v1/auto-snapshot/status — { os_daemon, os_daemon_active, dumpstore_managed, last_runs }
 };
 
 // ── Reactive store ──────────────────────────────────────────────────────────

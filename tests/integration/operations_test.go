@@ -91,7 +91,7 @@ func TestOperations(t *testing.T) {
 	// Client B listens on the shared progress stream.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/events?topics=ansible.progress", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/events?topics=ansible.progress", nil)
 	resp, err := clientB.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("events: %v %v", err, resp)
@@ -132,7 +132,7 @@ func TestOperations(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			st, echoed, b := opRequest(t, w.c, "POST", "/api/snapshots", w.id, map[string]any{"dataset": ds, "snapname": w.snap})
+			st, echoed, b := opRequest(t, w.c, "POST", "/api/v1/snapshots", w.id, map[string]any{"dataset": ds, "snapname": w.snap})
 			mu.Lock()
 			results[w.id] = res{st, echoed, b}
 			mu.Unlock()
@@ -172,7 +172,7 @@ func TestOperations(t *testing.T) {
 		}
 
 		// Operation record: same steps and result as the HTTP response.
-		op := decode[operation](t, apiOK(t, "GET", "/api/operations/"+id, nil))
+		op := decode[operation](t, apiOK(t, "GET", v1("/operations/%s", id), nil))
 		if op.State != "succeeded" || op.HTTPStatus != r.status || len(op.Steps) != len(live) {
 			t.Fatalf("%s: record %+v", id, op)
 		}
@@ -182,14 +182,14 @@ func TestOperations(t *testing.T) {
 		if a, b := mustJSON(gotRes), mustJSON(wantRes); a != b {
 			t.Errorf("%s: record result %s != response %s", id, a, b)
 		}
-		tail := decode[operation](t, apiOK(t, "GET", "/api/operations/"+id+"?after=1", nil))
+		tail := decode[operation](t, apiOK(t, "GET", v1("/operations/%s", id)+"?after=1", nil))
 		if len(tail.Steps) != len(op.Steps)-1 {
 			t.Errorf("%s: after=1 returned %d steps, want %d", id, len(tail.Steps), len(op.Steps)-1)
 		}
 	}
 
 	// A duplicate ID is refused without running anything.
-	if st, _, b := opRequest(t, client, "POST", "/api/snapshots", idA, map[string]any{"dataset": ds, "snapname": "opsDup"}); st != http.StatusConflict || !bytes.Contains(b, []byte(`"duplicate_operation":true`)) {
+	if st, _, b := opRequest(t, client, "POST", "/api/v1/snapshots", idA, map[string]any{"dataset": ds, "snapname": "opsDup"}); st != http.StatusConflict || !bytes.Contains(b, []byte(`"duplicate_operation":true`)) {
 		t.Errorf("duplicate ID: status %d body %s", st, truncate(b, 300))
 	}
 	for _, s := range listSnapshots(t) {
@@ -198,18 +198,18 @@ func TestOperations(t *testing.T) {
 		}
 	}
 	// An invalid ID is refused.
-	if st, _, _ := opRequest(t, client, "POST", "/api/snapshots", "bad id!", map[string]any{"dataset": ds, "snapname": "opsBad"}); st != http.StatusBadRequest {
+	if st, _, _ := opRequest(t, client, "POST", "/api/v1/snapshots", "bad id!", map[string]any{"dataset": ds, "snapname": "opsBad"}); st != http.StatusBadRequest {
 		t.Errorf("invalid ID: status %d", st)
 	}
 	// A write without the header gets a generated, fetchable ID.
-	st, gen, _ := opRequest(t, client, "POST", "/api/snapshots", "", map[string]any{"dataset": ds, "snapname": "opsGen"})
+	st, gen, _ := opRequest(t, client, "POST", "/api/v1/snapshots", "", map[string]any{"dataset": ds, "snapname": "opsGen"})
 	if st >= 300 || gen == "" {
 		t.Fatalf("generated ID: status %d id %q", st, gen)
 	}
-	if op := decode[operation](t, apiOK(t, "GET", "/api/operations/"+gen, nil)); op.ID != gen || op.State != "succeeded" {
+	if op := decode[operation](t, apiOK(t, "GET", v1("/operations/%s", gen), nil)); op.ID != gen || op.State != "succeeded" {
 		t.Errorf("generated op record %+v", op)
 	}
-	apiStatus(t, http.StatusNotFound, "GET", "/api/operations/itest-op-unknown", nil)
+	apiStatus(t, http.StatusNotFound, "GET", "/api/v1/operations/itest-op-unknown", nil)
 }
 
 func mustJSON(v any) string {

@@ -26,7 +26,7 @@ var vdevTypeMinDevices = map[string]int{
 	"draid3": 4,
 }
 
-// CreatePoolRequest is the POST /api/pools body.
+// CreatePoolRequest is the POST /api/v1/pools body.
 type CreatePoolRequest struct {
 	Name        string   `json:"name"`
 	VdevType    string   `json:"vdev_type" enum:"single,mirror,raidz1,raidz2,raidz3,draid,draid2,draid3"`
@@ -35,7 +35,7 @@ type CreatePoolRequest struct {
 	Compression string   `json:"compression,omitempty" doc:"Root dataset compression; empty for the default"`
 }
 
-// AddVdevRequest is the POST /api/pools/{pool}/vdevs body.
+// AddVdevRequest is the POST /api/v1/pools/{pool}/vdevs body.
 type AddVdevRequest struct {
 	VdevType string   `json:"vdev_type" enum:"single,mirror,raidz1,raidz2,raidz3"`
 	Devices  []string `json:"devices"`
@@ -46,13 +46,13 @@ type AddDevicesRequest struct {
 	Devices []string `json:"devices"`
 }
 
-// AddLogRequest is the POST /api/pools/{pool}/log body.
+// AddLogRequest is the POST /api/v1/pools/{pool}/log body.
 type AddLogRequest struct {
 	Devices []string `json:"devices"`
 	Mirror  bool     `json:"mirror,omitempty"`
 }
 
-// ImportPoolRequest is the POST /api/pools/import body.
+// ImportPoolRequest is the POST /api/v1/pools/import body.
 type ImportPoolRequest struct {
 	Pool  string `json:"pool"`
 	Force bool   `json:"force,omitempty"`
@@ -65,7 +65,7 @@ type PoolResult struct {
 	Tasks []ansible.TaskStep `json:"tasks"`
 }
 
-// createPool handles POST /api/pools
+// createPool handles POST /api/v1/pools
 // Body: { "name": "tank", "vdev_type": "mirror", "devices": ["/dev/sdb", ...],
 //
 //	"ashift": "12", "compression": "zstd" }
@@ -133,7 +133,7 @@ func (h *Handler) createPool(ctx context.Context, in struct {
 	return PoolResult{Pool: req.Name, Tasks: out.Steps()}, nil
 }
 
-// addDataVdev handles POST /api/pools/{pool}/vdevs
+// addDataVdev handles POST /api/v1/pools/{pool}/vdevs
 // Body: { "vdev_type": "mirror", "devices": ["/dev/sdd", "/dev/sde"] }
 // Adding a data vdev is irreversible on most pool layouts — the UI gates this
 // behind confirm-by-typing.
@@ -151,7 +151,7 @@ func (h *Handler) addDataVdev(ctx context.Context, in struct {
 	return h.addPoolDevices(ctx, in.Pool, "data", in.Body.VdevType, in.Body.Devices)
 }
 
-// addCacheDevice handles POST /api/pools/{pool}/cache — body { "devices": [...] }.
+// addCacheDevice handles POST /api/v1/pools/{pool}/cache — body { "devices": [...] }.
 func (h *Handler) addCacheDevice(ctx context.Context, in struct {
 	poolParam
 	Body AddDevicesRequest `body:""`
@@ -159,7 +159,7 @@ func (h *Handler) addCacheDevice(ctx context.Context, in struct {
 	return h.addPoolDevices(ctx, in.Pool, "cache", "", in.Body.Devices)
 }
 
-// addSpareDevice handles POST /api/pools/{pool}/spare — body { "devices": [...] }.
+// addSpareDevice handles POST /api/v1/pools/{pool}/spare — body { "devices": [...] }.
 func (h *Handler) addSpareDevice(ctx context.Context, in struct {
 	poolParam
 	Body AddDevicesRequest `body:""`
@@ -167,7 +167,7 @@ func (h *Handler) addSpareDevice(ctx context.Context, in struct {
 	return h.addPoolDevices(ctx, in.Pool, "spare", "", in.Body.Devices)
 }
 
-// addLogDevice handles POST /api/pools/{pool}/log
+// addLogDevice handles POST /api/v1/pools/{pool}/log
 // Body: { "devices": [...], "mirror": bool }
 func (h *Handler) addLogDevice(ctx context.Context, in struct {
 	poolParam
@@ -222,7 +222,7 @@ func (h *Handler) addPoolDevices(ctx context.Context, pool, kind, vdevType strin
 	return PoolResult{Pool: pool, Tasks: out.Steps()}, nil
 }
 
-// removePoolDevice handles DELETE /api/pools/{pool}/devices/{device...}
+// removePoolDevice handles DELETE /api/v1/pools/{pool}/devices/{device}
 // Removes a cache, log, or spare device via `zpool remove`. (zpool itself
 // decides whether the removal is legal for the given vdev.)
 func (h *Handler) removePoolDevice(ctx context.Context, in poolDeviceParam) (PoolResult, error) {
@@ -244,12 +244,12 @@ func (h *Handler) removePoolDevice(ctx context.Context, in poolDeviceParam) (Poo
 	return PoolResult{Pool: in.Pool, Tasks: out.Steps()}, nil
 }
 
-// getImportablePools handles GET /api/pools/importable
+// getImportablePools handles GET /api/v1/pools/importable
 func (h *Handler) getImportablePools(context.Context, struct{}) ([]zfs.ImportablePool, error) {
 	return zfs.ImportablePools()
 }
 
-// importPool handles POST /api/pools/import
+// importPool handles POST /api/v1/pools/import
 // Body: { "pool": "tank", "force": false }
 func (h *Handler) importPool(ctx context.Context, in struct {
 	Body ImportPoolRequest `body:""`
@@ -273,7 +273,7 @@ func (h *Handler) importPool(ctx context.Context, in struct {
 	return PoolResult{Pool: req.Pool, Tasks: out.Steps()}, nil
 }
 
-// exportPool handles POST /api/pools/{pool}/export
+// exportPool handles POST /api/v1/pools/{pool}/export
 // Fails (surfaced via the op-log) when the pool is busy.
 func (h *Handler) exportPool(ctx context.Context, in poolParam) (PoolResult, error) {
 	if !validPoolName(in.Pool) {

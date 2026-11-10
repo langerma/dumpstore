@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -36,7 +37,7 @@ func validCHAPSecret(s string) bool { return !strings.ContainsAny(s, "\"\\\n\r")
 func requireCtldInit() error {
 	if !iscsi.CtldInitialized() {
 		return errStatus(http.StatusConflict,
-			fmt.Errorf("ctld not initialised — run POST /api/iscsi/init first"))
+			fmt.Errorf("ctld not initialised — run POST /api/v1/iscsi/init first"))
 	}
 	return nil
 }
@@ -123,7 +124,7 @@ type ISCSIStatus struct {
 	ConfExists  bool   `json:"conf_exists"`
 }
 
-// getISCSIStatus handles GET /api/iscsi/status
+// getISCSIStatus handles GET /api/v1/iscsi/status
 // Returns {backend, initialized, conf_path, conf_exists}. Only ctld (FreeBSD)
 // has an init gate; targetcli (Linux) always reports initialized.
 func (h *Handler) getISCSIStatus(context.Context, struct{}) (ISCSIStatus, error) {
@@ -149,7 +150,7 @@ type ISCSIInitResult struct {
 	Tasks       []ansible.TaskStep `json:"tasks"`
 }
 
-// initISCSI handles POST /api/iscsi/init (FreeBSD/ctld only).
+// initISCSI handles POST /api/v1/iscsi/init (FreeBSD/ctld only).
 // Takes ownership of /etc/ctl.conf: backs up an existing file once to
 // ctl.conf.pre-dumpstore, imports the targets dumpstore's model represents
 // (reporting everything else as skipped steps), and renders the file from
@@ -198,13 +199,13 @@ func (h *Handler) initISCSI(ctx context.Context, _ struct{}) (ISCSIInitResult, e
 	}, nil
 }
 
-// getISCSITargets handles GET /api/iscsi-targets
+// getISCSITargets handles GET /api/v1/iscsi/targets
 // Returns all active iSCSI targets from the platform backend (targetcli or ctld).
 func (h *Handler) getISCSITargets(context.Context, struct{}) ([]iscsi.Target, error) {
 	return iscsi.ListTargets()
 }
 
-// CreateISCSITargetRequest is the body of POST /api/iscsi-targets.
+// CreateISCSITargetRequest is the body of POST /api/v1/iscsi/targets.
 type CreateISCSITargetRequest struct {
 	Zvol         string   `json:"zvol" doc:"Backing zvol, e.g. tank/vol1"`
 	IQN          string   `json:"iqn" doc:"Target IQN"`
@@ -223,7 +224,7 @@ type ISCSITargetResult struct {
 	Tasks []ansible.TaskStep `json:"tasks"`
 }
 
-// createISCSITarget handles POST /api/iscsi-targets
+// createISCSITarget handles POST /api/v1/iscsi/targets
 // Body: {zvol, iqn, portal_ip, portal_port, auth_mode, chap_user, chap_password, initiators}
 func (h *Handler) createISCSITarget(ctx context.Context, in struct {
 	Body CreateISCSITargetRequest `body:""`
@@ -305,15 +306,11 @@ func (h *Handler) createISCSITarget(ctx context.Context, in struct {
 	return ISCSITargetResult{Zvol: req.Zvol, IQN: req.IQN, Tasks: out.Steps()}, nil
 }
 
-// deleteISCSITarget handles DELETE /api/iscsi-targets?iqn=...&zvol=...
+// deleteISCSITarget handles DELETE /api/v1/iscsi/targets/{iqn}
 func (h *Handler) deleteISCSITarget(ctx context.Context, in deleteISCSIParams) (ISCSITargetResult, error) {
-	iqn, zvol := in.IQN, in.Zvol
-
+	iqn := in.IQN
 	if !validIQN(iqn) {
 		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid IQN"))
-	}
-	if !validZFSName(zvol) || !strings.Contains(zvol, "/") {
-		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid zvol name"))
 	}
 
 	backend := iscsi.Backend()
@@ -322,8 +319,19 @@ func (h *Handler) deleteISCSITarget(ctx context.Context, in deleteISCSIParams) (
 			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"))
 	}
 	if backend == "freebsd" {
-		return h.deleteCtldTarget(ctx, iqn, zvol)
+		return h.deleteCtldTarget(ctx, iqn)
 	}
+
+	// targetcli needs the zvol to remove its backstore; look it up by IQN.
+	targets, err := iscsi.ListTargets()
+	if err != nil {
+		return ISCSITargetResult{}, err
+	}
+	i := slices.IndexFunc(targets, func(t iscsi.Target) bool { return strings.EqualFold(t.IQN, iqn) })
+	if i < 0 {
+		return ISCSITargetResult{}, errStatus(http.StatusNotFound, fmt.Errorf("no iSCSI target %s", iqn))
+	}
+	zvol := targets[i].ZvolName
 
 	out, err := h.runOp(ctx, "iscsi_target_delete.yml", map[string]string{"iqn": iqn, "zvol": zvol})
 	auditLog(ctx, "iscsi.delete", zvol, err)
@@ -373,7 +381,7 @@ func (h *Handler) createCtldTarget(ctx context.Context, t iscsi.Target) (ISCSITa
 
 // deleteCtldTarget removes the target iqn (exporting zvol) from the
 // dumpstore-owned ctl.conf and applies it.
-func (h *Handler) deleteCtldTarget(ctx context.Context, iqn, zvol string) (ISCSITargetResult, error) {
+func (h *Handler) deleteCtldTarget(ctx context.Context, iqn string) (ISCSITargetResult, error) {
 	h.iscsiMu.Lock()
 	defer h.iscsiMu.Unlock()
 	if err := requireCtldInit(); err != nil {
@@ -383,15 +391,17 @@ func (h *Handler) deleteCtldTarget(ctx context.Context, iqn, zvol string) (ISCSI
 	if err != nil {
 		return ISCSITargetResult{}, err
 	}
+	var zvol string
 	kept := make([]iscsi.Target, 0, len(targets))
 	for _, t := range targets {
-		if !strings.EqualFold(t.IQN, iqn) || t.ZvolName != zvol {
-			kept = append(kept, t)
+		if strings.EqualFold(t.IQN, iqn) {
+			zvol = t.ZvolName
+			continue
 		}
+		kept = append(kept, t)
 	}
 	if len(kept) == len(targets) {
-		return ISCSITargetResult{}, errStatus(http.StatusNotFound,
-			fmt.Errorf("no iSCSI target %s for zvol %s", iqn, zvol))
+		return ISCSITargetResult{}, errStatus(http.StatusNotFound, fmt.Errorf("no iSCSI target %s", iqn))
 	}
 
 	out, err := h.applyCtlConf(ctx, kept, false)

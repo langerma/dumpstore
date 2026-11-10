@@ -36,7 +36,7 @@ scrape_configs:
 | `go_goroutines`, `go_memstats_*`, `go_gc_cycles_total`, `go_gc_pause_ns_total` | gauge / counter | — | Go runtime |
 | `process_start_time_seconds` | gauge | — | Process start (Unix time) |
 
-The `path` label is normalised to keep cardinality bounded: `/api/<resource>` or `/api/<resource>/{name}` — e.g. `DELETE /api/datasets/tank/vm1` is counted as `/api/datasets/{name}`. `op` is the command plus subcommand (`zfs destroy`), never its arguments.
+The `path` label is the matched route pattern, which keeps cardinality bounded: `DELETE /api/v1/datasets/tank%2Fvm1` is counted as `/api/v1/datasets/{name}`. API requests that never reached a route are counted as `(unauthenticated)` (401/403) or `(unmatched)`; static files are not counted. `op` is the command plus subcommand (`zfs destroy`), never its arguments.
 
 dumpstore does **not** export ZFS pool, dataset, or disk metrics; use [`node_exporter`](https://github.com/prometheus/node_exporter)'s ZFS collector or [`zfs_exporter`](https://github.com/pdf/zfs_exporter) for those.
 
@@ -78,7 +78,7 @@ If the collector is unreachable, OTLP batches are retried and then dropped in th
 
 | Span | Kind | Attributes |
 |---|---|---|
-| `METHOD /route/pattern` (e.g. `DELETE /api/datasets/{name...}`) | server, one per request | standard `http.*`, `req_id`. Requests that never reach a route are named `METHOD (unauthenticated)` or `METHOD (unmatched)` with `dumpstore.short_circuit`, never the raw path |
+| `METHOD /route/pattern` (e.g. `DELETE /api/v1/datasets/{name}`) | server, one per request | standard `http.*`, `req_id`. Requests that never reach a route are named `METHOD (unauthenticated)` or `METHOD (unmatched)` with `dumpstore.short_circuit`, never the raw path |
 | `ansible.playbook` | child of the request | `ansible.playbook`, `ansible.extra_var_keys` (names only — values such as passwords are never recorded) |
 | `ops.<command> <subcommand>` (e.g. `ops.zfs destroy`) | child of the request | `ops.step`, `ops.argv` |
 | `job.<type>`: `job.snapshot.send`, `job.dataset.rewrite`, `job.replication.run` | root span, **linked** to the request that started it (jobs outlive the request) | `job.type`, `job.id`, `job.argv`, `job.status`, `job.exit_code` |
@@ -106,7 +106,7 @@ Prometheus and OTLP share one meter provider, so OTLP metrics carry everything i
 Lines are `key=value` (slog text format). Every line belonging to a request carries its `req_id`, taken from an upstream `X-Request-ID` header if present (nginx, Traefik) and echoed back on the response; otherwise generated. When the request is traced, `trace_id` and `span_id` are appended.
 
 ```text
-time=2026-11-09T22:37:30.216+01:00 level=INFO msg=request req_id=53a61f4298899664 method=POST path=/api/iscsi/init status=200 duration_ms=11024 remote=127.0.0.1:27429
+time=2026-11-09T22:37:30.216+01:00 level=INFO msg=request req_id=53a61f4298899664 method=POST path=/api/v1/iscsi/init status=200 duration_ms=11024 remote=127.0.0.1:27429
 ```
 
 ### Audit lines

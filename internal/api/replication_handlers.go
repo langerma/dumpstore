@@ -11,11 +11,11 @@ import (
 	"dumpstore/internal/scheduler"
 )
 
-// listReplication handles GET /api/replication.
+// listReplication handles GET /api/v1/replication/tasks.
 func (h *Handler) listReplication(context.Context, struct{}) ([]replication.Task, error) {
 	tasks := h.repl.Store().List()
 	// Strip LastRuns from the list view for brevity; clients fetch history
-	// per-task via /api/replication/{id}/history.
+	// per-task via /api/v1/replication/tasks/{id}/history.
 	for i := range tasks {
 		tasks[i].LastRuns = nil
 	}
@@ -116,7 +116,7 @@ func (req replicationRequest) applyTo(t *replication.Task) {
 	}
 }
 
-// createReplication handles POST /api/replication.
+// createReplication handles POST /api/v1/replication/tasks.
 func (h *Handler) createReplication(ctx context.Context, in struct {
 	Body replicationRequest `body:""`
 }) (replication.Task, error) {
@@ -152,7 +152,7 @@ func (h *Handler) createReplication(ctx context.Context, in struct {
 	return stored, nil
 }
 
-// updateReplication handles PATCH /api/replication/{id}.
+// updateReplication handles PATCH /api/v1/replication/tasks/{id}.
 func (h *Handler) updateReplication(ctx context.Context, in struct {
 	idParam
 	Body replicationRequest `body:""`
@@ -181,7 +181,7 @@ func (h *Handler) updateReplication(ctx context.Context, in struct {
 	return updated, nil
 }
 
-// deleteReplication handles DELETE /api/replication/{id}.
+// deleteReplication handles DELETE /api/v1/replication/tasks/{id}.
 func (h *Handler) deleteReplication(ctx context.Context, in idParam) (struct{}, error) {
 	if in.ID == "" {
 		return struct{}{}, errStatus(http.StatusBadRequest, errors.New("id required"))
@@ -198,7 +198,7 @@ func (h *Handler) deleteReplication(ctx context.Context, in idParam) (struct{}, 
 	return struct{}{}, nil
 }
 
-// runReplication handles POST /api/replication/{id}/run.
+// runReplication handles POST /api/v1/replication/tasks/{id}/run.
 func (h *Handler) runReplication(ctx context.Context, in idParam) (ReplicationRunStarted, error) {
 	if in.ID == "" {
 		return ReplicationRunStarted{}, errStatus(http.StatusBadRequest, errors.New("id required"))
@@ -220,11 +220,11 @@ func (h *Handler) runReplication(ctx context.Context, in idParam) (ReplicationRu
 // ReplicationRunStarted is the 202 response of a manual replication run.
 type ReplicationRunStarted struct {
 	TaskID   string `json:"task_id"`
-	JobID    string `json:"job_id" doc:"Background job carrying the transfer; poll GET /api/jobs/{id}"`
+	JobID    string `json:"job_id" doc:"Background job carrying the transfer; poll GET /api/v1/jobs/{id}"`
 	Snapshot string `json:"snapshot" doc:"Snapshot taken for this run"`
 }
 
-// getReplicationHistory handles GET /api/replication/{id}/history.
+// getReplicationHistory handles GET /api/v1/replication/tasks/{id}/history.
 func (h *Handler) getReplicationHistory(_ context.Context, p idParam) ([]replication.RunRecord, error) {
 	if p.ID == "" {
 		return nil, errStatus(http.StatusBadRequest, errors.New("id required"))

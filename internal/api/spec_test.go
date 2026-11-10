@@ -79,8 +79,8 @@ func TestNoUntypedRoutes(t *testing.T) {
 
 // TestSpecPathsResolve serves every route's pattern and requests its
 // OpenAPI path with percent-encoded sample values: each must reach the same
-// pattern and decode the parameters intact. Wildcard ({x...}) parameters
-// get a value with '/' and '@', like dataset and snapshot names.
+// pattern and decode the parameters intact. Every parameter gets a value
+// with '/', '@' and a space, like dataset and snapshot names.
 func TestSpecPathsResolve(t *testing.T) {
 	for _, r := range fullRegistry(t).Routes() {
 		t.Run(r.Method+" "+r.Path, func(t *testing.T) {
@@ -92,10 +92,9 @@ func TestSpecPathsResolve(t *testing.T) {
 					continue
 				}
 				name := strings.TrimSuffix(strings.Trim(seg, "{}"), "...")
-				val := "tank"
-				if strings.HasSuffix(seg, "...}") {
-					val = "tank/a b/c@snap-1"
-				}
+				// Every parameter is one segment (#181 Phase 3): names with
+				// '/', '@' and spaces must arrive intact when percent-encoded.
+				val := "tank/a b/c@snap-1"
 				want[name] = val
 				path = strings.Replace(path, "{"+name+"}", url.PathEscape(val), 1)
 			}
@@ -216,9 +215,9 @@ func TestTypedAdapterErrors(t *testing.T) {
 func TestConvertedHandlerParity(t *testing.T) {
 	reg := fullRegistry(t)
 	for _, c := range []struct{ target, body string }{
-		{"/api/dataset-props/bad%20name", `{"error":"invalid dataset name"}`},
-		{"/api/acl/bad%20name", `{"error":"invalid dataset name"}`},
-		{"/api/auto-snapshot/bad%20name", `{"error":"invalid dataset name"}`},
+		{"/api/v1/datasets/bad%20name/properties", `{"error":"invalid dataset name"}`},
+		{"/api/v1/datasets/bad%20name/acl", `{"error":"invalid dataset name"}`},
+		{"/api/v1/datasets/bad%20name/auto-snapshot", `{"error":"invalid dataset name"}`},
 	} {
 		rec := httptest.NewRecorder()
 		reg.Mux().ServeHTTP(rec, httptest.NewRequest("GET", c.target, nil))
@@ -270,5 +269,21 @@ func TestTypedAdapterStatusAndOpErrors(t *testing.T) {
 	})
 	if addr != "192.0.2.7:4242" {
 		t.Errorf("remote addr in context = %q", addr)
+	}
+}
+
+// TestPreV1PathsGone: the /api/v1 cut is a hard cut (#181 Phase 3) — the
+// old paths must not resolve to any route.
+func TestPreV1PathsGone(t *testing.T) {
+	mux := fullRegistry(t).Mux()
+	for _, p := range []string{
+		"GET /api/pools", "GET /api/datasets", "GET /api/sysinfo", "GET /api/poolstatus",
+		"GET /api/dataset-props/tank", "POST /api/datasets/rename", "GET /api/smb-shares",
+		"DELETE /api/iscsi-targets", "GET /api/whoami", "GET /api/events",
+	} {
+		method, path, _ := strings.Cut(p, " ")
+		if _, pattern := mux.Handler(httptest.NewRequest(method, path, nil)); pattern != "" {
+			t.Errorf("%s still resolves to %q", p, pattern)
+		}
 	}
 }

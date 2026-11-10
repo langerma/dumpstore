@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtDate, toast } from './utils.js';
+import { api, delegate, esc, fmtDate, toast, v1 } from './utils.js';
 
 const STATUS_BADGES = {
   pending:     'badge-blue',
@@ -102,7 +102,7 @@ delegate(document.getElementById('jobs-wrap'), {
 
 async function removeJob(id) {
   try {
-    await api('DELETE', `/api/jobs/${encodeURIComponent(id)}`);
+    await api('DELETE', v1`/jobs/${id}`);
     storeSet('jobs', (state.jobs || []).filter(j => j.id !== id));
   } catch (err) {
     toast(`Remove failed: ${err.message}`, 'err');
@@ -117,7 +117,7 @@ document.getElementById('cancelJobConfirmBtn').addEventListener('click', async (
   const id = _cancelId;
   cancelDialog.close();
   try {
-    await api('POST', `/api/jobs/${encodeURIComponent(id)}/cancel`);
+    await api('POST', v1`/jobs/${id}/cancel`);
     toast('Cancellation signalled', 'ok');
   } catch (err) {
     toast(`Cancel failed: ${err.message}`, 'err');

@@ -25,7 +25,7 @@ type Target struct {
 	AuthMode   string   `json:"auth_mode"`  // "none" | "chap"
 	Initiators []string `json:"initiators"` // empty = allow-all
 
-	// CHAP credentials (ctld only). Never serialised: GET /api/iscsi-targets
+	// CHAP credentials (ctld only). Never serialised: GET /api/v1/iscsi/targets
 	// must not expose the secret.
 	CHAPUser   string `json:"-"`
 	CHAPSecret string `json:"-"`

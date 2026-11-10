@@ -4,18 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/system"
 )
 
-// getUsers handles GET /api/users
+// getUsers handles GET /api/v1/users
 func (h *Handler) getUsers(context.Context, struct{}) ([]system.User, error) {
 	return system.ListUsers()
 }
 
-// getGroups handles GET /api/groups
+// getGroups handles GET /api/v1/groups
 func (h *Handler) getGroups(context.Context, struct{}) ([]system.Group, error) {
 	return system.ListGroups()
 }
@@ -32,12 +33,12 @@ type GroupResult struct {
 	Tasks     []ansible.TaskStep `json:"tasks"`
 }
 
-// SSHKeyList is the GET /api/users/{name}/sshkeys response.
+// SSHKeyList is the GET /api/v1/users/{name}/ssh-keys response.
 type SSHKeyList struct {
-	Keys []string `json:"keys" doc:"Lines of the user's ~/.ssh/authorized_keys"`
+	Keys []system.AuthorizedKey `json:"keys" doc:"Entries of the user's ~/.ssh/authorized_keys"`
 }
 
-// CreateUserRequest is the POST /api/users body.
+// CreateUserRequest is the POST /api/v1/users body.
 type CreateUserRequest struct {
 	Username    string `json:"username"`
 	Shell       string `json:"shell,omitempty" doc:"Login shell (default /bin/bash)"`
@@ -49,7 +50,7 @@ type CreateUserRequest struct {
 	SMBUser     bool   `json:"smb_user,omitempty" doc:"Also register the user with Samba"`
 }
 
-// createUser handles POST /api/users
+// createUser handles POST /api/v1/users
 // Body: {"username":"alice","shell":"/bin/bash","uid":"1001","group":"storage","groups":"wheel,backup","password":"<plaintext>","create_group":true,"smb_user":false}
 func (h *Handler) createUser(ctx context.Context, in struct {
 	Body CreateUserRequest `body:""`
@@ -140,7 +141,7 @@ func findGroup(name string) (*system.Group, error) {
 	return nil, errStatus(http.StatusNotFound, fmt.Errorf("group %q not found", name))
 }
 
-// deleteUser handles DELETE /api/users/{name}
+// deleteUser handles DELETE /api/v1/users/{name}
 // Looks up the user's UID and rejects system users (uid < UIDMin).
 func (h *Handler) deleteUser(ctx context.Context, in userParam) (UserResult, error) {
 	name := in.Name
@@ -176,7 +177,7 @@ func (h *Handler) deleteUser(ctx context.Context, in userParam) (UserResult, err
 	return UserResult{Username: name, Tasks: out.Steps()}, nil
 }
 
-// ModifyUserRequest is the PUT /api/users/{name} body. Empty fields are
+// ModifyUserRequest is the PUT /api/v1/users/{name} body. Empty fields are
 // left unchanged.
 type ModifyUserRequest struct {
 	Shell      string `json:"shell,omitempty" doc:"Login shell"`
@@ -188,7 +189,7 @@ type ModifyUserRequest struct {
 	SMBSync    bool   `json:"smb_sync,omitempty" doc:"Also update the user's Samba password"`
 }
 
-// modifyUser handles PUT /api/users/{name}
+// modifyUser handles PUT /api/v1/users/{name}
 // Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"<plaintext>","home":"/home/foo","move_home":true}
 func (h *Handler) modifyUser(ctx context.Context, in struct {
 	userParam
@@ -259,7 +260,7 @@ func (h *Handler) modifyUser(ctx context.Context, in struct {
 	return UserResult{Username: name, Tasks: out.Steps()}, nil
 }
 
-// listSSHKeys handles GET /api/users/{name}/sshkeys
+// listSSHKeys handles GET /api/v1/users/{name}/ssh-keys
 func (h *Handler) listSSHKeys(_ context.Context, in userParam) (SSHKeyList, error) {
 	name := in.Name
 	if name == "" || !validUnixName(name) {
@@ -269,19 +270,23 @@ func (h *Handler) listSSHKeys(_ context.Context, in userParam) (SSHKeyList, erro
 	if err != nil {
 		return SSHKeyList{}, err
 	}
-	keys, err := system.ListAuthorizedKeys(target.Home)
+	lines, err := system.ListAuthorizedKeys(target.Home)
 	if err != nil {
 		return SSHKeyList{}, err
+	}
+	keys := make([]system.AuthorizedKey, 0, len(lines))
+	for _, l := range lines {
+		keys = append(keys, system.ParseAuthorizedKey(l))
 	}
 	return SSHKeyList{Keys: keys}, nil
 }
 
-// SSHKeyRequest is the body of POST and DELETE /api/users/{name}/sshkeys.
+// SSHKeyRequest is the body of POST and DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}.
 type SSHKeyRequest struct {
 	Key string `json:"key" doc:"Public key line, e.g. ssh-ed25519 AAAA... comment"`
 }
 
-// addSSHKey handles POST /api/users/{name}/sshkeys
+// addSSHKey handles POST /api/v1/users/{name}/ssh-keys
 // Body: {"key":"ssh-ed25519 AAAA..."}
 func (h *Handler) addSSHKey(ctx context.Context, in struct {
 	userParam
@@ -317,20 +322,18 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// removeSSHKey handles DELETE /api/users/{name}/sshkeys
-// Body: {"key":"ssh-ed25519 AAAA..."}
+// removeSSHKey handles DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}
+// Removes the key whose SHA256 fingerprint is {fingerprint}; no body.
 func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	userParam
-	Body SSHKeyRequest `body:""`
+	Fingerprint string `path:"fingerprint" doc:"SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')"`
 }) (TaskResult, error) {
 	name := in.Name
 	if name == "" || !validUnixName(name) {
 		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
-	req := in.Body
-	req.Key = strings.TrimSpace(req.Key)
-	if req.Key == "" {
-		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("key is required"))
+	if !strings.HasPrefix(in.Fingerprint, "SHA256:") {
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("fingerprint must start with SHA256:"))
 	}
 
 	target, err := findUser(name)
@@ -340,10 +343,18 @@ func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	if target.UID < system.UIDMin() {
 		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user"))
 	}
+	lines, err := system.ListAuthorizedKeys(target.Home)
+	if err != nil {
+		return TaskResult{}, err
+	}
+	i := slices.IndexFunc(lines, func(l string) bool { return system.ParseAuthorizedKey(l).Fingerprint == in.Fingerprint })
+	if i < 0 {
+		return TaskResult{}, errStatus(http.StatusNotFound, fmt.Errorf("no SSH key with fingerprint %s", in.Fingerprint))
+	}
 
 	out, err := h.runOp(ctx, "user_ssh_key_remove.yml", map[string]string{
 		"home": target.Home,
-		"key":  req.Key,
+		"key":  lines[i],
 	})
 	auditLog(ctx, "sshkey.remove", name, err)
 	if err != nil {
@@ -352,13 +363,13 @@ func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// CreateGroupRequest is the POST /api/groups body.
+// CreateGroupRequest is the POST /api/v1/groups body.
 type CreateGroupRequest struct {
 	Groupname string `json:"groupname"`
 	GID       string `json:"gid,omitempty" doc:"Numeric GID; empty lets the OS choose"`
 }
 
-// createGroup handles POST /api/groups
+// createGroup handles POST /api/v1/groups
 // Body: {"groupname":"storage","gid":"1500"}
 func (h *Handler) createGroup(ctx context.Context, in struct {
 	Body CreateGroupRequest `body:""`
@@ -385,7 +396,7 @@ func (h *Handler) createGroup(ctx context.Context, in struct {
 	return GroupResult{Groupname: req.Groupname, Tasks: out.Steps()}, nil
 }
 
-// deleteGroup handles DELETE /api/groups/{name}
+// deleteGroup handles DELETE /api/v1/groups/{name}
 // Looks up the group's GID and rejects system groups (gid < UIDMin).
 func (h *Handler) deleteGroup(ctx context.Context, in groupParam) (GroupResult, error) {
 	name := in.Name
@@ -421,14 +432,14 @@ func (h *Handler) deleteGroup(ctx context.Context, in groupParam) (GroupResult, 
 	return GroupResult{Groupname: name, Tasks: out.Steps()}, nil
 }
 
-// ModifyGroupRequest is the PUT /api/groups/{name} body.
+// ModifyGroupRequest is the PUT /api/v1/groups/{name} body.
 type ModifyGroupRequest struct {
 	NewName string `json:"new_name,omitempty" doc:"Rename the group"`
 	GID     string `json:"gid,omitempty" doc:"New numeric GID"`
 	Members string `json:"members,omitempty" doc:"Comma-separated member list; replaces the current members (empty clears them)"`
 }
 
-// modifyGroup handles PUT /api/groups/{name}
+// modifyGroup handles PUT /api/v1/groups/{name}
 // Body: {"new_name":"newgrp","gid":"1501","members":"alice,bob"}
 func (h *Handler) modifyGroup(ctx context.Context, in struct {
 	groupParam

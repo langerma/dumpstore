@@ -78,7 +78,7 @@ make vm-freebsd-deploy
 ### Request flow for writes
 
 ```
-Browser (POST /api/datasets) → zfs_handlers.go: createDataset()
+Browser (POST /api/v1/datasets) → zfs_handlers.go: createDataset()
   └─ validate inputs in Go → build argv
      └─ internal/ops.Run(steps) [in-process] OR ansible-playbook (config-file writes)
         └─ return 201 + tasks → browser shows op-log dialog

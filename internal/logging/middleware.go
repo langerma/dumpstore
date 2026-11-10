@@ -49,7 +49,7 @@ func RequestLogger(next http.Handler) http.Handler {
 		// The mux sets r.Pattern in place during dispatch, so the matched route
 		// is only known now: rename the span from the generic operation to the
 		// low-cardinality "METHOD /route". ServeMux patterns are registered
-		// method-qualified ("GET /api/pools"), so strip the method before
+		// method-qualified ("GET /api/v1/pools"), so strip the method before
 		// composing — semconv http.route is the path template alone.
 		if span.IsRecording() {
 			nameSpan(span, r, rw.status)
@@ -69,7 +69,7 @@ func RequestLogger(next http.Handler) http.Handler {
 			"duration_ms", elapsed.Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
-		api.RecordHTTP(r.Method, r.URL.Path, rw.status, elapsed)
+		api.RecordHTTP(r.Method, metricRoute(r, rw.status), rw.status, elapsed)
 	})
 }
 
@@ -93,6 +93,30 @@ func nameSpan(span trace.Span, r *http.Request, status int) {
 	}
 	span.SetName(r.Method + " " + route)
 	span.SetAttributes(semconv.HTTPRoute(route))
+}
+
+// metricRoute is the path label for the HTTP metrics: the matched route for
+// API requests and /metrics, a fixed label for API requests that never
+// reached a route (same rule as nameSpan, so cardinality stays bounded), and
+// "" — not recorded — for static files.
+func metricRoute(r *http.Request, status int) string {
+	if r.Pattern == "" {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			return ""
+		}
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			return "(unauthenticated)"
+		}
+		return "(unmatched)"
+	}
+	_, route, ok := strings.Cut(r.Pattern, " ")
+	if !ok {
+		route = r.Pattern
+	}
+	if route != "/metrics" && !strings.HasPrefix(route, "/api/") {
+		return ""
+	}
+	return route
 }
 
 // statusRecorder captures the HTTP status code written by a handler.

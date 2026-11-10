@@ -29,7 +29,7 @@ type ScrubSchedule struct {
 	Pool string `json:"pool"`
 }
 
-// ScrubScheduleList is the response returned by GET /api/scrub-schedules.
+// ScrubScheduleList is the response returned by GET /api/v1/pools/scrub-schedules.
 // When Schedules is empty, the platform default applies (all pools are scrubbed).
 type ScrubScheduleList struct {
 	Mode          ScrubScheduleMode `json:"mode"`

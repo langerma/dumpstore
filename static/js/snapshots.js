@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, startOp, toast, reZFSName, reSnapLabel } from './utils.js';
+import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, startOp, toast, reZFSName, reSnapLabel, v1 } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -158,7 +158,7 @@ document.getElementById('deleteSnapConfirmBtn').addEventListener('click', async 
   deleteSnapDialog.close();
   const op = startOp(`Deleting snapshot…`);
   try {
-    const result = await op.api('DELETE', '/api/snapshots/' + encodeURIComponent(name));
+    const result = await op.api('DELETE', v1`/snapshots/${name}`);
     storeSet('snapshots', state.snapshots.filter(s => s.name !== name));
     op.done(`Deleted snapshot: ${name}`, result.tasks, null);
   } catch (e) {
@@ -188,7 +188,7 @@ document.getElementById('deleteMultiSnapConfirmBtn').addEventListener('click', a
   document.getElementById('deleteMultiSnapDialog').close();
   const op = startOp(`Deleting ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}…`);
   try {
-    const result = await op.api('POST', '/api/snapshots/delete-batch', { snapshots });
+    const result = await op.api('POST', v1`/snapshots/batch-delete`, { snapshots });
     state.selectedSnaps.clear();
     storeSet('snapshots', state.snapshots.filter(s => !snapshots.includes(s.name)));
     op.done(`Deleted ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`, result.tasks, null);
@@ -230,9 +230,9 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
   dialog.close();
   const op = startOp(`Creating snapshot…`);
   try {
-    const result = await op.api('POST', '/api/snapshots', { dataset, snapname, recursive });
+    const result = await op.api('POST', v1`/snapshots`, { dataset, snapname, recursive });
     op.done(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
-    const snaps = await api('GET', '/api/snapshots');
+    const snaps = await api('GET', v1`/snapshots`);
     storeSet('snapshots', snaps || []);
   } catch (e) {
     op.done('Snapshot creation failed', e.tasks, e.message);
@@ -266,9 +266,9 @@ document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
   cloneSnapDialog.close();
   const op = startOp('Cloning snapshot…');
   try {
-    const result = await op.api('POST', '/api/snapshots/clone', { snapshot, target });
+    const result = await op.api('POST', v1`/snapshots/${snapshot}/clone`, { target });
     op.done(`Cloned: ${snapshot} → ${target}`, result.tasks, null);
-    const datasets = await api('GET', '/api/datasets');
+    const datasets = await api('GET', v1`/datasets`);
     storeSet('datasets', datasets || []);
   } catch (err) {
     op.done('Clone failed', err.tasks, err.message);
@@ -349,7 +349,7 @@ document.getElementById('diffSnapRunBtn').addEventListener('click', async () => 
   wrap.innerHTML = '<div class="loading">Running zfs diff…</div>';
   document.getElementById('diffSnapCount').textContent = '';
   try {
-    const data = await api('GET', `/api/snapshots/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    const data = await api('GET', v1`/snapshots/${from}/diff?to=${to}`);
     _diffEntries = data.entries || [];
     renderDiffResults();
     const note = data.truncated ? ' (truncated)' : '';
@@ -414,10 +414,10 @@ document.getElementById('sendSnapForm').addEventListener('submit', async e => {
   }
   sendSnapDialog.close();
   try {
-    const body = { snapshot, target, raw };
+    const body = { target, raw };
     if (incremental_from) body.incremental_from = incremental_from;
     if (remote) body.remote = remote;
-    await api('POST', '/api/snapshots/send', body);
+    await api('POST', v1`/snapshots/${snapshot}/send`, body);
     toast('Replication started — see Jobs tab', 'ok');
   } catch (err) {
     toast(`Send failed to start: ${err.message}`, 'err');

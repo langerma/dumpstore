@@ -59,7 +59,7 @@ var aclSafeRe = func() func(string) bool {
 	}
 }()
 
-// getACLStatus handles GET /api/acl-status
+// getACLStatus handles GET /api/v1/datasets/acl-status
 // Returns a map of dataset name → bool indicating whether the dataset has
 // non-trivial ACL entries on its mountpoint.
 func (h *Handler) getACLStatus(ctx context.Context, _ struct{}) (map[string]bool, error) {
@@ -86,7 +86,7 @@ func (h *Handler) getACLStatus(ctx context.Context, _ struct{}) (map[string]bool
 	return status, nil
 }
 
-// getDatasetACL handles GET /api/acl/{dataset...}
+// getDatasetACL handles GET /api/v1/datasets/{name}/acl
 func (h *Handler) getDatasetACL(_ context.Context, p datasetParam) (*zfs.DatasetACL, error) {
 	if p.Dataset == "" {
 		return nil, errStatus(http.StatusBadRequest, fmt.Errorf("dataset name required"))
@@ -97,7 +97,7 @@ func (h *Handler) getDatasetACL(_ context.Context, p datasetParam) (*zfs.Dataset
 	return zfs.GetDatasetACL(p.Dataset)
 }
 
-// setACLEntry handles POST /api/acl/{dataset...}
+// setACLEntry handles POST /api/v1/datasets/{name}/acl/entries
 // Body: {"ace":"user:alice:rwx","recursive":false}  (POSIX)
 //
 //	{"ace":"A::alice@localdomain:rwaDxtTnNcCoy"}       (NFSv4)
@@ -177,20 +177,20 @@ func (h *Handler) setACLEntry(ctx context.Context, in struct {
 	return ACLEntryResult{Dataset: name, ACE: req.ACE, Tasks: out.Steps()}, nil
 }
 
-// SetACLEntryRequest is the POST /api/acl/{dataset...} body.
+// SetACLEntryRequest is the POST /api/v1/datasets/{name}/acl/entries body.
 type SetACLEntryRequest struct {
 	ACE       string `json:"ace" doc:"POSIX (user:alice:rwx) or NFSv4 (A::alice@localdomain:rwaDxtTnNcCoy) entry"`
 	Recursive bool   `json:"recursive,omitempty" doc:"Apply to all files below the mountpoint"`
 }
 
-// ACLEntryResult is the POST /api/acl/{dataset...} response.
+// ACLEntryResult is the POST /api/v1/datasets/{name}/acl/entries response.
 type ACLEntryResult struct {
 	Dataset string             `json:"dataset"`
 	ACE     string             `json:"ace"`
 	Tasks   []ansible.TaskStep `json:"tasks"`
 }
 
-// ACLRemoveResult is the DELETE /api/acl/{dataset...} response.
+// ACLRemoveResult is the DELETE /api/v1/datasets/{name}/acl/entries response.
 type ACLRemoveResult struct {
 	Dataset string             `json:"dataset"`
 	Entry   string             `json:"entry"`
@@ -238,7 +238,7 @@ func findACLEntry(acl *zfs.DatasetACL, entry string) (zfs.ACLEntry, bool) {
 	return zfs.ACLEntry{}, false
 }
 
-// removeACLEntry handles DELETE /api/acl/{dataset...}?entry=<spec>
+// removeACLEntry handles DELETE /api/v1/datasets/{name}/acl/entries?entry=<spec>
 // For POSIX: entry is the removal spec (e.g. "user:alice", "default:group:storage")
 // For NFSv4: entry is the full ACE string to remove
 func (h *Handler) removeACLEntry(ctx context.Context, in removeACLParams) (ACLRemoveResult, error) {

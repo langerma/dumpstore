@@ -14,7 +14,7 @@ import (
 func TestRewrite(t *testing.T) {
 	caps := decode[struct {
 		Capabilities map[string]bool `json:"capabilities"`
-	}](t, apiOK(t, "GET", "/api/schema", nil)).Capabilities
+	}](t, apiOK(t, "GET", "/api/v1/system/schema", nil)).Capabilities
 	if !caps["rewrite"] {
 		t.Skip("zfs rewrite not supported by this OpenZFS version")
 	}
@@ -26,7 +26,7 @@ func TestRewrite(t *testing.T) {
 	res := decode[struct {
 		JobID string `json:"job_id"`
 		Type  string `json:"type"`
-	}](t, apiStatus(t, http.StatusAccepted, "POST", "/api/rewrite/"+ds, map[string]any{}))
+	}](t, apiStatus(t, http.StatusAccepted, "POST", v1("/datasets/%s/rewrite", ds), map[string]any{}))
 	if res.Type != "dataset.rewrite" {
 		t.Errorf("job type %q, want dataset.rewrite", res.Type)
 	}
@@ -37,7 +37,7 @@ func TestRewrite(t *testing.T) {
 	vol := testPool + "/itest-rewrite-vol"
 	destroyDatasetInVM(vol)
 	t.Cleanup(func() { destroyDatasetInVM(vol) })
-	apiOK(t, "POST", "/api/datasets", map[string]any{"name": vol, "type": "volume", "volsize": "16M"})
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/rewrite/"+vol, map[string]any{})
-	apiStatus(t, http.StatusNotFound, "POST", "/api/rewrite/"+testPool+"/itest-nonexistent", map[string]any{})
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": vol, "type": "volume", "volsize": "16M"})
+	apiStatus(t, http.StatusBadRequest, "POST", v1("/datasets/%s/rewrite", vol), map[string]any{})
+	apiStatus(t, http.StatusNotFound, "POST", v1("/datasets/%s/rewrite", testPool+"/itest-nonexistent"), map[string]any{})
 }

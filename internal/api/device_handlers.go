@@ -11,7 +11,7 @@ import (
 	"dumpstore/internal/zfs"
 )
 
-// getDevices handles GET /api/devices
+// getDevices handles GET /api/v1/devices
 // Returns the physical block devices on this host, with in_use_by set to the
 // pool name for devices that currently back a vdev (best-effort matching).
 func (h *Handler) getDevices(context.Context, struct{}) ([]blockdev.Device, error) {
@@ -33,14 +33,15 @@ func (h *Handler) getDevices(context.Context, struct{}) ([]blockdev.Device, erro
 	return devs, nil
 }
 
-// replaceDevice handles POST /api/pools/{pool}/replace
-// Body: { "old_device": "...", "new_device": "..." }
+// replaceDevice handles POST /api/v1/pools/{pool}/devices/{device}/replace
+// Body: { "new_device": "..." } — {device} is the device being replaced.
 // Runs `zpool replace`, which starts a resilver onto the new device.
 func (h *Handler) replaceDevice(ctx context.Context, in struct {
-	poolParam
+	poolDeviceParam
 	Body ReplaceDeviceRequest `body:""`
 }) (PoolResult, error) {
-	pool, req := in.Pool, in.Body
+	pool := in.Pool
+	req := struct{ OldDevice, NewDevice string }{in.Device, in.Body.NewDevice}
 	if !validPoolName(pool) {
 		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
@@ -62,35 +63,26 @@ func (h *Handler) replaceDevice(ctx context.Context, in struct {
 	return PoolResult{Pool: pool, Tasks: out.Steps()}, nil
 }
 
-// ReplaceDeviceRequest is the POST /api/pools/{pool}/replace body.
+// ReplaceDeviceRequest is the POST /api/v1/pools/{pool}/devices/{device}/replace body.
 type ReplaceDeviceRequest struct {
-	OldDevice string `json:"old_device"`
-	NewDevice string `json:"new_device"`
+	NewDevice string `json:"new_device" doc:"Replacement device path"`
 }
 
-// DeviceRequest names one device of a pool (offline/online).
-type DeviceRequest struct {
-	Device string `json:"device"`
-}
+type deviceStateIn = poolDeviceParam
 
-type deviceStateIn struct {
-	poolParam
-	Body DeviceRequest `body:""`
-}
-
-// offlineDevice handles POST /api/pools/{pool}/offline — body { "device": "..." }.
+// offlineDevice handles POST /api/v1/pools/{pool}/devices/{device}/offline (no body).
 func (h *Handler) offlineDevice(ctx context.Context, in deviceStateIn) (PoolResult, error) {
 	return h.setDeviceState(ctx, in, "offline", "pool.device_offline")
 }
 
-// onlineDevice handles POST /api/pools/{pool}/online — body { "device": "..." }.
+// onlineDevice handles POST /api/v1/pools/{pool}/devices/{device}/online (no body).
 func (h *Handler) onlineDevice(ctx context.Context, in deviceStateIn) (PoolResult, error) {
 	return h.setDeviceState(ctx, in, "online", "pool.device_online")
 }
 
 // setDeviceState is the shared implementation of offlineDevice/onlineDevice.
 func (h *Handler) setDeviceState(ctx context.Context, in deviceStateIn, subcmd, action string) (PoolResult, error) {
-	pool, device := in.Pool, in.Body.Device
+	pool, device := in.Pool, in.Device
 	if !validPoolName(pool) {
 		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}

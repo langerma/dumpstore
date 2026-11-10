@@ -5,6 +5,7 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -16,13 +17,13 @@ func TestAuth(t *testing.T) {
 	// No cookie yet (login() has not run in this fresh client for this request):
 	// use a bare request without the shared jar's session by hitting the API
 	// through a throwaway client.
-	resp, err := http.Get(baseURL + "/api/pools")
+	resp, err := http.Get(baseURL + "/api/v1/pools")
 	if err != nil {
-		t.Fatalf("GET /api/pools: %v", err)
+		t.Fatalf("GET /api/v1/pools: %v", err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated GET /api/pools: got %d, want 401", resp.StatusCode)
+		t.Fatalf("unauthenticated GET /api/v1/pools: got %d, want 401", resp.StatusCode)
 	}
 
 	if resp := postLogin(t, adminUser, "definitely-wrong-password"); resp.StatusCode != http.StatusFound ||
@@ -32,12 +33,22 @@ func TestAuth(t *testing.T) {
 	}
 
 	login(t) // asserts 302 -> / with a session cookie
-	body := apiOK(t, "GET", "/api/version", nil)
+	body := apiOK(t, "GET", "/api/v1/system/version", nil)
 	v := decode[map[string]string](t, body)
 	if v["version"] == "" {
-		t.Fatalf("GET /api/version returned empty version: %s", body)
+		t.Fatalf("GET /api/v1/system/version returned empty version: %s", body)
 	}
 	t.Logf("ZFS version on VM: %s", strings.ReplaceAll(v["version"], "\n", " "))
+}
+
+// TestLegacyPathsGone pins the hard cut to /api/v1 (#181): the pre-v1
+// routes are not kept as aliases, so a logged-in client gets 404.
+func TestLegacyPathsGone(t *testing.T) {
+	apiStatus(t, http.StatusNotFound, "GET", "/api/pools", nil)
+	apiStatus(t, http.StatusNotFound, "GET", "/api/sysinfo", nil)
+	apiStatus(t, http.StatusNotFound, "POST", "/api/datasets/rename", map[string]string{
+		"name": testPool + "/itest-nope", "new_name": testPool + "/itest-nope2",
+	})
 }
 
 // TestDatasetLifecycle creates a filesystem through the API, updates a
@@ -50,25 +61,31 @@ func TestDatasetLifecycle(t *testing.T) {
 	destroyDatasetInVM(renamed)
 	t.Cleanup(func() { destroyDatasetInVM(name); destroyDatasetInVM(renamed) })
 
-	apiOK(t, "POST", "/api/datasets", map[string]any{
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{
 		"name": name, "type": "filesystem", "compression": "lz4",
 	})
 	ds, ok := datasetByName(t, name)
 	if !ok {
-		t.Fatalf("dataset %s not in /api/datasets after create", name)
+		t.Fatalf("dataset %s not in /api/v1/datasets after create", name)
 	}
 	if ds.Compression != "lz4" {
 		t.Errorf("compression after create: got %q, want lz4", ds.Compression)
 	}
 
-	apiOK(t, "PATCH", "/api/datasets/"+name, map[string]string{"compression": "zstd"})
+	apiOK(t, "PATCH", v1("/datasets/%s", name), map[string]string{"compression": "zstd"})
 	if ds, _ := datasetByName(t, name); ds.Compression != "zstd" {
 		t.Errorf("compression after PATCH: got %q, want zstd", ds.Compression)
 	}
+	// The nested name round-trips as one percent-encoded path segment.
+	props := decode[map[string]struct {
+		Value  string `json:"value"`
+		Source string `json:"source"`
+	}](t, apiOK(t, "GET", v1("/datasets/%s/properties", name), nil))
+	if c := props["compression"]; c.Value != "zstd" || c.Source != "local" {
+		t.Errorf("properties of %s: compression %+v, want zstd/local", name, c)
+	}
 
-	apiOK(t, "POST", "/api/datasets/rename", map[string]string{
-		"name": name, "new_name": renamed,
-	})
+	apiOK(t, "POST", v1("/datasets/%s/rename", name), map[string]string{"new_name": renamed})
 	if _, ok := datasetByName(t, renamed); !ok {
 		t.Fatalf("dataset %s not found after rename", renamed)
 	}
@@ -76,7 +93,7 @@ func TestDatasetLifecycle(t *testing.T) {
 		t.Fatalf("old name %s still present after rename", name)
 	}
 
-	apiOK(t, "DELETE", "/api/datasets/"+renamed, nil)
+	apiOK(t, "DELETE", v1("/datasets/%s", renamed), nil)
 	if _, ok := datasetByName(t, renamed); ok {
 		t.Fatalf("dataset %s still present after delete", renamed)
 	}
@@ -92,17 +109,17 @@ func TestSnapshotsAndDiff(t *testing.T) {
 	destroyDatasetInVM(name)
 	t.Cleanup(func() { destroyDatasetInVM(clone); destroyDatasetInVM(name) })
 
-	apiOK(t, "POST", "/api/datasets", map[string]any{"name": name, "type": "filesystem"})
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": name, "type": "filesystem"})
 	ds, ok := datasetByName(t, name)
 	if !ok || ds.Mountpoint == "" {
 		t.Fatalf("dataset %s missing or has no mountpoint: %+v", name, ds)
 	}
 
 	vmExec(t, fmt.Sprintf("echo one > %s/first.txt", ds.Mountpoint))
-	apiOK(t, "POST", "/api/snapshots", map[string]any{"dataset": name, "snapname": "s1"})
+	apiOK(t, "POST", "/api/v1/snapshots", map[string]any{"dataset": name, "snapname": "s1"})
 
 	vmExec(t, fmt.Sprintf("echo two > %s/second.txt", ds.Mountpoint))
-	apiOK(t, "POST", "/api/snapshots", map[string]any{"dataset": name, "snapname": "s2"})
+	apiOK(t, "POST", "/api/v1/snapshots", map[string]any{"dataset": name, "snapname": "s2"})
 
 	var found int
 	for _, s := range listSnapshots(t) {
@@ -111,11 +128,11 @@ func TestSnapshotsAndDiff(t *testing.T) {
 		}
 	}
 	if found != 2 {
-		t.Fatalf("expected both snapshots in /api/snapshots, found %d", found)
+		t.Fatalf("expected both snapshots in /api/v1/snapshots, found %d", found)
 	}
 
 	diffBody := apiOK(t, "GET",
-		"/api/snapshots/diff?from="+name+"@s1&to="+name+"@s2", nil)
+		v1("/snapshots/%s/diff", name+"@s1")+"?to="+url.QueryEscape(name+"@s2"), nil)
 	diff := decode[struct {
 		Entries []struct {
 			Change string `json:"change"`
@@ -132,16 +149,14 @@ func TestSnapshotsAndDiff(t *testing.T) {
 		t.Fatalf("diff s1..s2 did not report second.txt as created: %s", truncate(diffBody, 2000))
 	}
 
-	apiOK(t, "POST", "/api/snapshots/clone", map[string]string{
-		"snapshot": name + "@s2", "target": clone,
-	})
+	apiOK(t, "POST", v1("/snapshots/%s/clone", name+"@s2"), map[string]string{"target": clone})
 	if _, ok := datasetByName(t, clone); !ok {
-		t.Fatalf("clone %s not in /api/datasets", clone)
+		t.Fatalf("clone %s not in /api/v1/datasets", clone)
 	}
 	// The clone depends on s2, so drop it before deleting the snapshots.
-	apiOK(t, "DELETE", "/api/datasets/"+clone, nil)
+	apiOK(t, "DELETE", v1("/datasets/%s", clone), nil)
 
-	apiOK(t, "POST", "/api/snapshots/delete-batch", map[string]any{
+	apiOK(t, "POST", "/api/v1/snapshots/batch-delete", map[string]any{
 		"snapshots": []string{name + "@s1", name + "@s2"},
 	})
 	for _, s := range listSnapshots(t) {
@@ -158,14 +173,14 @@ func TestUserQuota(t *testing.T) {
 	destroyDatasetInVM(name)
 	t.Cleanup(func() { destroyDatasetInVM(name) })
 
-	apiOK(t, "POST", "/api/datasets", map[string]any{"name": name, "type": "filesystem"})
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": name, "type": "filesystem"})
 
-	apiOK(t, "POST", "/api/userquota/"+name, map[string]string{
+	apiOK(t, "PUT", v1("/datasets/%s/quotas", name), map[string]string{
 		"kind": "user", "principal": "root", "quota": "25M",
 	})
 	rows := decode[struct {
 		Rows []spaceRow `json:"rows"`
-	}](t, apiOK(t, "GET", "/api/userspace/"+name+"?kind=user", nil))
+	}](t, apiOK(t, "GET", v1("/datasets/%s/userspace", name)+"?kind=user", nil))
 	const want = 25 * 1024 * 1024
 	var got uint64
 	for _, r := range rows.Rows {
@@ -177,12 +192,12 @@ func TestUserQuota(t *testing.T) {
 		t.Fatalf("root quota after set: got %d, want %d", got, want)
 	}
 
-	apiOK(t, "POST", "/api/userquota/"+name, map[string]string{
+	apiOK(t, "PUT", v1("/datasets/%s/quotas", name), map[string]string{
 		"kind": "user", "principal": "root", "quota": "none",
 	})
 	rows = decode[struct {
 		Rows []spaceRow `json:"rows"`
-	}](t, apiOK(t, "GET", "/api/userspace/"+name+"?kind=user", nil))
+	}](t, apiOK(t, "GET", v1("/datasets/%s/userspace", name)+"?kind=user", nil))
 	for _, r := range rows.Rows {
 		if r.Name == "root" && r.Quota != 0 {
 			t.Fatalf("root quota not cleared: still %d", r.Quota)
@@ -199,16 +214,14 @@ func TestSendReceiveJob(t *testing.T) {
 	destroyDatasetInVM(dst)
 	t.Cleanup(func() { destroyDatasetInVM(src); destroyDatasetInVM(dst) })
 
-	apiOK(t, "POST", "/api/datasets", map[string]any{"name": src, "type": "filesystem"})
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": src, "type": "filesystem"})
 	ds, _ := datasetByName(t, src)
 	vmExec(t, fmt.Sprintf("dd if=/dev/urandom of=%s/blob bs=1M count=8 2>/dev/null", ds.Mountpoint))
-	apiOK(t, "POST", "/api/snapshots", map[string]any{"dataset": src, "snapname": "xfer"})
+	apiOK(t, "POST", "/api/v1/snapshots", map[string]any{"dataset": src, "snapname": "xfer"})
 
-	status, body := api(t, "POST", "/api/snapshots/send", map[string]any{
-		"snapshot": src + "@xfer", "target": dst,
-	})
+	status, body := api(t, "POST", v1("/snapshots/%s/send", src+"@xfer"), map[string]any{"target": dst})
 	if status != http.StatusAccepted {
-		t.Fatalf("POST /api/snapshots/send: got %d, want 202; body: %s", status, truncate(body, 2000))
+		t.Fatalf("POST /api/v1/snapshots/{snap}/send: got %d, want 202; body: %s", status, truncate(body, 2000))
 	}
 	jobID := decode[struct {
 		JobID string `json:"job_id"`
@@ -219,17 +232,17 @@ func TestSendReceiveJob(t *testing.T) {
 
 	var j job
 	waitFor(t, "send job to finish", 2*time.Minute, func() bool {
-		j = decode[job](t, apiOK(t, "GET", "/api/jobs/"+jobID, nil))
+		j = decode[job](t, apiOK(t, "GET", v1("/jobs/%s", jobID), nil))
 		return j.Status != "pending" && j.Status != "running"
 	})
 	if j.Status != "success" {
 		t.Fatalf("send job ended %q (error %q, stderr %q)", j.Status, j.Error, j.Stderr)
 	}
 	if _, ok := datasetByName(t, dst); !ok {
-		t.Fatalf("received dataset %s not in /api/datasets", dst)
+		t.Fatalf("received dataset %s not in /api/v1/datasets", dst)
 	}
 
-	if status, body := api(t, "DELETE", "/api/jobs/"+jobID, nil); status != http.StatusNoContent {
+	if status, body := api(t, "DELETE", v1("/jobs/%s", jobID), nil); status != http.StatusNoContent {
 		t.Fatalf("DELETE job: got %d, body: %s", status, truncate(body, 500))
 	}
 }

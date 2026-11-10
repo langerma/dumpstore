@@ -4,7 +4,148 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-### Changed
+### Changed (breaking)
+
+- **The API moved to `/api/v1`, with cleaned-up paths** (#181, Phase 3). This is a hard cut: the old paths are gone and there are no aliases.
+  - **Path design:** paths are plural nouns, with sub-resources nested under their parent (`/datasets/{name}/acl`). Identities are in the path, not in the body or the query string. Methods follow the resource: PUT sets, DELETE carries no body.
+  - **SDK names are unchanged:** each operation keeps its `operationId` and SDK group/method names.
+  - **Unchanged paths:** `/login`, `/auth/login`, `/auth/logout`, `/metrics` and `/api/v1/openapi.json`.
+  - **One segment per name:** every path parameter is now a single segment, so dataset, snapshot and device names must be **percent-encoded** (`tank/data` → `tank%2Fdata`; `@` → `%40`). A raw slash in a name returns `404`. Reverse proxies must not decode `%2F`; see the wiki's Installation page (nginx: no URI part in `proxy_pass`).
+  - **Identifiers that moved into the path:**
+    - dataset rename (`{new_name}` body)
+    - snapshot clone, send and diff (`?to=`)
+    - device replace (`{new_device}` body), offline and online (no body)
+    - SMB shares (keyed by share name, `{dataset}` body)
+    - Time Machine shares
+    - iSCSI target delete (by IQN; the zvol is looked up)
+  - **SSH keys:**
+    - `GET /api/v1/users/{name}/ssh-keys` returns `{keys: [{key, type, fingerprint, comment}]}` (was an array of strings). Fingerprints match `ssh-keygen -lf`.
+    - A key is removed with `DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}` instead of a DELETE carrying the key in its body.
+  - **Responses:**
+    - `DELETE /api/v1/smb/shares/{name}` returns `{sharename, path, tasks}` (the dataset echo is gone) and `404` for an unknown share.
+    - Deleting an unknown iSCSI target is `404` on Linux too.
+  - **Metrics:** the `path` label of `http_requests_total` / `http_request_duration_seconds` is now the matched route pattern (`/api/v1/datasets/{name}`). API requests that reach no route are counted as `(unauthenticated)` or `(unmatched)`.
+  - **Frontend:** the UI builds every API path with one helper that percent-encodes all interpolated values; a Go test checks every path it uses against the server's routes.
+
+  <details><summary>Migration table (generated from the Phase 2 and Phase 3 specs, joined on operationId)</summary>
+
+| Old | New | operationId |
+|---|---|---|
+| `GET /api/auth/config` | `GET /api/v1/auth/config` | `authConfig` |
+| `POST /api/auth/change-password` | `PUT /api/v1/auth/password` | `authSetPassword` |
+| `POST /api/auth/change-username` | `PUT /api/v1/auth/username` | `authSetUsername` |
+| `GET /api/whoami` | `GET /api/v1/auth/whoami` | `authWhoami` |
+| `POST /api/auto-snapshot/release` | `POST /api/v1/auto-snapshot/release` | `autoSnapshotRelease` |
+| `GET /api/auto-snapshot-schedules` | `GET /api/v1/auto-snapshot/schedules` | `autoSnapshotListSchedules` |
+| `GET /api/auto-snapshot/status` | `GET /api/v1/auto-snapshot/status` | `autoSnapshotStatus` |
+| `POST /api/auto-snapshot/takeover` | `POST /api/v1/auto-snapshot/takeover` | `autoSnapshotTakeover` |
+| `GET /api/datasets` | `GET /api/v1/datasets` | `datasetsList` |
+| `POST /api/datasets` | `POST /api/v1/datasets` | `datasetsCreate` |
+| `GET /api/acl-status` | `GET /api/v1/datasets/acl-status` | `datasetsAclStatus` |
+| `DELETE /api/datasets/{name}` | `DELETE /api/v1/datasets/{name}` | `datasetsDelete` |
+| `PATCH /api/datasets/{name}` | `PATCH /api/v1/datasets/{name}` | `datasetsUpdate` |
+| `GET /api/acl/{dataset}` | `GET /api/v1/datasets/{name}/acl` | `datasetsAclGet` |
+| `DELETE /api/acl/{dataset}` | `DELETE /api/v1/datasets/{name}/acl/entries` | `datasetsAclRemoveEntry` |
+| `POST /api/acl/{dataset}` | `POST /api/v1/datasets/{name}/acl/entries` | `datasetsAclAddEntry` |
+| `GET /api/auto-snapshot/{name}` | `GET /api/v1/datasets/{name}/auto-snapshot` | `datasetsAutoSnapshotGet` |
+| `PUT /api/auto-snapshot/{name}` | `PUT /api/v1/datasets/{name}/auto-snapshot` | `datasetsAutoSnapshotSet` |
+| `GET /api/chown/{dataset}` | `GET /api/v1/datasets/{name}/owner` | `datasetsOwnerGet` |
+| `POST /api/chown/{dataset}` | `PUT /api/v1/datasets/{name}/owner` | `datasetsOwnerSet` |
+| `GET /api/dataset-props/{name}` | `GET /api/v1/datasets/{name}/properties` | `datasetsGetProperties` |
+| `POST /api/userquota/{name}` | `PUT /api/v1/datasets/{name}/quotas` | `datasetsQuotasSet` |
+| `POST /api/datasets/rename` | `POST /api/v1/datasets/{name}/rename` | `datasetsRename` |
+| `POST /api/rewrite/{name}` | `POST /api/v1/datasets/{name}/rewrite` | `datasetsRewrite` |
+| `GET /api/userspace/{name}` | `GET /api/v1/datasets/{name}/userspace` | `datasetsQuotasUsage` |
+| `GET /api/devices` | `GET /api/v1/devices` | `devicesList` |
+| `GET /api/events` | `GET /api/v1/events` | `eventsStream` |
+| `GET /api/groups` | `GET /api/v1/groups` | `groupsList` |
+| `POST /api/groups` | `POST /api/v1/groups` | `groupsCreate` |
+| `DELETE /api/groups/{name}` | `DELETE /api/v1/groups/{name}` | `groupsDelete` |
+| `PUT /api/groups/{name}` | `PUT /api/v1/groups/{name}` | `groupsUpdate` |
+| `POST /api/iscsi/init` | `POST /api/v1/iscsi/init` | `iscsiInit` |
+| `GET /api/iscsi/status` | `GET /api/v1/iscsi/status` | `iscsiStatus` |
+| `GET /api/iscsi-targets` | `GET /api/v1/iscsi/targets` | `iscsiTargetsList` |
+| `POST /api/iscsi-targets` | `POST /api/v1/iscsi/targets` | `iscsiTargetsCreate` |
+| `DELETE /api/iscsi-targets` | `DELETE /api/v1/iscsi/targets/{iqn}` | `iscsiTargetsDelete` |
+| `GET /api/jobs` | `GET /api/v1/jobs` | `jobsList` |
+| `DELETE /api/jobs/{id}` | `DELETE /api/v1/jobs/{id}` | `jobsDelete` |
+| `GET /api/jobs/{id}` | `GET /api/v1/jobs/{id}` | `jobsGet` |
+| `POST /api/jobs/{id}/cancel` | `POST /api/v1/jobs/{id}/cancel` | `jobsCancel` |
+| `GET /api/v1/openapi.json` | unchanged | `metaOpenapi` |
+| `GET /api/operations/{id}` | `GET /api/v1/operations/{id}` | `operationsGet` |
+| `GET /api/pools` | `GET /api/v1/pools` | `poolsList` |
+| `POST /api/pools` | `POST /api/v1/pools` | `poolsCreate` |
+| `POST /api/pools/import` | `POST /api/v1/pools/import` | `poolsImport` |
+| `GET /api/pools/importable` | `GET /api/v1/pools/importable` | `poolsListImportable` |
+| `GET /api/iostat` | `GET /api/v1/pools/iostat` | `poolsIostat` |
+| `GET /api/scrub-schedules` | `GET /api/v1/pools/scrub-schedules` | `poolsScrubListSchedules` |
+| `GET /api/poolstatus` | `GET /api/v1/pools/status` | `poolsStatus` |
+| `POST /api/pools/{pool}/cache` | `POST /api/v1/pools/{pool}/cache` | `poolsDevicesAddCache` |
+| `DELETE /api/pools/{pool}/devices/{device}` | `DELETE /api/v1/pools/{pool}/devices/{device}` | `poolsDevicesRemove` |
+| `POST /api/pools/{pool}/offline` | `POST /api/v1/pools/{pool}/devices/{device}/offline` | `poolsDevicesOffline` |
+| `POST /api/pools/{pool}/online` | `POST /api/v1/pools/{pool}/devices/{device}/online` | `poolsDevicesOnline` |
+| `POST /api/pools/{pool}/replace` | `POST /api/v1/pools/{pool}/devices/{device}/replace` | `poolsDevicesReplace` |
+| `POST /api/pools/{pool}/export` | `POST /api/v1/pools/{pool}/export` | `poolsExport` |
+| `POST /api/pools/{pool}/log` | `POST /api/v1/pools/{pool}/log` | `poolsDevicesAddLog` |
+| `DELETE /api/scrub/{pool}` | `DELETE /api/v1/pools/{pool}/scrub` | `poolsScrubCancel` |
+| `POST /api/scrub/{pool}` | `POST /api/v1/pools/{pool}/scrub` | `poolsScrubStart` |
+| `DELETE /api/scrub-schedule/{pool}` | `DELETE /api/v1/pools/{pool}/scrub-schedule` | `poolsScrubRemoveSchedule` |
+| `PUT /api/scrub-schedule/{pool}` | `PUT /api/v1/pools/{pool}/scrub-schedule` | `poolsScrubSetSchedule` |
+| `POST /api/pools/{pool}/spare` | `POST /api/v1/pools/{pool}/spare` | `poolsDevicesAddSpare` |
+| `POST /api/pools/{pool}/vdevs` | `POST /api/v1/pools/{pool}/vdevs` | `poolsVdevsAdd` |
+| `GET /api/replication` | `GET /api/v1/replication/tasks` | `replicationList` |
+| `POST /api/replication` | `POST /api/v1/replication/tasks` | `replicationCreate` |
+| `DELETE /api/replication/{id}` | `DELETE /api/v1/replication/tasks/{id}` | `replicationDelete` |
+| `PATCH /api/replication/{id}` | `PATCH /api/v1/replication/tasks/{id}` | `replicationUpdate` |
+| `GET /api/replication/{id}/history` | `GET /api/v1/replication/tasks/{id}/history` | `replicationHistory` |
+| `POST /api/replication/{id}/run` | `POST /api/v1/replication/tasks/{id}/run` | `replicationRun` |
+| `GET /api/services` | `GET /api/v1/services` | `servicesList` |
+| `POST /api/services/{service}/{action}` | `POST /api/v1/services/{service}/{action}` | `servicesControl` |
+| `DELETE /api/smb/homes` | `DELETE /api/v1/smb/homes` | `smbHomesDisable` |
+| `GET /api/smb/homes` | `GET /api/v1/smb/homes` | `smbHomesGet` |
+| `POST /api/smb/homes` | `PUT /api/v1/smb/homes` | `smbHomesSet` |
+| `POST /api/smb/init` | `POST /api/v1/smb/init` | `smbInit` |
+| `GET /api/smb-shares` | `GET /api/v1/smb/shares` | `smbSharesList` |
+| `DELETE /api/smb-share/{dataset}` | `DELETE /api/v1/smb/shares/{name}` | `smbSharesDelete` |
+| `POST /api/smb-share/{dataset}` | `PUT /api/v1/smb/shares/{name}` | `smbSharesSet` |
+| `GET /api/smb/status` | `GET /api/v1/smb/status` | `smbStatus` |
+| `GET /api/smb/timemachine` | `GET /api/v1/smb/timemachine` | `smbTimeMachineList` |
+| `DELETE /api/smb/timemachine/{sharename}` | `DELETE /api/v1/smb/timemachine/{name}` | `smbTimeMachineDelete` |
+| `POST /api/smb/timemachine` | `PUT /api/v1/smb/timemachine/{name}` | `smbTimeMachineSet` |
+| `GET /api/smb-users` | `GET /api/v1/smb/users` | `smbUsersList` |
+| `DELETE /api/smb-users/{name}` | `DELETE /api/v1/smb/users/{name}` | `smbUsersRemove` |
+| `POST /api/smb-users/{name}` | `PUT /api/v1/smb/users/{name}` | `smbUsersAdd` |
+| `POST /api/smb/wsdd` | `POST /api/v1/smb/wsdd/apply` | `smbWsddApply` |
+| `GET /api/snapshots` | `GET /api/v1/snapshots` | `snapshotsList` |
+| `POST /api/snapshots` | `POST /api/v1/snapshots` | `snapshotsCreate` |
+| `POST /api/snapshots/delete-batch` | `POST /api/v1/snapshots/batch-delete` | `snapshotsDeleteBatch` |
+| `DELETE /api/snapshots/{snapshot}` | `DELETE /api/v1/snapshots/{snap}` | `snapshotsDelete` |
+| `POST /api/snapshots/clone` | `POST /api/v1/snapshots/{snap}/clone` | `snapshotsClone` |
+| `GET /api/snapshots/diff` | `GET /api/v1/snapshots/{snap}/diff` | `snapshotsDiff` |
+| `POST /api/snapshots/send` | `POST /api/v1/snapshots/{snap}/send` | `snapshotsSend` |
+| `GET /api/sysinfo` | `GET /api/v1/system/info` | `systemInfo` |
+| `GET /api/network` | `GET /api/v1/system/network` | `systemNetwork` |
+| `GET /api/schema` | `GET /api/v1/system/schema` | `systemSchema` |
+| `GET /api/smart` | `GET /api/v1/system/smart` | `systemSmart` |
+| `GET /api/version` | `GET /api/v1/system/version` | `systemVersion` |
+| `GET /api/tls/status` | `GET /api/v1/tls` | `tlsGet` |
+| `PATCH /api/tls/config` | `PATCH /api/v1/tls` | `tlsUpdate` |
+| `POST /api/tls/acme/issue` | `POST /api/v1/tls/acme/issue` | `tlsAcmeIssue` |
+| `POST /api/tls/acme/renew` | `POST /api/v1/tls/acme/renew` | `tlsAcmeRenew` |
+| `POST /api/tls/gencert` | `POST /api/v1/tls/self-signed` | `tlsGenerateSelfSigned` |
+| `GET /api/users` | `GET /api/v1/users` | `usersList` |
+| `POST /api/users` | `POST /api/v1/users` | `usersCreate` |
+| `DELETE /api/users/{name}` | `DELETE /api/v1/users/{name}` | `usersDelete` |
+| `PUT /api/users/{name}` | `PUT /api/v1/users/{name}` | `usersUpdate` |
+| `GET /api/users/{name}/sshkeys` | `GET /api/v1/users/{name}/ssh-keys` | `usersSshKeysList` |
+| `POST /api/users/{name}/sshkeys` | `POST /api/v1/users/{name}/ssh-keys` | `usersSshKeysAdd` |
+| `DELETE /api/users/{name}/sshkeys` | `DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}` | `usersSshKeysRemove` |
+| `POST /auth/login` | unchanged | `authLogin` |
+| `POST /auth/logout` | unchanged | `authLogout` |
+| `GET /login` | unchanged | `authLoginPage` |
+| `GET /metrics` | unchanged | `metricsScrape` |
+
+  </details>
 
 - **Every API route has typed request and response schemas** (#181, Phase 2). All JSON handlers now run on the typed adapter (`func(ctx, In) (Out, error)`), so the OpenAPI spec's parameter, body and response schemas come from the Go signatures and can't drift from the code.
   - **No generic schemas left:** 71 responses and 36 request bodies that were documented as generic JSON objects now have named schemas (e.g. `CreatePoolRequest`, `PoolResult`, `SMBHomes`, `ISCSITargetResult`). `TestNoUntypedRoutes` keeps it that way, and optional request fields are marked so the spec's `required` lists are accurate.

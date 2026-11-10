@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, toast } from './utils.js';
+import { api, delegate, esc, toast, v1 } from './utils.js';
 
 const STATUS_BADGES = {
   success:     'badge-green',
@@ -120,10 +120,10 @@ replForm.addEventListener('submit', async e => {
   };
   try {
     if (id) {
-      await api('PATCH', `/api/replication/${encodeURIComponent(id)}`, body);
+      await api('PATCH', v1`/replication/tasks/${id}`, body);
       toast('Task updated', 'ok');
     } else {
-      await api('POST', '/api/replication', body);
+      await api('POST', v1`/replication/tasks`, body);
       toast('Task created', 'ok');
     }
     replDialog.close();
@@ -141,7 +141,7 @@ document.getElementById('replDeleteConfirmBtn').addEventListener('click', async 
   const id = _deleteId;
   replDeleteDialog.close();
   try {
-    await api('DELETE', `/api/replication/${encodeURIComponent(id)}`);
+    await api('DELETE', v1`/replication/tasks/${id}`);
     toast('Task deleted', 'ok');
     await refreshReplications();
   } catch (err) {
@@ -167,7 +167,7 @@ async function openHistoryDialog(id) {
   body.innerHTML = '<div class="loading">Loading…</div>';
   replHistoryDialog.showModal();
   try {
-    const runs = await api('GET', `/api/replication/${encodeURIComponent(id)}/history`);
+    const runs = await api('GET', v1`/replication/tasks/${id}/history`);
     if (!runs.length) {
       body.innerHTML = '<p class="muted">No runs recorded yet.</p>';
       return;
@@ -199,7 +199,7 @@ async function openHistoryDialog(id) {
 // ── Run now ──────────────────────────────────────────────────────────────────
 async function runReplication(id) {
   try {
-    const out = await api('POST', `/api/replication/${encodeURIComponent(id)}/run`);
+    const out = await api('POST', v1`/replication/tasks/${id}/run`);
     toast(`Started job ${out.job_id.substring(0, 8)}…`, 'ok');
   } catch (err) {
     toast(`Run failed: ${err.message}`, 'err');
@@ -209,7 +209,7 @@ async function runReplication(id) {
 // ── Refresh helper ───────────────────────────────────────────────────────────
 export async function refreshReplications() {
   try {
-    const tasks = await api('GET', '/api/replication');
+    const tasks = await api('GET', v1`/replication/tasks`);
     storeSet('replication', tasks || []);
   } catch (err) {
     // SSE will retry; surface only on explicit user-driven refresh.

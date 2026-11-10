@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, esc, toast, setRefreshing, opSessionStep, opSessionResync } from './utils.js';
+import { api, esc, toast, setRefreshing, opSessionStep, opSessionResync, v1 } from './utils.js';
 import { refreshACLStatus } from './dataset-dialogs.js';
 import { mergeJob } from './jobs.js';
 
@@ -52,28 +52,28 @@ export async function loadAll() {
     // Use null as the sentinel for failed fetches so we can distinguish
     // "endpoint returned empty" from "fetch failed" and preserve last-known-good state.
     const [pools, poolStatuses, version, sysinfo, network, datasets, snapshots, users, groups, smbData, smbStatus, smbShares, smbHomes, tmShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema, services, jobs, replication, autosnapStatus] = await Promise.all([
-      api('GET', '/api/pools').catch(() => null),
-      api('GET', '/api/poolstatus').catch(() => null),
-      api('GET', '/api/version').catch(() => null),
-      api('GET', '/api/sysinfo').catch(() => null),
-      api('GET', '/api/network').catch(() => null),
-      api('GET', '/api/datasets').catch(() => null),
-      api('GET', '/api/snapshots').catch(() => null),
-      api('GET', '/api/users').catch(() => null),
-      api('GET', '/api/groups').catch(() => null),
-      api('GET', '/api/smb-users').catch(() => null),
-      api('GET', '/api/smb/status').catch(() => null),
-      api('GET', '/api/smb-shares').catch(() => null),
-      api('GET', '/api/smb/homes').catch(() => null),
-      api('GET', '/api/smb/timemachine').catch(() => null),
-      api('GET', '/api/iscsi-targets').catch(() => null),
-      api('GET', '/api/scrub-schedules').catch(() => null),
-      api('GET', '/api/auto-snapshot-schedules').catch(() => null),
-      api('GET', '/api/schema').catch(() => null),
-      api('GET', '/api/services').catch(() => null),
-      api('GET', '/api/jobs').catch(() => null),
-      api('GET', '/api/replication').catch(() => null),
-      api('GET', '/api/auto-snapshot/status').catch(() => null),
+      api('GET', v1`/pools`).catch(() => null),
+      api('GET', v1`/pools/status`).catch(() => null),
+      api('GET', v1`/system/version`).catch(() => null),
+      api('GET', v1`/system/info`).catch(() => null),
+      api('GET', v1`/system/network`).catch(() => null),
+      api('GET', v1`/datasets`).catch(() => null),
+      api('GET', v1`/snapshots`).catch(() => null),
+      api('GET', v1`/users`).catch(() => null),
+      api('GET', v1`/groups`).catch(() => null),
+      api('GET', v1`/smb/users`).catch(() => null),
+      api('GET', v1`/smb/status`).catch(() => null),
+      api('GET', v1`/smb/shares`).catch(() => null),
+      api('GET', v1`/smb/homes`).catch(() => null),
+      api('GET', v1`/smb/timemachine`).catch(() => null),
+      api('GET', v1`/iscsi/targets`).catch(() => null),
+      api('GET', v1`/pools/scrub-schedules`).catch(() => null),
+      api('GET', v1`/auto-snapshot/schedules`).catch(() => null),
+      api('GET', v1`/system/schema`).catch(() => null),
+      api('GET', v1`/services`).catch(() => null),
+      api('GET', v1`/jobs`).catch(() => null),
+      api('GET', v1`/replication/tasks`).catch(() => null),
+      api('GET', v1`/auto-snapshot/status`).catch(() => null),
     ]);
     storeBatch(() => {
       if (pools !== null) storeSet('pools', pools);
@@ -126,8 +126,8 @@ export async function loadAll() {
 // Loads iostat (~1 s) and SMART (drive scans) without blocking the main render.
 export async function loadSlowMetrics() {
   const [iostat, smart] = await Promise.all([
-    api('GET', '/api/iostat').catch(() => null),
-    api('GET', '/api/smart').catch(() => null),
+    api('GET', v1`/pools/iostat`).catch(() => null),
+    api('GET', v1`/system/smart`).catch(() => null),
   ]);
   storeBatch(() => {
     if (iostat !== null) storeSet('iostat', iostat);
@@ -176,7 +176,7 @@ function stopPolling() {
 export function startSSE() {
   if (_es) { _es.close(); _es = null; }
   const topics = [...Object.keys(sseTopicMap), 'ansible.progress', 'jobs.update'].join(',');
-  const es = new EventSource('/api/events?topics=' + encodeURIComponent(topics));
+  const es = new EventSource(v1`/events?topics=${topics}`);
   _es = es;
 
   es.onopen = () => {

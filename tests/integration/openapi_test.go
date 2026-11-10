@@ -61,7 +61,7 @@ func TestOpenAPISpec(t *testing.T) {
 	sort.Strings(paths)
 	for _, path := range paths {
 		op, ok := spec.Paths[path]["get"]
-		if !ok || !strings.HasPrefix(path, "/api/") || strings.Contains(path, "{") || path == "/api/events" {
+		if !ok || !strings.HasPrefix(path, "/api/") || strings.Contains(path, "{") || path == "/api/v1/events" {
 			continue
 		}
 		if slices.ContainsFunc(op.Parameters, func(p struct {

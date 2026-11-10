@@ -214,6 +214,32 @@
         ],
         "type": "object"
       },
+      "AuthorizedKey": {
+        "properties": {
+          "comment": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "description": "OpenSSH SHA256 fingerprint (as printed by ssh-keygen -l); empty if the line could not be parsed",
+            "type": "string"
+          },
+          "key": {
+            "description": "The complete line, as stored",
+            "type": "string"
+          },
+          "type": {
+            "description": "Key type, e.g. ssh-ed25519; empty if the line could not be parsed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "fingerprint",
+          "comment"
+        ],
+        "type": "object"
+      },
       "AutoSnapshotProps": {
         "properties": {
           "com.sun:auto-snapshot": {
@@ -342,17 +368,12 @@
       },
       "CloneSnapshotRequest": {
         "properties": {
-          "snapshot": {
-            "description": "Snapshot to clone, e.g. tank/data@snap1",
-            "type": "string"
-          },
           "target": {
             "description": "New dataset, e.g. tank/data-clone",
             "type": "string"
           }
         },
         "required": [
-          "snapshot",
           "target"
         ],
         "type": "object"
@@ -633,17 +654,11 @@
             "description": "Share path; required unless dataset is given",
             "type": "string"
           },
-          "sharename": {
-            "type": "string"
-          },
           "valid_users": {
             "description": "Samba valid users list",
             "type": "string"
           }
         },
-        "required": [
-          "sharename"
-        ],
         "type": "object"
       },
       "CreateUserRequest": {
@@ -908,17 +923,6 @@
         "required": [
           "snapshots",
           "tasks"
-        ],
-        "type": "object"
-      },
-      "DeviceRequest": {
-        "properties": {
-          "device": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "device"
         ],
         "type": "object"
       },
@@ -1704,16 +1708,12 @@
       },
       "RenameDatasetRequest": {
         "properties": {
-          "name": {
-            "type": "string"
-          },
           "new_name": {
             "description": "New name; must share the parent dataset",
             "type": "string"
           }
         },
         "required": [
-          "name",
           "new_name"
         ],
         "type": "object"
@@ -1746,14 +1746,11 @@
       "ReplaceDeviceRequest": {
         "properties": {
           "new_device": {
-            "type": "string"
-          },
-          "old_device": {
+            "description": "Replacement device path",
             "type": "string"
           }
         },
         "required": [
-          "old_device",
           "new_device"
         ],
         "type": "object"
@@ -1792,7 +1789,7 @@
       "ReplicationRunStarted": {
         "properties": {
           "job_id": {
-            "description": "Background job carrying the transfer; poll GET /api/jobs/{id}",
+            "description": "Background job carrying the transfer; poll GET /api/v1/jobs/{id}",
             "type": "string"
           },
           "snapshot": {
@@ -2034,6 +2031,32 @@
         ],
         "type": "object"
       },
+      "SMBShareRemoved": {
+        "properties": {
+          "path": {
+            "description": "Path the share pointed to",
+            "type": "string"
+          },
+          "sharename": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sharename",
+          "path",
+          "tasks"
+        ],
+        "type": "object"
+      },
       "SMBShareResult": {
         "properties": {
           "dataset": {
@@ -2093,9 +2116,9 @@
       "SSHKeyList": {
         "properties": {
           "keys": {
-            "description": "Lines of the user's ~/.ssh/authorized_keys",
+            "description": "Entries of the user's ~/.ssh/authorized_keys",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/AuthorizedKey"
             },
             "type": [
               "array",
@@ -2235,17 +2258,12 @@
             "description": "user@host to receive over SSH; omit for a local receive",
             "type": "string"
           },
-          "snapshot": {
-            "description": "Snapshot to send, e.g. tank/data@snap1",
-            "type": "string"
-          },
           "target": {
             "description": "Receiving dataset, e.g. backup/data",
             "type": "string"
           }
         },
         "required": [
-          "snapshot",
           "target"
         ],
         "type": "object"
@@ -2450,12 +2468,13 @@
       },
       "SetSMBShareRequest": {
         "properties": {
-          "sharename": {
+          "dataset": {
+            "description": "Dataset whose mountpoint is shared",
             "type": "string"
           }
         },
         "required": [
-          "sharename"
+          "dataset"
         ],
         "type": "object"
       },
@@ -3078,7 +3097,7 @@
     }
   },
   "info": {
-    "description": "HTTP API of dumpstore, a web UI for ZFS and file sharing. Generated from the server's route registry (internal/apispec). Dataset, snapshot and device names contain '/' and '@' — percent-encode them in path parameters. Every write accepts an optional X-Operation-ID header; its progress steps are published on the ansible.progress SSE topic and the result can be fetched from GET /api/operations/{id}.",
+    "description": "HTTP API of dumpstore, a web UI for ZFS and file sharing. Generated from the server's route registry (internal/apispec). Dataset, snapshot and device names contain '/' and '@' — percent-encode them in path parameters. Every write accepts an optional X-Operation-ID header; its progress steps are published on the ansible.progress SSE topic and the result can be fetched from GET /api/v1/operations/{id}.",
     "license": {
       "identifier": "BSD-2-Clause",
       "name": "BSD-2-Clause"
@@ -3088,21 +3107,15 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/acl-status": {
+    "/api/v1/auth/config": {
       "get": {
-        "operationId": "datasetsAclStatus",
+        "operationId": "authConfig",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "boolean"
-                  },
-                  "type": [
-                    "object",
-                    "null"
-                  ]
+                  "$ref": "#/components/schemas/AuthConfigResponse"
                 }
               }
             },
@@ -3115,219 +3128,16 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Which datasets carry ACLs",
+        "summary": "Admin username and session lifetime",
         "tags": [
-          "datasets"
+          "auth"
         ],
-        "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "status"
+        "x-fern-sdk-group-name": "auth",
+        "x-fern-sdk-method-name": "config"
       }
     },
-    "/api/acl/{dataset}": {
-      "delete": {
-        "operationId": "datasetsAclRemoveEntry",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "description": "ACL entry to remove, in the form returned by GET /api/acl/{dataset}",
-            "in": "query",
-            "name": "entry",
-            "required": true,
-            "schema": {
-              "description": "ACL entry to remove, in the form returned by GET /api/acl/{dataset}",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
-            "in": "query",
-            "name": "recursive",
-            "required": false,
-            "schema": {
-              "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
-              "enum": [
-                "true",
-                "false"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ACLRemoveResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Remove an ACL entry",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "removeEntry"
-      },
-      "get": {
-        "operationId": "datasetsAclGet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/DatasetACL"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "ACL of a dataset's mountpoint",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "get"
-      },
-      "post": {
-        "operationId": "datasetsAclAddEntry",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetACLEntryRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ACLEntryResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Add or update an ACL entry",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.acl",
-        "x-fern-sdk-method-name": "addEntry"
-      }
-    },
-    "/api/auth/change-password": {
-      "post": {
+    "/api/v1/auth/password": {
+      "put": {
         "description": "401 when the current password is wrong.",
         "operationId": "authSetPassword",
         "parameters": [
@@ -3385,8 +3195,8 @@
         "x-fern-sdk-method-name": "setPassword"
       }
     },
-    "/api/auth/change-username": {
-      "post": {
+    "/api/v1/auth/username": {
+      "put": {
         "operationId": "authSetUsername",
         "parameters": [
           {
@@ -3443,15 +3253,15 @@
         "x-fern-sdk-method-name": "setUsername"
       }
     },
-    "/api/auth/config": {
+    "/api/v1/auth/whoami": {
       "get": {
-        "operationId": "authConfig",
+        "operationId": "authWhoami",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthConfigResponse"
+                  "$ref": "#/components/schemas/WhoamiResponse"
                 }
               }
             },
@@ -3464,50 +3274,15 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Admin username and session lifetime",
+        "summary": "The authenticated user",
         "tags": [
           "auth"
         ],
         "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "config"
+        "x-fern-sdk-method-name": "whoami"
       }
     },
-    "/api/auto-snapshot-schedules": {
-      "get": {
-        "operationId": "autoSnapshotListSchedules",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/AutoSnapshotProps"
-                  },
-                  "type": [
-                    "object",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Auto-snapshot properties of all datasets",
-        "tags": [
-          "autoSnapshot"
-        ],
-        "x-fern-sdk-group-name": "autoSnapshot",
-        "x-fern-sdk-method-name": "listSchedules"
-      }
-    },
-    "/api/auto-snapshot/release": {
+    "/api/v1/auto-snapshot/release": {
       "post": {
         "operationId": "autoSnapshotRelease",
         "parameters": [
@@ -3555,7 +3330,42 @@
         "x-fern-sdk-method-name": "release"
       }
     },
-    "/api/auto-snapshot/status": {
+    "/api/v1/auto-snapshot/schedules": {
+      "get": {
+        "operationId": "autoSnapshotListSchedules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/AutoSnapshotProps"
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Auto-snapshot properties of all datasets",
+        "tags": [
+          "autoSnapshot"
+        ],
+        "x-fern-sdk-group-name": "autoSnapshot",
+        "x-fern-sdk-method-name": "listSchedules"
+      }
+    },
+    "/api/v1/auto-snapshot/status": {
       "get": {
         "operationId": "autoSnapshotStatus",
         "responses": {
@@ -3584,7 +3394,7 @@
         "x-fern-sdk-method-name": "status"
       }
     },
-    "/api/auto-snapshot/takeover": {
+    "/api/v1/auto-snapshot/takeover": {
       "post": {
         "operationId": "autoSnapshotTakeover",
         "parameters": [
@@ -3632,286 +3442,7 @@
         "x-fern-sdk-method-name": "takeover"
       }
     },
-    "/api/auto-snapshot/{name}": {
-      "get": {
-        "operationId": "datasetsAutoSnapshotGet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoSnapshotProps"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Auto-snapshot properties of a dataset",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.autoSnapshot",
-        "x-fern-sdk-method-name": "get"
-      },
-      "put": {
-        "operationId": "datasetsAutoSnapshotSet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Set auto-snapshot properties of a dataset",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.autoSnapshot",
-        "x-fern-sdk-method-name": "set"
-      }
-    },
-    "/api/chown/{dataset}": {
-      "get": {
-        "operationId": "datasetsOwnerGet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetOwnership"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Owner and group of the mountpoint",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.owner",
-        "x-fern-sdk-method-name": "get"
-      },
-      "post": {
-        "operationId": "datasetsOwnerSet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetOwnershipRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetTaskResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Change owner and group of the mountpoint",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.owner",
-        "x-fern-sdk-method-name": "set"
-      }
-    },
-    "/api/dataset-props/{name}": {
-      "get": {
-        "operationId": "datasetsGetProperties",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/DatasetProp"
-                  },
-                  "type": [
-                    "object",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "All properties of a dataset, with source",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "getProperties"
-      }
-    },
-    "/api/datasets": {
+    "/api/v1/datasets": {
       "get": {
         "operationId": "datasetsList",
         "responses": {
@@ -4002,68 +3533,42 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/datasets/rename": {
-      "post": {
-        "operationId": "datasetsRename",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RenameDatasetRequest"
-              }
-            }
-          },
-          "required": true
-        },
+    "/api/v1/datasets/acl-status": {
+      "get": {
+        "operationId": "datasetsAclStatus",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RenameDatasetResult"
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
+            "description": "OK"
           },
           "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Rename a dataset",
+        "summary": "Which datasets carry ACLs",
         "tags": [
           "datasets"
         ],
-        "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "rename"
+        "x-fern-sdk-group-name": "datasets.acl",
+        "x-fern-sdk-method-name": "status"
       }
     },
-    "/api/datasets/{name}": {
+    "/api/v1/datasets/{name}": {
       "delete": {
         "description": "Refused with 409 while shares, iSCSI targets or replication tasks reference it (#183).",
         "operationId": "datasetsDelete",
@@ -4212,7 +3717,765 @@
         "x-fern-sdk-method-name": "update"
       }
     },
-    "/api/devices": {
+    "/api/v1/datasets/{name}/acl": {
+      "get": {
+        "operationId": "datasetsAclGet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DatasetACL"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "ACL of a dataset's mountpoint",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.acl",
+        "x-fern-sdk-method-name": "get"
+      }
+    },
+    "/api/v1/datasets/{name}/acl/entries": {
+      "delete": {
+        "operationId": "datasetsAclRemoveEntry",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ACL entry to remove, in the form returned by GET /api/v1/datasets/{name}/acl",
+            "in": "query",
+            "name": "entry",
+            "required": true,
+            "schema": {
+              "description": "ACL entry to remove, in the form returned by GET /api/v1/datasets/{name}/acl",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
+            "in": "query",
+            "name": "recursive",
+            "required": false,
+            "schema": {
+              "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ACLRemoveResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove an ACL entry",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.acl",
+        "x-fern-sdk-method-name": "removeEntry"
+      },
+      "post": {
+        "operationId": "datasetsAclAddEntry",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetACLEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ACLEntryResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add or update an ACL entry",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.acl",
+        "x-fern-sdk-method-name": "addEntry"
+      }
+    },
+    "/api/v1/datasets/{name}/auto-snapshot": {
+      "get": {
+        "operationId": "datasetsAutoSnapshotGet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoSnapshotProps"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Auto-snapshot properties of a dataset",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.autoSnapshot",
+        "x-fern-sdk-method-name": "get"
+      },
+      "put": {
+        "operationId": "datasetsAutoSnapshotSet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set auto-snapshot properties of a dataset",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.autoSnapshot",
+        "x-fern-sdk-method-name": "set"
+      }
+    },
+    "/api/v1/datasets/{name}/owner": {
+      "get": {
+        "operationId": "datasetsOwnerGet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetOwnership"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Owner and group of the mountpoint",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.owner",
+        "x-fern-sdk-method-name": "get"
+      },
+      "put": {
+        "operationId": "datasetsOwnerSet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetTaskResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change owner and group of the mountpoint",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.owner",
+        "x-fern-sdk-method-name": "set"
+      }
+    },
+    "/api/v1/datasets/{name}/properties": {
+      "get": {
+        "operationId": "datasetsGetProperties",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/DatasetProp"
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "All properties of a dataset, with source",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets",
+        "x-fern-sdk-method-name": "getProperties"
+      }
+    },
+    "/api/v1/datasets/{name}/quotas": {
+      "put": {
+        "operationId": "datasetsQuotasSet",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserQuotaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetTaskResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set or clear a user or group quota",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.quotas",
+        "x-fern-sdk-method-name": "set"
+      }
+    },
+    "/api/v1/datasets/{name}/rename": {
+      "post": {
+        "operationId": "datasetsRename",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameDatasetResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Rename a dataset",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets",
+        "x-fern-sdk-method-name": "rename"
+      }
+    },
+    "/api/v1/datasets/{name}/rewrite": {
+      "post": {
+        "operationId": "datasetsRewrite",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RewriteResult"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Rewrite dataset data in place (background job)",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets",
+        "x-fern-sdk-method-name": "rewrite"
+      }
+    },
+    "/api/v1/datasets/{name}/userspace": {
+      "get": {
+        "operationId": "datasetsQuotasUsage",
+        "parameters": [
+          {
+            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Report per-user (default) or per-group usage",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "description": "Report per-user (default) or per-group usage",
+              "enum": [
+                "user",
+                "group"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSpaceResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Per-user or per-group space usage and quotas",
+        "tags": [
+          "datasets"
+        ],
+        "x-fern-sdk-group-name": "datasets.quotas",
+        "x-fern-sdk-method-name": "usage"
+      }
+    },
+    "/api/v1/devices": {
       "get": {
         "operationId": "devicesList",
         "responses": {
@@ -4247,7 +4510,7 @@
         "x-fern-sdk-method-name": "list"
       }
     },
-    "/api/events": {
+    "/api/v1/events": {
       "get": {
         "description": "Subscribe to one or more topics. Cached topics replay their last value on connect. Topics: ansible.progress, autosnap.status, autosnapshot.query, dataset.query, group.query, iostat, jobs.update, pool.query, poolstatus, replication.update, service.query, snapshot.query, user.query.",
         "operationId": "eventsStream",
@@ -4293,7 +4556,7 @@
         "x-forge-internal": true
       }
     },
-    "/api/groups": {
+    "/api/v1/groups": {
       "get": {
         "operationId": "groupsList",
         "responses": {
@@ -4384,7 +4647,7 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/groups/{name}": {
+    "/api/v1/groups/{name}": {
       "delete": {
         "operationId": "groupsDelete",
         "parameters": [
@@ -4520,66 +4783,10 @@
         "x-fern-sdk-method-name": "update"
       }
     },
-    "/api/iostat": {
-      "get": {
-        "operationId": "poolsIostat",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/IOStat"
-                  },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Per-pool I/O statistics",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "iostat"
-      }
-    },
-    "/api/iscsi-targets": {
-      "delete": {
-        "description": "On FreeBSD, refused with 409 until POST /api/iscsi/init has run; 404 when no target matches iqn and zvol.",
-        "operationId": "iscsiTargetsDelete",
+    "/api/v1/iscsi/init": {
+      "post": {
+        "operationId": "iscsiInit",
         "parameters": [
-          {
-            "description": "Target IQN",
-            "in": "query",
-            "name": "iqn",
-            "required": true,
-            "schema": {
-              "description": "Target IQN",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Backing zvol, e.g. tank/vol1",
-            "in": "query",
-            "name": "zvol",
-            "required": true,
-            "schema": {
-              "description": "Backing zvol, e.g. tank/vol1",
-              "type": "string"
-            }
-          },
           {
             "$ref": "#/components/parameters/OperationID"
           }
@@ -4589,7 +4796,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ISCSITargetResult"
+                  "$ref": "#/components/schemas/ISCSIInitResult"
                 }
               }
             },
@@ -4609,9 +4816,6 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4619,13 +4823,44 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Delete an iSCSI target",
+        "summary": "Initialise ctld: back up and take over /etc/ctl.conf (FreeBSD)",
         "tags": [
           "iscsi"
         ],
-        "x-fern-sdk-group-name": "iscsi.targets",
-        "x-fern-sdk-method-name": "delete"
-      },
+        "x-fern-sdk-group-name": "iscsi",
+        "x-fern-sdk-method-name": "init"
+      }
+    },
+    "/api/v1/iscsi/status": {
+      "get": {
+        "operationId": "iscsiStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ISCSIStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "iSCSI backend and initialisation state (ctld init gate on FreeBSD)",
+        "tags": [
+          "iscsi"
+        ],
+        "x-fern-sdk-group-name": "iscsi",
+        "x-fern-sdk-method-name": "status"
+      }
+    },
+    "/api/v1/iscsi/targets": {
       "get": {
         "operationId": "iscsiTargetsList",
         "responses": {
@@ -4660,7 +4895,7 @@
         "x-fern-sdk-method-name": "list"
       },
       "post": {
-        "description": "On FreeBSD, refused with 409 until POST /api/iscsi/init has run, or when the IQN or zvol is already exported.",
+        "description": "On FreeBSD, refused with 409 until POST /api/v1/iscsi/init has run, or when the IQN or zvol is already exported.",
         "operationId": "iscsiTargetsCreate",
         "parameters": [
           {
@@ -4717,10 +4952,21 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/iscsi/init": {
-      "post": {
-        "operationId": "iscsiInit",
+    "/api/v1/iscsi/targets/{iqn}": {
+      "delete": {
+        "description": "On FreeBSD, refused with 409 until POST /api/v1/iscsi/init has run; 404 when no target has this IQN.",
+        "operationId": "iscsiTargetsDelete",
         "parameters": [
+          {
+            "description": "Target IQN",
+            "in": "path",
+            "name": "iqn",
+            "required": true,
+            "schema": {
+              "description": "Target IQN",
+              "type": "string"
+            }
+          },
           {
             "$ref": "#/components/parameters/OperationID"
           }
@@ -4730,7 +4976,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ISCSIInitResult"
+                  "$ref": "#/components/schemas/ISCSITargetResult"
                 }
               }
             },
@@ -4750,6 +4996,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4757,44 +5006,15 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Initialise ctld: back up and take over /etc/ctl.conf (FreeBSD)",
+        "summary": "Delete an iSCSI target",
         "tags": [
           "iscsi"
         ],
-        "x-fern-sdk-group-name": "iscsi",
-        "x-fern-sdk-method-name": "init"
+        "x-fern-sdk-group-name": "iscsi.targets",
+        "x-fern-sdk-method-name": "delete"
       }
     },
-    "/api/iscsi/status": {
-      "get": {
-        "operationId": "iscsiStatus",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ISCSIStatus"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "iSCSI backend and initialisation state (ctld init gate on FreeBSD)",
-        "tags": [
-          "iscsi"
-        ],
-        "x-fern-sdk-group-name": "iscsi",
-        "x-fern-sdk-method-name": "status"
-      }
-    },
-    "/api/jobs": {
+    "/api/v1/jobs": {
       "get": {
         "operationId": "jobsList",
         "responses": {
@@ -4829,7 +5049,7 @@
         "x-fern-sdk-method-name": "list"
       }
     },
-    "/api/jobs/{id}": {
+    "/api/v1/jobs/{id}": {
       "delete": {
         "description": "400 also covers an unknown or still running job.",
         "operationId": "jobsDelete",
@@ -4919,7 +5139,7 @@
         "x-fern-sdk-method-name": "get"
       }
     },
-    "/api/jobs/{id}/cancel": {
+    "/api/v1/jobs/{id}/cancel": {
       "post": {
         "description": "400 also covers an unknown or already finished job.",
         "operationId": "jobsCancel",
@@ -4969,19 +5189,17 @@
         "x-fern-sdk-method-name": "cancel"
       }
     },
-    "/api/network": {
+    "/api/v1/openapi.json": {
       "get": {
-        "operationId": "systemNetwork",
+        "operationId": "metaOpenapi",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/NetworkInterface"
-                  },
+                  "additionalProperties": {},
                   "type": [
-                    "array",
+                    "object",
                     "null"
                   ]
                 }
@@ -4996,15 +5214,16 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Network interfaces and addresses",
+        "summary": "This OpenAPI document",
         "tags": [
-          "system"
+          "meta"
         ],
-        "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "network"
+        "x-fern-sdk-group-name": "meta",
+        "x-fern-sdk-method-name": "openapi",
+        "x-forge-internal": true
       }
     },
-    "/api/operations/{id}": {
+    "/api/v1/operations/{id}": {
       "get": {
         "description": "Steps are returned after the given seq; the result is kept for finished operations up to 1 h (#184).",
         "operationId": "operationsGet",
@@ -5063,7 +5282,7 @@
         "x-fern-sdk-method-name": "get"
       }
     },
-    "/api/pools": {
+    "/api/v1/pools": {
       "get": {
         "operationId": "poolsList",
         "responses": {
@@ -5154,7 +5373,7 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/pools/import": {
+    "/api/v1/pools/import": {
       "post": {
         "operationId": "poolsImport",
         "parameters": [
@@ -5212,7 +5431,7 @@
         "x-fern-sdk-method-name": "import"
       }
     },
-    "/api/pools/importable": {
+    "/api/v1/pools/importable": {
       "get": {
         "operationId": "poolsListImportable",
         "responses": {
@@ -5247,7 +5466,106 @@
         "x-fern-sdk-method-name": "listImportable"
       }
     },
-    "/api/pools/{pool}/cache": {
+    "/api/v1/pools/iostat": {
+      "get": {
+        "operationId": "poolsIostat",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IOStat"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Per-pool I/O statistics",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools",
+        "x-fern-sdk-method-name": "iostat"
+      }
+    },
+    "/api/v1/pools/scrub-schedules": {
+      "get": {
+        "operationId": "poolsScrubListSchedules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrubScheduleList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Periodic scrub schedules",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.scrub",
+        "x-fern-sdk-method-name": "listSchedules"
+      }
+    },
+    "/api/v1/pools/status": {
+      "get": {
+        "operationId": "poolsStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PoolDetail"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Detailed status (vdev tree, scan, errors) of all pools",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools",
+        "x-fern-sdk-method-name": "status"
+      }
+    },
+    "/api/v1/pools/{pool}/cache": {
       "post": {
         "operationId": "poolsDevicesAddCache",
         "parameters": [
@@ -5315,7 +5633,7 @@
         "x-fern-sdk-method-name": "addCache"
       }
     },
-    "/api/pools/{pool}/devices/{device}": {
+    "/api/v1/pools/{pool}/devices/{device}": {
       "delete": {
         "operationId": "poolsDevicesRemove",
         "parameters": [
@@ -5383,7 +5701,221 @@
         "x-fern-sdk-method-name": "remove"
       }
     },
-    "/api/pools/{pool}/export": {
+    "/api/v1/pools/{pool}/devices/{device}/offline": {
+      "post": {
+        "operationId": "poolsDevicesOffline",
+        "parameters": [
+          {
+            "description": "Pool name",
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Pool name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device path or vdev name (percent-encode '/')",
+            "in": "path",
+            "name": "device",
+            "required": true,
+            "schema": {
+              "description": "Device path or vdev name (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a device offline",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.devices",
+        "x-fern-sdk-method-name": "offline"
+      }
+    },
+    "/api/v1/pools/{pool}/devices/{device}/online": {
+      "post": {
+        "operationId": "poolsDevicesOnline",
+        "parameters": [
+          {
+            "description": "Pool name",
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Pool name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device path or vdev name (percent-encode '/')",
+            "in": "path",
+            "name": "device",
+            "required": true,
+            "schema": {
+              "description": "Device path or vdev name (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Bring a device online",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.devices",
+        "x-fern-sdk-method-name": "online"
+      }
+    },
+    "/api/v1/pools/{pool}/devices/{device}/replace": {
+      "post": {
+        "operationId": "poolsDevicesReplace",
+        "parameters": [
+          {
+            "description": "Pool name",
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Pool name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device path or vdev name (percent-encode '/')",
+            "in": "path",
+            "name": "device",
+            "required": true,
+            "schema": {
+              "description": "Device path or vdev name (percent-encode '/')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceDeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Replace a device",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.devices",
+        "x-fern-sdk-method-name": "replace"
+      }
+    },
+    "/api/v1/pools/{pool}/export": {
       "post": {
         "operationId": "poolsExport",
         "parameters": [
@@ -5441,7 +5973,7 @@
         "x-fern-sdk-method-name": "export"
       }
     },
-    "/api/pools/{pool}/log": {
+    "/api/v1/pools/{pool}/log": {
       "post": {
         "operationId": "poolsDevicesAddLog",
         "parameters": [
@@ -5509,481 +6041,17 @@
         "x-fern-sdk-method-name": "addLog"
       }
     },
-    "/api/pools/{pool}/offline": {
-      "post": {
-        "operationId": "poolsDevicesOffline",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Take a device offline",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "offline"
-      }
-    },
-    "/api/pools/{pool}/online": {
-      "post": {
-        "operationId": "poolsDevicesOnline",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Bring a device online",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "online"
-      }
-    },
-    "/api/pools/{pool}/replace": {
-      "post": {
-        "operationId": "poolsDevicesReplace",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplaceDeviceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Replace a device",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "replace"
-      }
-    },
-    "/api/pools/{pool}/spare": {
-      "post": {
-        "operationId": "poolsDevicesAddSpare",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddDevicesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Add hot spares",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.devices",
-        "x-fern-sdk-method-name": "addSpare"
-      }
-    },
-    "/api/pools/{pool}/vdevs": {
-      "post": {
-        "operationId": "poolsVdevsAdd",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddVdevRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Add a data vdev",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.vdevs",
-        "x-fern-sdk-method-name": "add"
-      }
-    },
-    "/api/poolstatus": {
-      "get": {
-        "operationId": "poolsStatus",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PoolDetail"
-                  },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Detailed status (vdev tree, scan, errors) of all pools",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools",
-        "x-fern-sdk-method-name": "status"
-      }
-    },
-    "/api/replication": {
-      "get": {
-        "operationId": "replicationList",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ReplicationTask"
-                  },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "List replication tasks",
-        "tags": [
-          "replication"
-        ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "list"
-      },
-      "post": {
-        "operationId": "replicationCreate",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplicationTaskInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReplicationTask"
-                }
-              }
-            },
-            "description": "Created",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Create a replication task",
-        "tags": [
-          "replication"
-        ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "create"
-      }
-    },
-    "/api/replication/{id}": {
+    "/api/v1/pools/{pool}/scrub": {
       "delete": {
-        "operationId": "replicationDelete",
+        "operationId": "poolsScrubCancel",
         "parameters": [
           {
+            "description": "Pool name",
             "in": "path",
-            "name": "id",
+            "name": "pool",
             "required": true,
             "schema": {
+              "description": "Pool name",
               "type": "string"
             }
           },
@@ -5991,72 +6059,12 @@
             "$ref": "#/components/parameters/OperationID"
           }
         ],
-        "responses": {
-          "204": {
-            "description": "No Content",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Delete a replication task",
-        "tags": [
-          "replication"
-        ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "delete"
-      },
-      "patch": {
-        "operationId": "replicationUpdate",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplicationTaskInput"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReplicationTask"
+                  "$ref": "#/components/schemas/PoolResult"
                 }
               }
             },
@@ -6076,9 +6084,6 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -6086,74 +6091,23 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Update a replication task",
+        "summary": "Cancel a running scrub",
         "tags": [
-          "replication"
+          "pools"
         ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "update"
-      }
-    },
-    "/api/replication/{id}/history": {
-      "get": {
-        "operationId": "replicationHistory",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ReplicationRun"
-                  },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Recent runs of a replication task",
-        "tags": [
-          "replication"
-        ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "history"
-      }
-    },
-    "/api/replication/{id}/run": {
+        "x-fern-sdk-group-name": "pools.scrub",
+        "x-fern-sdk-method-name": "cancel"
+      },
       "post": {
-        "operationId": "replicationRun",
+        "operationId": "poolsScrubStart",
         "parameters": [
           {
+            "description": "Pool name",
             "in": "path",
-            "name": "id",
+            "name": "pool",
             "required": true,
             "schema": {
+              "description": "Pool name",
               "type": "string"
             }
           },
@@ -6162,15 +6116,15 @@
           }
         ],
         "responses": {
-          "202": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReplicationRunStarted"
+                  "$ref": "#/components/schemas/PoolResult"
                 }
               }
             },
-            "description": "Accepted",
+            "description": "OK",
             "headers": {
               "X-Operation-ID": {
                 "description": "ID of this operation.",
@@ -6186,9 +6140,6 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -6196,115 +6147,15 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Run a replication task now (background job)",
+        "summary": "Start a scrub",
         "tags": [
-          "replication"
+          "pools"
         ],
-        "x-fern-sdk-group-name": "replication",
-        "x-fern-sdk-method-name": "run"
+        "x-fern-sdk-group-name": "pools.scrub",
+        "x-fern-sdk-method-name": "start"
       }
     },
-    "/api/rewrite/{name}": {
-      "post": {
-        "operationId": "datasetsRewrite",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RewriteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RewriteResult"
-                }
-              }
-            },
-            "description": "Accepted",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Rewrite dataset data in place (background job)",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets",
-        "x-fern-sdk-method-name": "rewrite"
-      }
-    },
-    "/api/schema": {
-      "get": {
-        "operationId": "systemSchema",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SchemaInfo"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Dataset property metadata and ZFS capabilities for the UI",
-        "tags": [
-          "system"
-        ],
-        "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "schema"
-      }
-    },
-    "/api/scrub-schedule/{pool}": {
+    "/api/v1/pools/{pool}/scrub-schedule": {
       "delete": {
         "operationId": "poolsScrubRemoveSchedule",
         "parameters": [
@@ -6428,15 +6279,157 @@
         "x-fern-sdk-method-name": "setSchedule"
       }
     },
-    "/api/scrub-schedules": {
-      "get": {
-        "operationId": "poolsScrubListSchedules",
+    "/api/v1/pools/{pool}/spare": {
+      "post": {
+        "operationId": "poolsDevicesAddSpare",
+        "parameters": [
+          {
+            "description": "Pool name",
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Pool name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDevicesRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScrubScheduleList"
+                  "$ref": "#/components/schemas/PoolResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add hot spares",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.devices",
+        "x-fern-sdk-method-name": "addSpare"
+      }
+    },
+    "/api/v1/pools/{pool}/vdevs": {
+      "post": {
+        "operationId": "poolsVdevsAdd",
+        "parameters": [
+          {
+            "description": "Pool name",
+            "in": "path",
+            "name": "pool",
+            "required": true,
+            "schema": {
+              "description": "Pool name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddVdevRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a data vdev",
+        "tags": [
+          "pools"
+        ],
+        "x-fern-sdk-group-name": "pools.vdevs",
+        "x-fern-sdk-method-name": "add"
+      }
+    },
+    "/api/v1/replication/tasks": {
+      "get": {
+        "operationId": "replicationList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReplicationTask"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
                 }
               }
             },
@@ -6449,98 +6442,40 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Periodic scrub schedules",
+        "summary": "List replication tasks",
         "tags": [
-          "pools"
+          "replication"
         ],
-        "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "listSchedules"
-      }
-    },
-    "/api/scrub/{pool}": {
-      "delete": {
-        "operationId": "poolsScrubCancel",
-        "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Cancel a running scrub",
-        "tags": [
-          "pools"
-        ],
-        "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "cancel"
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "list"
       },
       "post": {
-        "operationId": "poolsScrubStart",
+        "operationId": "replicationCreate",
         "parameters": [
-          {
-            "description": "Pool name",
-            "in": "path",
-            "name": "pool",
-            "required": true,
-            "schema": {
-              "description": "Pool name",
-              "type": "string"
-            }
-          },
           {
             "$ref": "#/components/parameters/OperationID"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplicationTaskInput"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PoolResult"
+                  "$ref": "#/components/schemas/ReplicationTask"
                 }
               }
             },
-            "description": "OK",
+            "description": "Created",
             "headers": {
               "X-Operation-ID": {
                 "description": "ID of this operation.",
@@ -6563,15 +6498,244 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Start a scrub",
+        "summary": "Create a replication task",
         "tags": [
-          "pools"
+          "replication"
         ],
-        "x-fern-sdk-group-name": "pools.scrub",
-        "x-fern-sdk-method-name": "start"
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/services": {
+    "/api/v1/replication/tasks/{id}": {
+      "delete": {
+        "operationId": "replicationDelete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a replication task",
+        "tags": [
+          "replication"
+        ],
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "delete"
+      },
+      "patch": {
+        "operationId": "replicationUpdate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplicationTaskInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplicationTask"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Update a replication task",
+        "tags": [
+          "replication"
+        ],
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "update"
+      }
+    },
+    "/api/v1/replication/tasks/{id}/history": {
+      "get": {
+        "operationId": "replicationHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReplicationRun"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Recent runs of a replication task",
+        "tags": [
+          "replication"
+        ],
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "history"
+      }
+    },
+    "/api/v1/replication/tasks/{id}/run": {
+      "post": {
+        "operationId": "replicationRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplicationRunStarted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Run a replication task now (background job)",
+        "tags": [
+          "replication"
+        ],
+        "x-fern-sdk-group-name": "replication",
+        "x-fern-sdk-method-name": "run"
+      }
+    },
+    "/api/v1/services": {
       "get": {
         "operationId": "servicesList",
         "responses": {
@@ -6606,18 +6770,18 @@
         "x-fern-sdk-method-name": "list"
       }
     },
-    "/api/services/{service}/{action}": {
+    "/api/v1/services/{service}/{action}": {
       "post": {
         "description": "409 when the service is not installed on this host.",
         "operationId": "servicesControl",
         "parameters": [
           {
-            "description": "Logical service name, as listed by GET /api/services",
+            "description": "Logical service name, as listed by GET /api/v1/services",
             "in": "path",
             "name": "service",
             "required": true,
             "schema": {
-              "description": "Logical service name, as listed by GET /api/services",
+              "description": "Logical service name, as listed by GET /api/v1/services",
               "type": "string"
             }
           },
@@ -6683,361 +6847,7 @@
         "x-fern-sdk-method-name": "control"
       }
     },
-    "/api/smart": {
-      "get": {
-        "operationId": "systemSmart",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmartReport"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "SMART health of all drives",
-        "tags": [
-          "system"
-        ],
-        "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "smart"
-      }
-    },
-    "/api/smb-share/{dataset}": {
-      "delete": {
-        "operationId": "smbSharesDelete",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Share name",
-            "in": "query",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Share name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SMBShareResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Remove an SMB share",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "delete"
-      },
-      "post": {
-        "operationId": "smbSharesSet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "dataset",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetSMBShareRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SMBShareResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Share a dataset over SMB",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "set"
-      }
-    },
-    "/api/smb-shares": {
-      "get": {
-        "operationId": "smbSharesList",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Usershare"
-                  },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "List SMB usershares",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.shares",
-        "x-fern-sdk-method-name": "list"
-      }
-    },
-    "/api/smb-users": {
-      "get": {
-        "operationId": "smbUsersList",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SambaUserList"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "List Samba users",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "list"
-      }
-    },
-    "/api/smb-users/{name}": {
-      "delete": {
-        "operationId": "smbUsersRemove",
-        "parameters": [
-          {
-            "description": "User name",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "User name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Remove a user from Samba",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "remove"
-      },
-      "post": {
-        "operationId": "smbUsersAdd",
-        "parameters": [
-          {
-            "description": "User name",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "User name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddSambaUserRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Register a user with Samba",
-        "tags": [
-          "smb"
-        ],
-        "x-fern-sdk-group-name": "smb.users",
-        "x-fern-sdk-method-name": "add"
-      }
-    },
-    "/api/smb/homes": {
+    "/api/v1/smb/homes": {
       "delete": {
         "operationId": "smbHomesDisable",
         "parameters": [
@@ -7111,7 +6921,7 @@
         "x-fern-sdk-group-name": "smb.homes",
         "x-fern-sdk-method-name": "get"
       },
-      "post": {
+      "put": {
         "operationId": "smbHomesSet",
         "parameters": [
           {
@@ -7168,7 +6978,7 @@
         "x-fern-sdk-method-name": "set"
       }
     },
-    "/api/smb/init": {
+    "/api/v1/smb/init": {
       "post": {
         "operationId": "smbInit",
         "parameters": [
@@ -7219,7 +7029,172 @@
         "x-fern-sdk-method-name": "init"
       }
     },
-    "/api/smb/status": {
+    "/api/v1/smb/shares": {
+      "get": {
+        "operationId": "smbSharesList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Usershare"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "List SMB usershares",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.shares",
+        "x-fern-sdk-method-name": "list"
+      }
+    },
+    "/api/v1/smb/shares/{name}": {
+      "delete": {
+        "operationId": "smbSharesDelete",
+        "parameters": [
+          {
+            "description": "Share name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Share name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SMBShareRemoved"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove an SMB share",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.shares",
+        "x-fern-sdk-method-name": "delete"
+      },
+      "put": {
+        "operationId": "smbSharesSet",
+        "parameters": [
+          {
+            "description": "Share name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Share name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSMBShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SMBShareResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Share a dataset over SMB",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.shares",
+        "x-fern-sdk-method-name": "set"
+      }
+    },
+    "/api/v1/smb/status": {
       "get": {
         "operationId": "smbStatus",
         "responses": {
@@ -7248,7 +7223,7 @@
         "x-fern-sdk-method-name": "status"
       }
     },
-    "/api/smb/timemachine": {
+    "/api/v1/smb/timemachine": {
       "get": {
         "operationId": "smbTimeMachineList",
         "responses": {
@@ -7281,10 +7256,78 @@
         ],
         "x-fern-sdk-group-name": "smb.timeMachine",
         "x-fern-sdk-method-name": "list"
+      }
+    },
+    "/api/v1/smb/timemachine/{name}": {
+      "delete": {
+        "operationId": "smbTimeMachineDelete",
+        "parameters": [
+          {
+            "description": "Share name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Share name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a Time Machine share",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.timeMachine",
+        "x-fern-sdk-method-name": "delete"
       },
-      "post": {
+      "put": {
         "operationId": "smbTimeMachineSet",
         "parameters": [
+          {
+            "description": "Share name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Share name",
+              "type": "string"
+            }
+          },
           {
             "$ref": "#/components/parameters/OperationID"
           }
@@ -7339,17 +7382,46 @@
         "x-fern-sdk-method-name": "set"
       }
     },
-    "/api/smb/timemachine/{sharename}": {
+    "/api/v1/smb/users": {
+      "get": {
+        "operationId": "smbUsersList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SambaUserList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "List Samba users",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.users",
+        "x-fern-sdk-method-name": "list"
+      }
+    },
+    "/api/v1/smb/users/{name}": {
       "delete": {
-        "operationId": "smbTimeMachineDelete",
+        "operationId": "smbUsersRemove",
         "parameters": [
           {
-            "description": "Share name",
+            "description": "User name",
             "in": "path",
-            "name": "sharename",
+            "name": "name",
             "required": true,
             "schema": {
-              "description": "Share name",
+              "description": "User name",
               "type": "string"
             }
           },
@@ -7362,7 +7434,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResult"
+                  "$ref": "#/components/schemas/UserResult"
                 }
               }
             },
@@ -7389,15 +7461,81 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Delete a Time Machine share",
+        "summary": "Remove a user from Samba",
         "tags": [
           "smb"
         ],
-        "x-fern-sdk-group-name": "smb.timeMachine",
-        "x-fern-sdk-method-name": "delete"
+        "x-fern-sdk-group-name": "smb.users",
+        "x-fern-sdk-method-name": "remove"
+      },
+      "put": {
+        "operationId": "smbUsersAdd",
+        "parameters": [
+          {
+            "description": "User name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "User name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSambaUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Register a user with Samba",
+        "tags": [
+          "smb"
+        ],
+        "x-fern-sdk-group-name": "smb.users",
+        "x-fern-sdk-method-name": "add"
       }
     },
-    "/api/smb/wsdd": {
+    "/api/v1/smb/wsdd/apply": {
       "post": {
         "operationId": "smbWsddApply",
         "parameters": [
@@ -7445,7 +7583,7 @@
         "x-fern-sdk-method-name": "apply"
       }
     },
-    "/api/snapshots": {
+    "/api/v1/snapshots": {
       "get": {
         "operationId": "snapshotsList",
         "responses": {
@@ -7539,65 +7677,7 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/snapshots/clone": {
-      "post": {
-        "operationId": "snapshotsClone",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CloneSnapshotRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloneSnapshotResult"
-                }
-              }
-            },
-            "description": "Created",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Clone a snapshot into a new dataset",
-        "tags": [
-          "snapshots"
-        ],
-        "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "clone"
-      }
-    },
-    "/api/snapshots/delete-batch": {
+    "/api/v1/snapshots/batch-delete": {
       "post": {
         "operationId": "snapshotsDeleteBatch",
         "parameters": [
@@ -7655,132 +7735,14 @@
         "x-fern-sdk-method-name": "deleteBatch"
       }
     },
-    "/api/snapshots/diff": {
-      "get": {
-        "operationId": "snapshotsDiff",
-        "parameters": [
-          {
-            "description": "Snapshot to diff from, e.g. tank/data@before",
-            "in": "query",
-            "name": "from",
-            "required": true,
-            "schema": {
-              "description": "Snapshot to diff from, e.g. tank/data@before",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Later snapshot of the same dataset; omit to diff against the live filesystem",
-            "in": "query",
-            "name": "to",
-            "required": false,
-            "schema": {
-              "description": "Later snapshot of the same dataset; omit to diff against the live filesystem",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SnapshotDiffResult"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Files changed between a snapshot and a later snapshot or the live filesystem",
-        "tags": [
-          "snapshots"
-        ],
-        "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "diff"
-      }
-    },
-    "/api/snapshots/send": {
-      "post": {
-        "operationId": "snapshotsSend",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendSnapshotRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SendSnapshotResult"
-                }
-              }
-            },
-            "description": "Accepted",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Send a snapshot to another dataset (background job)",
-        "tags": [
-          "snapshots"
-        ],
-        "x-fern-sdk-group-name": "snapshots",
-        "x-fern-sdk-method-name": "send"
-      }
-    },
-    "/api/snapshots/{snapshot}": {
+    "/api/v1/snapshots/{snap}": {
       "delete": {
         "operationId": "snapshotsDelete",
         "parameters": [
           {
             "description": "Snapshot name, e.g. tank/data@before (percent-encode '/' and '@')",
             "in": "path",
-            "name": "snapshot",
+            "name": "snap",
             "required": true,
             "schema": {
               "description": "Snapshot name, e.g. tank/data@before (percent-encode '/' and '@')",
@@ -7848,7 +7810,203 @@
         "x-fern-sdk-method-name": "delete"
       }
     },
-    "/api/sysinfo": {
+    "/api/v1/snapshots/{snap}/clone": {
+      "post": {
+        "operationId": "snapshotsClone",
+        "parameters": [
+          {
+            "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+            "in": "path",
+            "name": "snap",
+            "required": true,
+            "schema": {
+              "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneSnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneSnapshotResult"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Clone a snapshot into a new dataset",
+        "tags": [
+          "snapshots"
+        ],
+        "x-fern-sdk-group-name": "snapshots",
+        "x-fern-sdk-method-name": "clone"
+      }
+    },
+    "/api/v1/snapshots/{snap}/diff": {
+      "get": {
+        "operationId": "snapshotsDiff",
+        "parameters": [
+          {
+            "description": "Snapshot to diff from, e.g. tank/data@before (percent-encode '/' and '@')",
+            "in": "path",
+            "name": "snap",
+            "required": true,
+            "schema": {
+              "description": "Snapshot to diff from, e.g. tank/data@before (percent-encode '/' and '@')",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Later snapshot of the same dataset; omit to diff against the live filesystem",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "description": "Later snapshot of the same dataset; omit to diff against the live filesystem",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotDiffResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Files changed between a snapshot and a later snapshot or the live filesystem",
+        "tags": [
+          "snapshots"
+        ],
+        "x-fern-sdk-group-name": "snapshots",
+        "x-fern-sdk-method-name": "diff"
+      }
+    },
+    "/api/v1/snapshots/{snap}/send": {
+      "post": {
+        "operationId": "snapshotsSend",
+        "parameters": [
+          {
+            "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+            "in": "path",
+            "name": "snap",
+            "required": true,
+            "schema": {
+              "description": "Snapshot name, e.g. tank/data@snap1 (percent-encode '/' and '@')",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendSnapshotResult"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Send a snapshot to another dataset (background job)",
+        "tags": [
+          "snapshots"
+        ],
+        "x-fern-sdk-group-name": "snapshots",
+        "x-fern-sdk-method-name": "send"
+      }
+    },
+    "/api/v1/system/info": {
       "get": {
         "operationId": "systemInfo",
         "responses": {
@@ -7877,113 +8035,156 @@
         "x-fern-sdk-method-name": "info"
       }
     },
-    "/api/tls/acme/issue": {
-      "post": {
-        "operationId": "tlsAcmeIssue",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ACMEIssueRequest"
-              }
-            }
-          },
-          "required": true
-        },
+    "/api/v1/system/network": {
+      "get": {
+        "operationId": "systemNetwork",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResult"
+                  "items": {
+                    "$ref": "#/components/schemas/NetworkInterface"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
+            "description": "OK"
           },
           "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Issue a certificate via ACME",
+        "summary": "Network interfaces and addresses",
         "tags": [
-          "tls"
+          "system"
         ],
-        "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "acmeIssue"
+        "x-fern-sdk-group-name": "system",
+        "x-fern-sdk-method-name": "network"
       }
     },
-    "/api/tls/acme/renew": {
-      "post": {
-        "operationId": "tlsAcmeRenew",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
+    "/api/v1/system/schema": {
+      "get": {
+        "operationId": "systemSchema",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResult"
+                  "$ref": "#/components/schemas/SchemaInfo"
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
+            "description": "OK"
           },
           "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Renew the ACME certificate",
+        "summary": "Dataset property metadata and ZFS capabilities for the UI",
+        "tags": [
+          "system"
+        ],
+        "x-fern-sdk-group-name": "system",
+        "x-fern-sdk-method-name": "schema"
+      }
+    },
+    "/api/v1/system/smart": {
+      "get": {
+        "operationId": "systemSmart",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartReport"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "SMART health of all drives",
+        "tags": [
+          "system"
+        ],
+        "x-fern-sdk-group-name": "system",
+        "x-fern-sdk-method-name": "smart"
+      }
+    },
+    "/api/v1/system/version": {
+      "get": {
+        "operationId": "systemVersion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "OpenZFS version",
+        "tags": [
+          "system"
+        ],
+        "x-fern-sdk-group-name": "system",
+        "x-fern-sdk-method-name": "version"
+      }
+    },
+    "/api/v1/tls": {
+      "get": {
+        "operationId": "tlsGet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TLSStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "TLS configuration and certificate details",
         "tags": [
           "tls"
         ],
         "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "acmeRenew"
-      }
-    },
-    "/api/tls/config": {
+        "x-fern-sdk-method-name": "get"
+      },
       "patch": {
         "operationId": "tlsUpdate",
         "parameters": [
@@ -8041,7 +8242,113 @@
         "x-fern-sdk-method-name": "update"
       }
     },
-    "/api/tls/gencert": {
+    "/api/v1/tls/acme/issue": {
+      "post": {
+        "operationId": "tlsAcmeIssue",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ACMEIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Issue a certificate via ACME",
+        "tags": [
+          "tls"
+        ],
+        "x-fern-sdk-group-name": "tls",
+        "x-fern-sdk-method-name": "acmeIssue"
+      }
+    },
+    "/api/v1/tls/acme/renew": {
+      "post": {
+        "operationId": "tlsAcmeRenew",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Renew the ACME certificate",
+        "tags": [
+          "tls"
+        ],
+        "x-fern-sdk-group-name": "tls",
+        "x-fern-sdk-method-name": "acmeRenew"
+      }
+    },
+    "/api/v1/tls/self-signed": {
       "post": {
         "operationId": "tlsGenerateSelfSigned",
         "parameters": [
@@ -8099,107 +8406,7 @@
         "x-fern-sdk-method-name": "generateSelfSigned"
       }
     },
-    "/api/tls/status": {
-      "get": {
-        "operationId": "tlsGet",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TLSStatus"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "TLS configuration and certificate details",
-        "tags": [
-          "tls"
-        ],
-        "x-fern-sdk-group-name": "tls",
-        "x-fern-sdk-method-name": "get"
-      }
-    },
-    "/api/userquota/{name}": {
-      "post": {
-        "operationId": "datasetsQuotasSet",
-        "parameters": [
-          {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetUserQuotaRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetTaskResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Set or clear a user or group quota",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.quotas",
-        "x-fern-sdk-method-name": "set"
-      }
-    },
-    "/api/users": {
+    "/api/v1/users": {
       "get": {
         "operationId": "usersList",
         "responses": {
@@ -8290,7 +8497,7 @@
         "x-fern-sdk-method-name": "create"
       }
     },
-    "/api/users/{name}": {
+    "/api/v1/users/{name}": {
       "delete": {
         "operationId": "usersDelete",
         "parameters": [
@@ -8426,79 +8633,7 @@
         "x-fern-sdk-method-name": "update"
       }
     },
-    "/api/users/{name}/sshkeys": {
-      "delete": {
-        "operationId": "usersSshKeysRemove",
-        "parameters": [
-          {
-            "description": "User name",
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "description": "User name",
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/OperationID"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SSHKeyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "X-Operation-ID": {
-                "description": "ID of this operation.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Remove an SSH key (key in the body)",
-        "tags": [
-          "users"
-        ],
-        "x-fern-sdk-group-name": "users.sshKeys",
-        "x-fern-sdk-method-name": "remove"
-      },
+    "/api/v1/users/{name}/ssh-keys": {
       "get": {
         "operationId": "usersSshKeysList",
         "parameters": [
@@ -8617,33 +8752,32 @@
         "x-fern-sdk-method-name": "add"
       }
     },
-    "/api/userspace/{name}": {
-      "get": {
-        "operationId": "datasetsQuotasUsage",
+    "/api/v1/users/{name}/ssh-keys/{fingerprint}": {
+      "delete": {
+        "operationId": "usersSshKeysRemove",
         "parameters": [
           {
-            "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+            "description": "User name",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
-              "description": "Dataset name, e.g. tank/data (percent-encode '/')",
+              "description": "User name",
               "type": "string"
             }
           },
           {
-            "description": "Report per-user (default) or per-group usage",
-            "in": "query",
-            "name": "kind",
-            "required": false,
+            "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')",
+            "in": "path",
+            "name": "fingerprint",
+            "required": true,
             "schema": {
-              "description": "Report per-user (default) or per-group usage",
-              "enum": [
-                "user",
-                "group"
-              ],
+              "description": "SHA256 fingerprint as returned by the list, e.g. SHA256:abc… (percent-encode '/' and '+')",
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/OperationID"
           }
         ],
         "responses": {
@@ -8651,11 +8785,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserSpaceResult"
+                  "$ref": "#/components/schemas/TaskResult"
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-Operation-ID": {
+                "description": "ID of this operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -8663,111 +8805,25 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "404": {
             "$ref": "#/components/responses/Error"
           },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Per-user or per-group space usage and quotas",
-        "tags": [
-          "datasets"
-        ],
-        "x-fern-sdk-group-name": "datasets.quotas",
-        "x-fern-sdk-method-name": "usage"
-      }
-    },
-    "/api/v1/openapi.json": {
-      "get": {
-        "operationId": "metaOpenapi",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {},
-                  "type": [
-                    "object",
-                    "null"
-                  ]
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "This OpenAPI document",
+        "summary": "Remove an SSH key by its SHA256 fingerprint",
         "tags": [
-          "meta"
+          "users"
         ],
-        "x-fern-sdk-group-name": "meta",
-        "x-fern-sdk-method-name": "openapi",
-        "x-forge-internal": true
-      }
-    },
-    "/api/version": {
-      "get": {
-        "operationId": "systemVersion",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VersionInfo"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "OpenZFS version",
-        "tags": [
-          "system"
-        ],
-        "x-fern-sdk-group-name": "system",
-        "x-fern-sdk-method-name": "version"
-      }
-    },
-    "/api/whoami": {
-      "get": {
-        "operationId": "authWhoami",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WhoamiResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "The authenticated user",
-        "tags": [
-          "auth"
-        ],
-        "x-fern-sdk-group-name": "auth",
-        "x-fern-sdk-method-name": "whoami"
+        "x-fern-sdk-group-name": "users.sshKeys",
+        "x-fern-sdk-method-name": "remove"
       }
     },
     "/auth/login": {

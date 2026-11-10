@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { esc, api, delegate, toast, startOp } from './utils.js';
+import { esc, api, delegate, toast, startOp, v1 } from './utils.js';
 
 export function renderServices() {
   const wrap = document.getElementById('services-wrap');
@@ -62,7 +62,7 @@ async function serviceAction(svc, action) {
 
   const op = startOp(`${action} ${svc}`);
   try {
-    const res = await op.api('POST', `/api/services/${svc}/${action}`);
+    const res = await op.api('POST', v1`/services/${svc}/${action}`);
     op.done(`${action} ${svc}`, res?.tasks);
     toast(`${svc} ${action} OK`, 'ok');
   } catch (err) {
