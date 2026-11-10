@@ -17,7 +17,9 @@ import (
 var (
 	reDomain  = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
 	reEmail   = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
-	reTLSPath = regexp.MustCompile(`^/[^\x00;|&$` + "`" + `]+$`)
+	// Absolute path of plain characters only — no whitespace or quotes,
+	// so a path can never turn into extra command arguments (#194).
+	reTLSPath = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 )
 
 type tlsStatusResponse struct {

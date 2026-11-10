@@ -520,3 +520,27 @@ func TestValidCHAPSecret(t *testing.T) {
 		}
 	}
 }
+
+// TestTLSPath: cert/key paths and cert_dir go into openssl/lego arguments,
+// so only plain absolute paths are accepted — never whitespace (which would
+// split into extra options), quotes or shell metacharacters (#194).
+func TestTLSPath(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/etc/dumpstore/tls":                          true,
+		"/usr/local/etc/dumpstore/tls/acme":           true,
+		"/etc/dumpstore/tls/cert.pem":                 true,
+		"/etc/letsencrypt/live/nas.example.com/x.pem": true,
+		"relative/path":                               false,
+		"":                                            false,
+		"/etc/dumpstore/tls --days 1":                 false,
+		"/etc/dumpstore/tls\n--days":                  false,
+		"/etc/dumpstore/tls\t-out":                    false,
+		`/etc/"quoted"`:                               false,
+		"/etc/$(id)":                                  false,
+		"/etc/a;b":                                    false,
+	} {
+		if got := reTLSPath.MatchString(path); got != want {
+			t.Errorf("reTLSPath(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
