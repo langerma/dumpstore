@@ -110,6 +110,33 @@ func TestUserLifecycle(t *testing.T) {
 	apiStatus(t, http.StatusNotFound, "DELETE", v1("/users/%s", name), nil)
 }
 
+// TestSSHKeyForeignPrimaryGroup adds a key for a user whose primary group is
+// not named after the user (#197): .ssh must get the user's primary GID.
+func TestSSHKeyForeignPrimaryGroup(t *testing.T) {
+	const name = "itest-sshuser"
+	const grp = "itest-sshgrp"
+	removeUserInVM(name)
+	removeGroupInVM(grp)
+	t.Cleanup(func() { removeUserInVM(name); removeGroupInVM(grp) })
+
+	apiStatus(t, http.StatusCreated, "POST", "/api/v1/groups", map[string]string{"groupname": grp})
+	assertTasks(t, apiStatus(t, http.StatusCreated, "POST", "/api/v1/users", map[string]any{
+		"username": name, "shell": "/bin/sh", "group": grp, "create_group": false,
+	}))
+	if _, ok := groupByName(t, name); ok {
+		t.Fatalf("group %s exists; the test needs a user without a same-named group", name)
+	}
+
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOKtWwfbM2iF+MtO37AgDseyCwAS8RAERcXAj41LUEHu itest@host"
+	assertTasks(t, apiOK(t, "POST", v1("/users/%s/ssh-keys", name), map[string]string{"key": key}))
+	// GNU stat -c, BSD stat -f — whichever works.
+	home := strings.TrimSpace(vmExec(t, "getent passwd "+name+" | cut -d: -f6"))
+	owner := strings.TrimSpace(vmExec(t, "f="+home+"/.ssh/authorized_keys; stat -c '%U:%G' $f 2>/dev/null || stat -f '%Su:%Sg' $f"))
+	if owner != name+":"+grp {
+		t.Fatalf("authorized_keys owned by %q, want %s:%s", owner, name, grp)
+	}
+}
+
 // TestUserNegatives covers the guards: invalid names, system users, missing users.
 func TestUserNegatives(t *testing.T) {
 	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/users", map[string]string{"username": "bad name"})

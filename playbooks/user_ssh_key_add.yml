@@ -1,6 +1,8 @@
 ---
 # Required extra vars:
-#   username - login name of the user (for .ssh dir ownership)
+#   username - login name of the user (owner of .ssh and authorized_keys)
+#   gid      - numeric primary GID of the user (group of .ssh and authorized_keys);
+#              numeric because the user's primary group need not share its name
 #   home     - absolute path to user's home directory
 #   key      - full SSH public key string to add
 
@@ -12,16 +14,17 @@
       ansible.builtin.assert:
         that:
           - username is defined and username != ""
+          - gid is defined and gid | string is match('^[0-9]+$')
           - home is defined and home != ""
           - key is defined and key != ""
-        fail_msg: "username, home, and key are all required"
+        fail_msg: "username, numeric gid, home, and key are all required"
 
     - name: Ensure .ssh directory exists
       ansible.builtin.file:
         path: "{{ home }}/.ssh"
         state: directory
         owner: "{{ username }}"
-        group: "{{ username }}"
+        group: "{{ gid }}"
         mode: "0700"
 
     - name: Ensure authorized_keys file exists
@@ -29,7 +32,7 @@
         path: "{{ home }}/.ssh/authorized_keys"
         state: touch
         owner: "{{ username }}"
-        group: "{{ username }}"
+        group: "{{ gid }}"
         mode: "0600"
         modification_time: preserve
         access_time: preserve

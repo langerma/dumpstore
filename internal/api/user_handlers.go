@@ -312,6 +312,7 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 
 	out, err := h.runOp(ctx, "user_ssh_key_add.yml", map[string]string{
 		"username": name,
+		"gid":      fmt.Sprintf("%d", target.GID),
 		"home":     target.Home,
 		"key":      req.Key,
 	})
