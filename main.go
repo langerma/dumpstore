@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -198,11 +199,11 @@ func main() {
 	}
 
 	if *tlsFlag && cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
-		httpsAddr := ":" + *tlsPort
+		// Without a password the TLS listeners stay on loopback too (#192).
+		httpsAddr, redirectAddr := tlsAddrs(cfg.PasswordHash == "", *tlsPort, *httpPort)
 		srv := &http.Server{Addr: httpsAddr, Handler: handler}
 
 		// HTTP redirect server: plain HTTP → HTTPS.
-		redirectAddr := ":" + *httpPort
 		redirectSrv := &http.Server{
 			Addr: redirectAddr,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -276,4 +277,15 @@ func traceRequest(r *http.Request) bool {
 		return false
 	}
 	return strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/")
+}
+
+// tlsAddrs returns the HTTPS and HTTP-redirect listen addresses. With no
+// password configured both bind to loopback only, like the plain listener:
+// an unconfigured instance must not be reachable from the network (#192).
+func tlsAddrs(loopbackOnly bool, tlsPort, httpPort string) (https, redirect string) {
+	host := ""
+	if loopbackOnly {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, tlsPort), net.JoinHostPort(host, httpPort)
 }
