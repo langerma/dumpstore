@@ -9048,7 +9048,7 @@
     },
     "/auth/login": {
       "post": {
-        "description": "Browser form login: redirects to / on success (setting the dumpstore_session cookie) or back to /login?error=… on failure. Rate-limited per client IP.",
+        "description": "Browser form login: redirects to / on success (setting the dumpstore_session cookie) or back to /login?error=… on failure. Rate-limited per client IP: after 10 failed attempts in 60 s, a client sending Accept: application/json gets 429 with Retry-After; a browser is redirected to /login?error=….",
         "operationId": "authLogin",
         "requestBody": {
           "content": {
@@ -9070,6 +9070,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
           },
           "default": {
             "$ref": "#/components/responses/Error"

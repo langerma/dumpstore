@@ -1,10 +1,9 @@
 # Deliberate exceptions to redocly.yaml (recommended-strict) for api/openapi.json.
 api/openapi.json:
-  # These public browser/scrape endpoints never answer 4xx: login failures
-  # and rate limiting redirect back to /login?error=…, logout always
-  # redirects, and /login and /metrics always render.
+  # These public browser/scrape endpoints never answer 4xx: logout always
+  # redirects, and /login and /metrics always render. (/auth/login documents
+  # its 429 for API clients; failed logins redirect back to /login?error=….)
   operation-4xx-response:
-    - '#/paths/~1auth~1login/post/responses'
     - '#/paths/~1auth~1logout/post/responses'
     - '#/paths/~1login/get/responses'
     - '#/paths/~1metrics/get/responses'
