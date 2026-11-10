@@ -174,6 +174,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **The auto-snapshot banner's message broke into columns.** The banner is a flex container, so text next to `<code>` or `<strong>` (the *Take over* state, and the new zfstools states from #208) was laid out as separate narrow columns. The message is now one element.
 - **FreeBSD: zfstools run from cron was neither detected nor stopped by takeover** (#208). The status reported `os_daemon: "zfstools"`, but only the `zfs-periodic` switches in periodic.conf were checked. zfstools has no periodic or rc.d hook; it runs from crontab lines the admin adds. Running both, zfstools and dumpstore's scheduler, takes every snapshot twice.
   - **Detection:** a line that isn't a comment and runs `zfs-auto-snapshot` in `/etc/crontab`, `/etc/cron.d/*`, `/usr/local/etc/cron.d/*` or `/var/cron/tabs/*` makes `os_daemon` `zfstools` and `os_daemon_active` true; the new `cron_files` field lists the files. Otherwise `os_daemon` is now `zfs-periodic`. A zfstools host no longer gets dumpstore's scheduler registered at startup.
   - **Takeover** returns `409` naming the files while those lines exist. dumpstore doesn't edit crontabs, so the admin removes them. The Datasets banner says so instead of offering *Take over*, and warns if zfstools runs alongside dumpstore's scheduler.
