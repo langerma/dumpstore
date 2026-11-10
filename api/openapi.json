@@ -273,6 +273,13 @@
       },
       "AutoSnapshotStatus": {
         "properties": {
+          "cron_files": {
+            "description": "FreeBSD: crontab files with zfstools (zfs-auto-snapshot) lines. dumpstore never edits a crontab, so takeover is refused until these lines are removed",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "dumpstore_managed": {
             "type": "boolean"
           },

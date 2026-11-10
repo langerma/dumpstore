@@ -55,7 +55,7 @@ This is one half of the project's **scope boundary** (#121). The other half: dom
 | Users / Groups | — | OS is source of truth | n/a |
 | ZFS datasets | — | ZFS kernel properties | n/a |
 
-**OS auto-snapshot daemons** are not owned either: *takeover* only switches them off, records exactly what it changed in dumpstore's state dir, and *release* puts back what it recorded. On Linux it disables `zfs-auto-snapshot` timers or renames its cron files; on FreeBSD it sets the `zfs-periodic` switches (`{hourly,daily,weekly,monthly}_zfs_snapshot_enable`) that are `YES` in any periodic.conf to `NO` with `sysrc -f`, no `lineinfile` (#197).
+**OS auto-snapshot daemons** are not owned either: *takeover* only switches them off, records exactly what it changed in dumpstore's state dir, and *release* puts back what it recorded. On Linux it disables `zfs-auto-snapshot` timers or renames its cron files; on FreeBSD it sets the `zfs-periodic` switches (`{hourly,daily,weekly,monthly}_zfs_snapshot_enable`) that are `YES` in any periodic.conf to `NO` with `sysrc -f`, no `lineinfile` (#197) zfstools runs from crontab lines the admin wrote; dumpstore never edits a crontab, so takeover refuses with `409` until those lines are removed (#208).
 
 For config-owning services the write path is extended:
 

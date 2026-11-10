@@ -203,3 +203,41 @@ func TestAutosnapTakeoverReleaseFreeBSD(t *testing.T) {
 	}
 	vmExec(t, "[ ! -e "+record+" ]")
 }
+
+// TestAutosnapZfstoolsCron: a crontab running zfstools' zfs-auto-snapshot is
+// detected as the active OS daemon, and takeover is refused with 409 because
+// dumpstore never edits a crontab (#208).
+func TestAutosnapZfstoolsCron(t *testing.T) {
+	if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) != "FreeBSD" {
+		t.Skip("zfstools cron detection is FreeBSD-only")
+	}
+	const tab = "/etc/cron.d/itest-zfstools"
+	type status struct {
+		OSDaemon       string   `json:"os_daemon"`
+		OSDaemonActive bool     `json:"os_daemon_active"`
+		CronFiles      []string `json:"cron_files"`
+	}
+	get := func() status { return decode[status](t, apiOK(t, "GET", "/api/v1/auto-snapshot/status", nil)) }
+	t.Cleanup(func() { _, _ = vmExecErr("rm -f " + tab) })
+
+	vmExec(t, "printf '#0 * * * * root /usr/local/sbin/zfs-auto-snapshot hourly 24\\n' > "+tab)
+	if st := get(); st.OSDaemon == "zfstools" || len(st.CronFiles) != 0 {
+		t.Fatalf("status with a commented-out line: %+v, want no zfstools", st)
+	}
+
+	vmExec(t, "printf '0 * * * * root /usr/local/sbin/zfs-auto-snapshot hourly 24\\n' > "+tab)
+	st := get()
+	if st.OSDaemon != "zfstools" || !st.OSDaemonActive || len(st.CronFiles) != 1 || st.CronFiles[0] != tab {
+		t.Fatalf("status with a zfstools cron line: %+v, want zfstools active from %s", st, tab)
+	}
+	before := vmExec(t, "md5 -q "+tab)
+	apiStatus(t, http.StatusConflict, "POST", "/api/v1/auto-snapshot/takeover", nil)
+	if after := vmExec(t, "md5 -q "+tab); after != before {
+		t.Fatalf("takeover changed %s", tab)
+	}
+
+	vmExec(t, "rm -f "+tab)
+	if st := get(); st.OSDaemon != "zfs-periodic" || len(st.CronFiles) != 0 {
+		t.Fatalf("status without the cron line: %+v, want zfs-periodic", st)
+	}
+}

@@ -253,7 +253,7 @@ func (h *Handler) RegisterRoutes(reg *apispec.Registry) {
 	// Auto-snapshot ownership
 	handle(reg, route("GET /api/v1/auto-snapshot/schedules", "autoSnapshot.listSchedules", "Auto-snapshot properties of all datasets"), h.listAutoSnapshotSchedules)
 	handle(reg, route("GET /api/v1/auto-snapshot/status", "autoSnapshot.status", "Who runs auto-snapshots (OS daemon or dumpstore) and last runs"), h.getAutoSnapshotStatus)
-	handle(reg, route("POST /api/v1/auto-snapshot/takeover", "autoSnapshot.takeover", "Disable the OS daemon and let dumpstore run auto-snapshots"), h.takeoverAutoSnapshot)
+	handle(reg, route("POST /api/v1/auto-snapshot/takeover", "autoSnapshot.takeover", "Disable the OS daemon and let dumpstore run auto-snapshots", fails(http.StatusConflict)), h.takeoverAutoSnapshot)
 	handle(reg, route("POST /api/v1/auto-snapshot/release", "autoSnapshot.release", "Hand auto-snapshots back to the OS daemon"), h.releaseAutoSnapshot)
 
 	// Replication and jobs

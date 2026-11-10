@@ -648,26 +648,6 @@ func platformWarnings() []string {
 		if err != nil || strings.TrimSpace(string(out)) != "YES" {
 			w = append(w, "zfs_enable is not set to YES in rc.conf — ZFS pools will not mount after reboot")
 		}
-
-		// #74: Check zfstools cron — auto-snapshot does nothing without it.
-		hasAutoSnap := probePresence("zfs-auto-snapshot") != "" || probePresence("zfs-auto-snapshot.rb") != ""
-		if hasAutoSnap {
-			if msg := autoSnapCronWarning(); msg != "" {
-				w = append(w, msg)
-			}
-		}
 	}
 	return w
-}
-
-// autoSnapCronWarning checks whether any crontab mentions zfs-auto-snapshot.
-func autoSnapCronWarning() string {
-	// Check system crontab and user crontabs for auto-snapshot entries.
-	for _, path := range []string{"/etc/crontab", "/var/cron/tabs/root"} {
-		data, err := os.ReadFile(path)
-		if err == nil && strings.Contains(string(data), "auto-snapshot") {
-			return ""
-		}
-	}
-	return "zfs-auto-snapshot requires manual cron setup on FreeBSD — auto-snapshots may not be running"
 }

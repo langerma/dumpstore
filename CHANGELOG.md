@@ -174,6 +174,10 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **FreeBSD: zfstools run from cron was neither detected nor stopped by takeover** (#208). The status reported `os_daemon: "zfstools"`, but only the `zfs-periodic` switches in periodic.conf were checked. zfstools has no periodic or rc.d hook; it runs from crontab lines the admin adds. Running both, zfstools and dumpstore's scheduler, takes every snapshot twice.
+  - **Detection:** a line that isn't a comment and runs `zfs-auto-snapshot` in `/etc/crontab`, `/etc/cron.d/*`, `/usr/local/etc/cron.d/*` or `/var/cron/tabs/*` makes `os_daemon` `zfstools` and `os_daemon_active` true; the new `cron_files` field lists the files. Otherwise `os_daemon` is now `zfs-periodic`. A zfstools host no longer gets dumpstore's scheduler registered at startup.
+  - **Takeover** returns `409` naming the files while those lines exist. dumpstore doesn't edit crontabs, so the admin removes them. The Datasets banner says so instead of offering *Take over*, and warns if zfstools runs alongside dumpstore's scheduler.
+  - The Installed Software warning "zfs-auto-snapshot requires manual cron setup on FreeBSD" (#74) is gone. It was wrong since dumpstore runs the snapshots itself.
 - **Small defects from the docs audit** (#197).
   - **SSH key add failed for users without a same-named group.** `~/.ssh` and `authorized_keys` now get the user's primary GID.
   - **`mountpoint=legacy` was treated as a relative path.** ACL, chown and SMB checks treat it like `none`: GET and PUT `/datasets/{name}/owner` and ACL writes return `400`; `smb_usershare_set.yml` refuses it too.
