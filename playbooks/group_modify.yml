@@ -1,10 +1,11 @@
 ---
 # Required extra vars:
 #   groupname - current name of the group to modify
-#   gid       - current GID (must be >= 1000, validated in Go before calling)
+#   gid       - current GID (must be >= uid_min, validated in Go before calling)
+#   uid_min   - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 # Optional extra vars:
 #   new_name       - rename the group to this name
-#   new_gid        - change the GID to this value (must be >= 1000)
+#   new_gid        - change the GID to this value (must be >= uid_min)
 #   members        - comma-separated list of members to set (replaces existing)
 #   update_members - "true" to apply the members list
 
@@ -22,15 +23,15 @@
         that:
           - groupname is defined and groupname != ""
           - gid is defined
-          - gid | int >= 1000
+          - gid | int >= uid_min | int
           - groupname not in ['nogroup', 'nobody', 'nfsnobody']
-        fail_msg: "groupname is required, gid must be >= 1000, and protected groups cannot be modified"
+        fail_msg: "groupname is required, gid must be >= {{ uid_min }}, and protected groups cannot be modified"
 
     - name: Assert new_gid is safe if provided
       ansible.builtin.assert:
         that:
-          - new_gid | int >= 1000
-        fail_msg: "new_gid must be >= 1000 (system GIDs are reserved)"
+          - new_gid | int >= uid_min | int
+        fail_msg: "new_gid must be >= {{ uid_min }} (system GIDs are reserved)"
       when: new_gid != ""
 
     - name: Change GID

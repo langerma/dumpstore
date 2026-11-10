@@ -1,6 +1,7 @@
 ---
 # Required extra vars:
 #   groupname - name of the group to create
+#   uid_min   - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 # Optional extra vars:
 #   gid       - explicit GID (omit for auto-assignment)
 
@@ -20,8 +21,8 @@
     - name: Assert gid is safe if provided
       ansible.builtin.assert:
         that:
-          - gid | int >= 1000
-        fail_msg: "gid must be >= 1000 (system GIDs are reserved)"
+          - gid | int >= uid_min | int
+        fail_msg: "gid must be >= {{ uid_min }} (system GIDs are reserved)"
       when: gid != ""
 
     - name: Create group

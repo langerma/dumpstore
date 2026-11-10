@@ -1,7 +1,8 @@
 ---
 # Required extra vars:
 #   username - login name of the user to modify
-#   uid      - current UID of the user (must be >= 1000, validated in Go before calling)
+#   uid      - current UID of the user (must be >= uid_min, validated in Go before calling)
+#   uid_min  - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 # Optional extra vars:
 #   shell         - new login shell
 #   primary_group - new primary group name (must already exist)
@@ -28,9 +29,9 @@
         that:
           - username is defined and username != ""
           - uid is defined
-          - uid | int >= 1000
+          - uid | int >= uid_min | int
           - username not in ['nobody', 'nfsnobody']
-        fail_msg: "username is required, uid must be >= 1000, and protected accounts cannot be modified"
+        fail_msg: "username is required, uid must be >= {{ uid_min }}, and protected accounts cannot be modified"
 
     - name: Look up current home directory
       ansible.builtin.command: "getent passwd {{ username | quote }}"

@@ -1,7 +1,8 @@
 ---
 # Required extra vars:
 #   username - login name of the user to delete
-#   uid      - UID of the user (must be >= 1000, validated in Go before calling)
+#   uid      - UID of the user (must be >= uid_min, validated in Go before calling)
+#   uid_min  - lowest non-system UID/GID (system.UIDMin, i.e. UID_MIN from /etc/login.defs)
 
 - name: Delete local user
   hosts: localhost
@@ -12,9 +13,9 @@
         that:
           - username is defined and username != ""
           - uid is defined
-          - uid | int >= 1000
+          - uid | int >= uid_min | int
           - username not in ['nobody', 'nfsnobody']
-        fail_msg: "username is required, uid must be >= 1000, and protected accounts (nobody, nfsnobody) cannot be deleted"
+        fail_msg: "username is required, uid must be >= {{ uid_min }}, and protected accounts (nobody, nfsnobody) cannot be deleted"
 
     - name: Delete user and home directory
       ansible.builtin.user:

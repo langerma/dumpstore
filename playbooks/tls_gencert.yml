@@ -22,7 +22,8 @@
 
     - name: Generate self-signed ECDSA-P256 certificate
       # argv, not a command string: no value can be split into extra
-      # options (#194).
+      # options (#194). No `creates:` — every run replaces cert and key, so
+      # a new hostname takes effect (#197).
       ansible.builtin.command:
         argv:
           - openssl
@@ -43,7 +44,6 @@
           - "/CN={{ hostname }}"
           - -addext
           - "subjectAltName=IP:127.0.0.1,DNS:{{ hostname }}"
-        creates: "{{ cert_dir }}/cert.pem"
       register: gencert_result
 
     - name: Restrict key file permissions

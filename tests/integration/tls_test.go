@@ -49,6 +49,15 @@ func TestTLSGencert(t *testing.T) {
 	}
 	vmExec(t, "test -s "+certDir+"/cert.pem && test -s "+certDir+"/key.pem")
 
+	// A second run with another hostname replaces the certificate (#197).
+	const host2 = "itest2.dumpstore.local"
+	assertTasks(t, apiOK(t, "POST", "/api/v1/tls/self-signed", map[string]string{"hostname": host2, "cert_dir": certDir}))
+	if cn := decode[struct {
+		CN string `json:"cn"`
+	}](t, apiOK(t, "GET", "/api/v1/tls", nil)).CN; cn != host2 {
+		t.Fatalf("CN after second gencert: %q, want %q", cn, host2)
+	}
+
 	assertTasks(t, apiOK(t, "PATCH", "/api/v1/tls", map[string]string{
 		"cert_path": certDir + "/cert.pem", "key_path": certDir + "/key.pem",
 	}))

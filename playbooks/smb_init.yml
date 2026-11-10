@@ -1,10 +1,12 @@
 ---
 # smb_init.yml — First-time Samba initialisation for dumpstore.
 #
-# Checks that the Samba daemon is installed, backs up any existing config,
-# creates the usershares directory, and restarts Samba. The actual smb.conf
-# is written by smb_apply.yml immediately after this playbook completes —
-# dumpstore generates it entirely from its own template.
+# Backs up an existing smb.conf to <smb.conf>.pre-dumpstore (once; an
+# earlier backup is never overwritten), ensures the sambashare group exists
+# (Linux only) and creates the usershares directory. It neither checks for
+# nor restarts Samba: the handler runs smb_apply.yml right after this
+# playbook, which writes smb.conf from dumpstore's template and starts or
+# reloads the Samba services.
 #
 # No required extra vars — OS is detected via gather_facts.
 

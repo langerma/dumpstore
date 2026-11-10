@@ -221,7 +221,7 @@ func (h *Handler) initSamba(ctx context.Context, _ struct{}) (SMBInitResult, err
 		return SMBInitResult{}, err
 	}
 
-	// Step 1: check smbd is installed, back up existing conf, create usershares dir.
+	// Step 1: back up the existing conf, create the sambashare group and usershares dir.
 	out1, err := h.runOp(ctx, "smb_init.yml", map[string]string{})
 	auditLog(ctx, "smb.init", "", err)
 	if err != nil {
@@ -742,7 +742,7 @@ func datasetMountpoint(dataset string) (string, error) {
 	}
 	for _, ds := range datasets {
 		if ds.Name == dataset {
-			if ds.Mountpoint == "-" || ds.Mountpoint == "none" || ds.Mountpoint == "legacy" {
+			if !zfs.HasMountpoint(ds.Mountpoint) {
 				return "", nil
 			}
 			return ds.Mountpoint, nil

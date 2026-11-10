@@ -77,6 +77,9 @@ func (h *Handler) createUser(ctx context.Context, in struct {
 	if req.Password != "" && !safePassword(req.Password) {
 		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"))
 	}
+	if req.SMBUser && req.Password == "" {
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("smb_user requires a password"))
+	}
 
 	createGroup := "false"
 	if req.CreateGroup {
@@ -97,6 +100,7 @@ func (h *Handler) createUser(ctx context.Context, in struct {
 		"password":     req.Password,
 		"create_group": createGroup,
 		"smb_user":     smbUser,
+		"uid_min":      uidMinVar(),
 	}
 	out, err := h.runOp(ctx, "user_create.yml", vars)
 	auditLog(ctx, "user.create", req.Username, err)
@@ -112,6 +116,10 @@ var protectedUsers = map[string]bool{"nobody": true, "nfsnobody": true}
 
 // protectedGroups lists groups that must never be deleted regardless of GID.
 var protectedGroups = map[string]bool{"nogroup": true, "nobody": true, "nfsnobody": true}
+
+// uidMinVar is the uid_min extra var of the user/group playbooks: the same
+// limit the handlers enforce (system.UIDMin), so the playbook asserts agree.
+func uidMinVar() string { return fmt.Sprintf("%d", system.UIDMin()) }
 
 // findUser returns the local user called name, or a 404 error.
 func findUser(name string) (*system.User, error) {
@@ -168,6 +176,7 @@ func (h *Handler) deleteUser(ctx context.Context, in userParam) (UserResult, err
 	out, err := h.runOp(ctx, "user_delete.yml", map[string]string{
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
+		"uid_min":  uidMinVar(),
 	})
 	auditLog(ctx, "user.delete", name, err)
 	if err != nil {
@@ -251,6 +260,7 @@ func (h *Handler) modifyUser(ctx context.Context, in struct {
 		"home":          req.Home,
 		"move_home":     moveHome,
 		"smb_sync":      smbSync,
+		"uid_min":       uidMinVar(),
 	})
 	auditLog(ctx, "user.modify", name, err)
 	if err != nil {
@@ -301,6 +311,9 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 	if !validSSHKey(req.Key) {
 		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid SSH public key"))
 	}
+	if protectedUsers[name] {
+		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name))
+	}
 
 	target, err := findUser(name)
 	if err != nil {
@@ -312,6 +325,7 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 
 	out, err := h.runOp(ctx, "user_ssh_key_add.yml", map[string]string{
 		"username": name,
+		"gid":      fmt.Sprintf("%d", target.GID),
 		"home":     target.Home,
 		"key":      req.Key,
 	})
@@ -334,6 +348,9 @@ func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	}
 	if !strings.HasPrefix(in.Fingerprint, "SHA256:") {
 		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("fingerprint must start with SHA256:"))
+	}
+	if protectedUsers[name] {
+		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name))
 	}
 
 	target, err := findUser(name)
@@ -387,6 +404,7 @@ func (h *Handler) createGroup(ctx context.Context, in struct {
 	out, err := h.runOp(ctx, "group_create.yml", map[string]string{
 		"groupname": req.Groupname,
 		"gid":       req.GID,
+		"uid_min":   uidMinVar(),
 	})
 	auditLog(ctx, "group.create", req.Groupname, err)
 	if err != nil {
@@ -423,6 +441,7 @@ func (h *Handler) deleteGroup(ctx context.Context, in groupParam) (GroupResult, 
 	out, err := h.runOp(ctx, "group_delete.yml", map[string]string{
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
+		"uid_min":   uidMinVar(),
 	})
 	auditLog(ctx, "group.delete", name, err)
 	if err != nil {
@@ -506,6 +525,7 @@ func (h *Handler) modifyGroup(ctx context.Context, in struct {
 		"new_gid":        req.GID,
 		"members":        req.Members,
 		"update_members": "true",
+		"uid_min":        uidMinVar(),
 	})
 	auditLog(ctx, "group.modify", name, err)
 	if err != nil {

@@ -36,7 +36,7 @@
     - name: Validate mountpoint
       ansible.builtin.assert:
         that:
-          - _mp.stdout | trim not in ['none', '-', '']
+          - _mp.stdout | trim not in ['none', '-', '', 'legacy']
         fail_msg: "Dataset {{ dataset }} has no valid mountpoint (got: {{ _mp.stdout | trim }})"
 
     - name: Create usershare

@@ -3,8 +3,12 @@ package auth
 import (
 	"encoding/json"
 	"html"
+	"math"
 	"net/http"
 	"reflect"
+	"strconv"
+	"strings"
+	"time"
 
 	"dumpstore/internal/apispec"
 )
@@ -44,9 +48,9 @@ func RegisterRoutes(reg *apispec.Registry, cfg *Config, store *SessionStore, rl 
 	reg.Handle(apispec.Route{
 		Method: "POST", Path: "/auth/login", Group: "auth", Name: "login",
 		Summary:     "Log in and receive a session cookie",
-		Description: "Browser form login: redirects to / on success (setting the dumpstore_session cookie) or back to /login?error=… on failure. Rate-limited per client IP.",
+		Description: "Browser form login: redirects to / on success (setting the dumpstore_session cookie) or back to /login?error=… on failure. Rate-limited per client IP: after 10 failed attempts in 60 s, a client sending Accept: application/json gets 429 with Retry-After; a browser is redirected to /login?error=….",
 		Request:     reflect.TypeFor[loginForm](), RequestType: apispec.Form,
-		Status: http.StatusFound, Public: true,
+		Status: http.StatusFound, Errors: []int{http.StatusTooManyRequests}, Public: true,
 		Handler: handleLogin(cfg, store, rl),
 	})
 	reg.Handle(apispec.Route{
@@ -84,8 +88,8 @@ func handleLoginPage(cfg *Config, store *SessionStore) http.HandlerFunc {
 // handleLogin validates credentials, sets the session cookie, and redirects.
 func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !rl.Allow(r) {
-			http.Redirect(w, r, "/login?error=Too+many+attempts.+Try+again+later.", http.StatusFound)
+		if retryAfter, ok := rl.Allow(r); !ok {
+			tooManyAttempts(w, r, retryAfter)
 			return
 		}
 
@@ -101,6 +105,7 @@ func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.Handler
 			return
 		}
 
+		rl.Reset(r)
 		token := store.Create()
 		http.SetCookie(w, &http.Cookie{
 			Name:     sessionCookieName,
@@ -113,6 +118,21 @@ func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.Handler
 		})
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
+}
+
+// tooManyAttempts answers a rate-limited login: 429 with Retry-After for
+// API clients (Accept: application/json), a redirect back to the form with
+// the message for browsers.
+func tooManyAttempts(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Redirect(w, r, "/login?error=Too+many+attempts.+Try+again+later.", http.StatusFound)
+		return
+	}
+	secs := int(math.Ceil(retryAfter.Seconds()))
+	w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusTooManyRequests)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "too many failed login attempts; try again later"})
 }
 
 // handleLogout invalidates the session and clears the cookie.

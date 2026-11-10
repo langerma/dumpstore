@@ -246,7 +246,9 @@ func (h *Handler) AuthCfgWrite(fn func(*auth.Config)) {
 
 // auditLog emits a structured audit log line for every mutating API operation.
 // req_id is injected automatically by the journalHandler middleware.
-// Since the service has no authentication, operator identity is the client IP.
+// Writes require the admin login (or a trusted proxy's auth); there is a
+// single admin account, so the line records the client IP to tell sessions
+// apart rather than a user name.
 func auditLog(ctx context.Context, action, target string, err error) {
 	args := []any{"remote_ip", remoteAddr(ctx), "action", action, "target", target, "outcome", "ok"}
 	if err != nil {

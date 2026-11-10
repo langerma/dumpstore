@@ -49,24 +49,27 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestSSEEvents` | `/api/v1/events` stream headers + cached `user.query` replay on connect |
 | `TestOperations` | #184: two clients create snapshots concurrently while one watches `ansible.progress` — each operation's live steps carry its ID with contiguous `seq` and match its HTTP response; `GET /api/v1/operations/{id}` returns the same steps/result, `?after=1` the tail; duplicate ID → 409 (not executed), invalid → 400, no header → generated ID; unknown → 404 |
 | `TestUserLifecycle` / `TestUserNegatives` | user create/modify/delete, SSH key add/list (fingerprint matches `ssh-keygen -lf` in the VM)/remove by percent-encoded fingerprint, unknown fingerprint 404, `id` in the VM; invalid names 400, system user 403, unknown user 404 |
+| `TestSSHKeyForeignPrimaryGroup` | #197: SSH key add for a user whose primary group isn't named after the user; `authorized_keys` owned by `<user>:<primary group>` |
 | `TestGroupLifecycle` | group create, members + rename, unknown member 400, delete; system group 403 |
 | `TestSMBSurface` | init (409 gate when smb.conf is absent), usershare set/list/unset by share name (delete returns name + path; unknown share 404), Samba user add/remove, `[homes]`, Time Machine shares |
 | `TestPosixACL` | acltype gate, POSIX ACE set/get/remove (+ `getfacl` check), 404 on re-delete — Linux only |
 | `TestNFSv4ACL` | NFSv4 ACE add/list/remove in the nfs4-acl-tools form (+ `getfacl` check), 404 on re-delete, bad permission 400 — FreeBSD only (Linux ZFS cannot apply NFSv4 ACLs locally) |
-| `TestChown` | mountpoint owner/group read + change, verified with `stat` |
+| `TestChown` | mountpoint owner/group read + change, verified with `stat`; `mountpoint=legacy` → 400 for GET and PUT |
 | `TestDatasetRefGuard` | #183 reference guard: destroy (incl. recursive parent), rename, and mountpoint change of a usershare'd dataset → 409 with conflict list; replication source/target and iSCSI zvol → 409; stale usershare listed with `path_missing`, removed, and not resurrected by a new dataset at the same path; unreadable `smb.conf`/`smb4.conf` → 500 fail-closed with nothing destroyed. Runs on Linux and FreeBSD |
 | `TestISCSITarget` | zvol → iSCSI target create/list/delete by IQN (unknown IQN 404; targetcli on Linux, ctld on FreeBSD — `/etc/ctl.conf`, its `.pre-dumpstore` backup, and ctld state restored afterwards); CHAP-without-password, bad IQN, and quote-in-secret 400. ctld: write before init 409, init imports an old block-patched `ctl.conf`, three targets share one portal and survive `service ctld restart`, duplicate IQN/zvol 409, unknown target 404 |
-| `TestReplicationTask` | task CRUD, invalid schedule/target 400, manual run → job → received snapshot → history record, hold released |
+| `TestReplicationTask` | task CRUD, invalid schedule/target 400, manual run → job → received snapshot → history record, hold released; a re-held replication snapshot is destroyed by a single `DELETE` |
 | `TestAutoSnapshotProperties` | per-dataset auto-snapshot properties set/read/inherit, value validation |
 | `TestScrubSchedule` | scrub schedule add/remove (`/etc/default/zfs` backed up and restored) |
+| `TestAutosnapTakeoverRelease` | #152, Linux: zfs-auto-snapshot cron entry points disabled by takeover (twice), restored byte-for-byte by release — skipped unless the daemon owns auto-snapshots initially |
+| `TestAutosnapTakeoverReleaseFreeBSD` | #197, FreeBSD only: zfs-periodic switches in `/etc/periodic.conf` and `/etc/periodic.conf.local` set to `NO` by takeover (twice), restored byte-for-byte by release; the three conf files and the record are backed up and restored |
 | `TestServices` | Samba restart + enable, unknown service 404, bad action/name 400 |
-| `TestTLSGencert` | self-signed cert generation, status, cert/key config; invalid input 400 |
+| `TestTLSGencert` | self-signed cert generation, status, regeneration with another hostname (new CN), cert/key config; invalid input 400 |
 | `TestChangePassword` | wrong current 401, change → session survives, only the new password logs in → change back |
 | `TestRewrite` | `zfs rewrite` background job, volume 400 — skipped when OpenZFS lacks `zfs rewrite` |
 
 Deliberately **not** exercised: `change-username` (invalidates every session;
 a mid-test failure would strand the VM's credentials), ACME issue/renew (needs
-a real domain), service stop/disable, and auto-snapshot takeover/release (#152).
+a real domain), and service stop/disable.
 Tests that rewrite host config (`dumpstore.conf`, `/etc/default/zfs`) back the
 file up and restore it byte-for-byte, so the next deploy starts from the
 provisioned state.

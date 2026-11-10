@@ -139,3 +139,67 @@ func TestAutosnapTakeoverRelease(t *testing.T) {
 		t.Fatalf("cron entry points not restored:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 }
+
+// TestAutosnapTakeoverReleaseFreeBSD hands zfs-periodic's snapshot switches
+// to dumpstore and back (#197): settings spread over two periodic.conf files
+// are set to NO by takeover and restored exactly by release.
+func TestAutosnapTakeoverReleaseFreeBSD(t *testing.T) {
+	if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) != "FreeBSD" {
+		t.Skip("periodic.conf takeover is FreeBSD-only")
+	}
+	const (
+		conf   = "/etc/periodic.conf"
+		local  = "/etc/periodic.conf.local"
+		usr    = "/usr/local/etc/periodic.conf"
+		record = "/var/db/dumpstore/autosnap-disabled-periodic.json"
+		files  = conf + " " + local + " " + usr + " " + record
+	)
+	status := func() autosnapStatus {
+		return decode[autosnapStatus](t, apiOK(t, "GET", "/api/v1/auto-snapshot/status", nil))
+	}
+	initial := status()
+	// Set the files aside (absent ones are marked) and put them back after.
+	vmExec(t, "for f in "+files+"; do rm -f $f.itest-bak $f.itest-absent; if [ -e $f ]; then cp -p $f $f.itest-bak; else touch $f.itest-absent; fi; done")
+	t.Cleanup(func() {
+		_, _ = api(t, "POST", "/api/v1/auto-snapshot/release", nil)
+		if initial.DumpstoreManaged {
+			// Re-register dumpstore's scheduler; the file restore below
+			// undoes what this takeover writes.
+			_, _ = api(t, "POST", "/api/v1/auto-snapshot/takeover", nil)
+		}
+		restore := "for f in " + files + "; do if [ -e $f.itest-bak ]; then mv $f.itest-bak $f; elif [ -e $f.itest-absent ]; then rm -f $f $f.itest-absent; fi; done"
+		if out, err := vmExecErr(restore); err != nil {
+			t.Errorf("restoring periodic.conf files failed — fix the VM by hand: %v\n%s", err, out)
+		}
+	})
+
+	vmExec(t, "rm -f "+usr+" "+record+
+		"; printf '# itest\\ndaily_zfs_snapshot_enable=\"YES\"\\nweekly_zfs_snapshot_enable=\"NO\"\\n' > "+conf+
+		"; printf 'hourly_zfs_snapshot_enable=\"YES\"\\n' > "+local)
+	fingerprint := func() string { return vmExec(t, "md5 -r "+conf+" "+local+"; [ ! -e "+usr+" ] && echo no-usr; true") }
+	before := fingerprint()
+	if st := status(); !st.OSDaemonActive {
+		t.Fatalf("status with daily/hourly YES: %+v, want daemon active", st)
+	}
+
+	// Twice: takeover must be idempotent and keep the first record.
+	for range 2 {
+		assertTasks(t, apiOK(t, "POST", "/api/v1/auto-snapshot/takeover", nil))
+	}
+	if st := status(); st.OSDaemonActive || !st.DumpstoreManaged {
+		t.Fatalf("status after takeover: %+v, want daemon inactive and dumpstore managed", st)
+	}
+	got := vmExec(t, "sysrc -f "+conf+" -n daily_zfs_snapshot_enable weekly_zfs_snapshot_enable; sysrc -f "+local+" -n hourly_zfs_snapshot_enable")
+	if strings.Join(strings.Fields(got), " ") != "NO NO NO" {
+		t.Fatalf("switches after takeover: %q, want NO NO NO", got)
+	}
+
+	assertTasks(t, apiOK(t, "POST", "/api/v1/auto-snapshot/release", nil))
+	if st := status(); !st.OSDaemonActive || st.DumpstoreManaged {
+		t.Fatalf("status after release: %+v, want daemon active and dumpstore not managed", st)
+	}
+	if after := fingerprint(); after != before {
+		t.Fatalf("periodic.conf files not restored:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	vmExec(t, "[ ! -e "+record+" ]")
+}

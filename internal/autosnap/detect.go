@@ -23,7 +23,9 @@ type Status struct {
 //
 // Linux: any of the five `zfs-auto-snapshot-*.timer` units being enabled,
 // OR any of the package's cron entry points existing, counts as active.
-// FreeBSD: `daily_zfs_snapshot_enable="YES"` in periodic.conf{,.local}.
+// FreeBSD: any of {hourly,daily,weekly,monthly}_zfs_snapshot_enable
+// (zfs-periodic's periodic(8) switches) effectively YES in
+// PeriodicConfFiles.
 func DetectStatus() Status {
 	switch runtime.GOOS {
 	case "linux":
@@ -76,34 +78,59 @@ var CronFiles = []string{
 	"/etc/cron.monthly/zfs-auto-snapshot",
 }
 
+// PeriodicConfFiles are FreeBSD's periodic_conf_files, in the order
+// periodic(8) sources them: a later file overrides an earlier one.
+var PeriodicConfFiles = []string{
+	"/etc/periodic.conf",
+	"/etc/periodic.conf.local",
+	"/usr/local/etc/periodic.conf",
+}
+
+// periodicSnapshotVars are the switches of the zfs-periodic package's
+// hourly/daily/weekly/monthly periodic(8) snapshot scripts.
+var periodicSnapshotVars = []string{
+	"hourly_zfs_snapshot_enable",
+	"daily_zfs_snapshot_enable",
+	"weekly_zfs_snapshot_enable",
+	"monthly_zfs_snapshot_enable",
+}
+
 func detectFreeBSD() Status {
-	s := Status{OSDaemon: "zfstools"}
-	for _, path := range []string{"/etc/periodic.conf", "/etc/periodic.conf.local"} {
+	return Status{OSDaemon: "zfstools", OSDaemonActive: periodicSnapshotsEnabled(PeriodicConfFiles)}
+}
+
+// periodicSnapshotsEnabled reports whether any periodic snapshot switch is
+// effectively YES after sourcing files in order. Missing files are skipped.
+func periodicSnapshotsEnabled(files []string) bool {
+	vals := map[string]string{}
+	for _, path := range files {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		// Match `daily_zfs_snapshot_enable="YES"` (with or without quotes,
-		// any indentation). Comment lines (#) are skipped.
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			if !strings.HasPrefix(line, "daily_zfs_snapshot_enable") {
-				continue
-			}
-			// Crude but sufficient: look for YES in the value.
-			eq := strings.Index(line, "=")
-			if eq < 0 {
-				continue
-			}
-			val := strings.Trim(strings.TrimSpace(line[eq+1:]), "\"'")
-			if strings.EqualFold(val, "YES") {
-				s.OSDaemonActive = true
-				return s
-			}
+		parsePeriodicConf(string(data), vals)
+	}
+	for _, v := range periodicSnapshotVars {
+		if strings.EqualFold(vals[v], "YES") {
+			return true
 		}
 	}
-	return s
+	return false
+}
+
+// parsePeriodicConf records the `name=value` assignments of one sh-style
+// conf file into vals, later lines overriding earlier ones. Crude but
+// sufficient: comment lines are skipped and one level of quotes stripped.
+func parsePeriodicConf(data string, vals map[string]string) {
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		vals[strings.TrimSpace(name)] = strings.Trim(strings.TrimSpace(val), "\"'")
+	}
 }

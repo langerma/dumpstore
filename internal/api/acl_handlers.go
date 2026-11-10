@@ -69,7 +69,7 @@ func (h *Handler) getACLStatus(ctx context.Context, _ struct{}) (map[string]bool
 	}
 	status := make(map[string]bool, len(datasets))
 	for _, d := range datasets {
-		if d.Type != "filesystem" || d.Mountpoint == "none" || d.Mountpoint == "-" || d.Mountpoint == "" {
+		if d.Type != "filesystem" || !zfs.HasMountpoint(d.Mountpoint) {
 			continue
 		}
 		// DatasetHasACL checks actual getfacl output; fall back to acltype
@@ -133,7 +133,7 @@ func (h *Handler) setACLEntry(ctx context.Context, in struct {
 	if acl.ACLType == "off" {
 		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("acltype is off for dataset %s; enable it first", name))
 	}
-	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
+	if !zfs.HasMountpoint(acl.Mountpoint) {
 		return ACLEntryResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 
@@ -269,7 +269,7 @@ func (h *Handler) removeACLEntry(ctx context.Context, in removeACLParams) (ACLRe
 	if err != nil {
 		return ACLRemoveResult{}, err
 	}
-	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" {
+	if !zfs.HasMountpoint(acl.Mountpoint) {
 		return ACLRemoveResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 	match, ok := findACLEntry(acl, entry)

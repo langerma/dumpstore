@@ -511,3 +511,18 @@ func TestParseImportablePoolsEmpty(t *testing.T) {
 		t.Errorf("expected no pools, got %+v", pools)
 	}
 }
+
+func TestHasMountpoint(t *testing.T) {
+	for mp, want := range map[string]bool{
+		"":           false,
+		"-":          false,
+		"none":       false,
+		"legacy":     false,
+		"/":          true,
+		"/tank/data": true,
+	} {
+		if got := HasMountpoint(mp); got != want {
+			t.Errorf("HasMountpoint(%q) = %v, want %v", mp, got, want)
+		}
+	}
+}

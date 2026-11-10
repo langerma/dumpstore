@@ -10,13 +10,20 @@
 #   systemd timers: zfs-auto-snapshot-<bucket>.timer. Only timers that are
 #     enabled are stopped/disabled, and their names are recorded in
 #     timer_state_file so release re-enables exactly those.
-# FreeBSD: clear `daily_zfs_snapshot_enable="YES"` from /etc/periodic.conf.
+# FreeBSD — the zfs-periodic package's periodic(8) scripts snapshot when
+#   {hourly,daily,weekly,monthly}_zfs_snapshot_enable is YES in any of
+#   periodic_conf_files (/etc/periodic.conf, /etc/periodic.conf.local,
+#   /usr/local/etc/periodic.conf). Every definition that is YES is set to NO
+#   with `sysrc -f <file>`, and file, variable and original value are recorded
+#   in periodic_state_file so release restores exactly those. (zfstools has
+#   no periodic scripts; its cron lines are the admin's own /etc/crontab.)
 #
 # Required extra vars:
-#   timer_state_file - where to record the timers this takeover disabled
+#   timer_state_file    - where to record the timers this takeover disabled
+#   periodic_state_file - where to record the periodic.conf settings it disabled
 #
 # Idempotent: re-running is safe — a second takeover finds nothing enabled
-# and keeps the earlier record.
+# and keeps the earlier record (FreeBSD merges new finds into it).
 - name: Take over auto-snapshot execution from the OS daemon
   hosts: localhost
   gather_facts: true
@@ -37,12 +44,29 @@
       {{ (autosnap_timer_scan.stdout_lines | default([]))
          | map('split') | map('first')
          | select('in', autosnap_known_timers) | list }}
+    autosnap_periodic_files:
+      - /etc/periodic.conf
+      - /etc/periodic.conf.local
+      - /usr/local/etc/periodic.conf
+    autosnap_periodic_vars:
+      - hourly_zfs_snapshot_enable
+      - daily_zfs_snapshot_enable
+      - weekly_zfs_snapshot_enable
+      - monthly_zfs_snapshot_enable
+    autosnap_periodic_old: >-
+      {{ (autosnap_periodic_record.stdout | from_json)
+         if (autosnap_periodic_record.rc | default(1)) == 0 else [] }}
+    autosnap_periodic_old_keys: >-
+      {{ autosnap_periodic_old | map(attribute='file')
+         | zip(autosnap_periodic_old | map(attribute='var'))
+         | map('join', ' ') | list }}
   tasks:
     - name: Assert required vars are defined
       ansible.builtin.assert:
         that:
           - timer_state_file is defined and timer_state_file | length > 0
-        fail_msg: "timer_state_file is required"
+          - periodic_state_file is defined and periodic_state_file | length > 0
+        fail_msg: "timer_state_file and periodic_state_file are required"
 
     - name: Linux — detect enabled zfs-auto-snapshot systemd timers
       ansible.builtin.command:
@@ -79,21 +103,58 @@
       loop: "{{ autosnap_cron_files }}"
       when: ansible_system == "Linux"
 
-    - name: FreeBSD — disable daily_zfs_snapshot_enable in periodic.conf
-      ansible.builtin.lineinfile:
-        path: /etc/periodic.conf
-        regexp: '^daily_zfs_snapshot_enable\s*='
-        line: 'daily_zfs_snapshot_enable="NO"'
-        create: true
+    - name: FreeBSD — read zfs-periodic snapshot settings
+      # rc 1 = the file or the variable does not exist.
+      ansible.builtin.command:
+        argv: [sysrc, -f, "{{ item.0 }}", -n, "{{ item.1 }}"]
+      loop: "{{ autosnap_periodic_files | product(autosnap_periodic_vars) | list }}"
+      register: autosnap_periodic_scan
+      changed_when: false
+      failed_when: false
+      when: ansible_system == "FreeBSD"
+
+    - name: FreeBSD — collect the enabled settings
+      ansible.builtin.set_fact:
+        autosnap_periodic_enabled: >-
+          {{ autosnap_periodic_enabled | default([])
+             + [{'file': item.item.0, 'var': item.item.1, 'value': item.stdout}] }}
+      loop: "{{ autosnap_periodic_scan.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0 }} {{ item.item.1 }}"
+      when: >-
+        ansible_system == "FreeBSD" and (item.rc | default(1)) == 0
+        and item.stdout | trim | lower == 'yes'
+
+    - name: FreeBSD — read an earlier takeover record
+      ansible.builtin.command:
+        argv: [cat, "{{ periodic_state_file }}"]
+      register: autosnap_periodic_record
+      changed_when: false
+      failed_when: false
+      when: ansible_system == "FreeBSD"
+
+    - name: FreeBSD — merge new finds into the record
+      ansible.builtin.set_fact:
+        autosnap_periodic_record_new: >-
+          {{ autosnap_periodic_record_new | default(autosnap_periodic_old) + [item] }}
+      loop: "{{ autosnap_periodic_enabled | default([]) }}"
+      loop_control:
+        label: "{{ item.file }} {{ item.var }}"
+      when: ansible_system == "FreeBSD" and (item.file ~ ' ' ~ item.var) not in autosnap_periodic_old_keys
+
+    # Written even when empty: release tells "nothing was enabled" apart
+    # from a takeover by an older dumpstore that kept no record.
+    - name: FreeBSD — record the settings being disabled
+      ansible.builtin.copy:
+        dest: "{{ periodic_state_file }}"
+        content: "{{ autosnap_periodic_record_new | default(autosnap_periodic_old) | to_nice_json }}\n"
         mode: "0644"
       when: ansible_system == "FreeBSD"
 
-    - name: FreeBSD — also disable in periodic.conf.local if it exists
-      ansible.builtin.lineinfile:
-        path: /etc/periodic.conf.local
-        regexp: '^daily_zfs_snapshot_enable\s*='
-        line: 'daily_zfs_snapshot_enable="NO"'
-        state: present
+    - name: FreeBSD — disable zfs-periodic snapshots
+      ansible.builtin.command:
+        argv: [sysrc, -f, "{{ item.file }}", "{{ item.var }}=NO"]
+      loop: "{{ autosnap_periodic_enabled | default([]) }}"
+      loop_control:
+        label: "{{ item.file }} {{ item.var }}"
       when: ansible_system == "FreeBSD"
-      register: fbsd_local
-      failed_when: fbsd_local.failed | default(false) and 'does not exist' not in (fbsd_local.msg | default(''))
