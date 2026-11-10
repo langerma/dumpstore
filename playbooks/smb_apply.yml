@@ -3,7 +3,8 @@
 #
 # Called by dumpstore after rendering the complete config from its internal
 # template. This playbook creates any referenced directories, deploys the
-# rendered file, and reloads the services (started if not running). A reload
+# rendered file, starts the services that are stopped and reloads the ones
+# that were running. A reload
 # re-reads smb.conf without dropping client connections; a restart per write
 # trips systemd's start limit when several edits land within seconds.
 #
@@ -11,7 +12,8 @@
 #   src             – path to the rendered smb.conf temp file
 #   smb_conf        – destination path (e.g. /etc/samba/smb.conf)
 #   dirs            – JSON list of directories to ensure exist (may be empty: [])
-#   samba_services  – JSON list of service names to reload
+#   samba_services  – JSON list of service names to reload (or start)
+#   service_manager – "systemd" (Linux) or "rc" (FreeBSD)
 #
 # Optional extra vars (Linux, set only when wsdd is installed and its unit
 # reads $WSDD_PARAMS from an EnvironmentFile):
@@ -33,7 +35,8 @@
           - smb_conf is defined and smb_conf | length > 0
           - dirs is defined
           - samba_services is defined and samba_services | length > 0
-        fail_msg: "src, smb_conf, dirs, and samba_services are required"
+          - service_manager is defined and service_manager in ['systemd', 'rc']
+        fail_msg: "src, smb_conf, dirs, samba_services and service_manager (systemd|rc) are required"
 
     - name: Create referenced directories
       ansible.builtin.file:
@@ -52,11 +55,36 @@
         mode: "0644"
         backup: true
 
-    - name: Reload Samba services
-      ansible.builtin.service:
-        name: "{{ item }}"
-        state: reloaded
+    # Reload what is running, start what is stopped (#196): FreeBSD's
+    # `service samba_server reload` fails while Samba is stopped. Status is
+    # read with the OS's own command, not ansible.builtin.service — on
+    # FreeBSD that module probes with `onestatus` and starts with
+    # `onestart`, which for samba_server also force-starts winbindd (not
+    # enabled without `idmap uid`), misreads a running Samba as stopped and
+    # leaves an orphaned winbindd behind.
+    - name: Check which Samba services are running
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', 'is-active', '--quiet', item] if service_manager == 'systemd' else ['service', item, 'status'] }}"
       loop: "{{ samba_services | from_json }}"
+      register: samba_status
+      changed_when: false
+      failed_when: false
+
+    - name: Reload running Samba services
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', 'reload', item.item] if service_manager == 'systemd' else ['service', item.item, 'reload'] }}"
+      loop: "{{ samba_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc == 0
+
+    - name: Start stopped Samba services
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', 'start', item.item] if service_manager == 'systemd' else ['service', item.item, 'start'] }}"
+      loop: "{{ samba_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0
 
     - name: Deploy wsdd options
       ansible.builtin.copy:

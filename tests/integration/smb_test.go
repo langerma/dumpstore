@@ -171,3 +171,40 @@ func hasTimeMachine(t *testing.T, name string) bool {
 	}
 	return false
 }
+
+// TestSMBWriteWhileStopped: a config write must succeed while Samba is
+// stopped and leave it running (#196). On FreeBSD `service samba_server
+// reload` fails when Samba isn't running, so the apply playbook starts
+// stopped services instead of reloading them.
+func TestSMBWriteWhileStopped(t *testing.T) {
+	skipUnlessVMTool(t, "smbd")
+	assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
+
+	stop := "systemctl stop smbd nmbd"
+	running := "systemctl is-active --quiet smbd"
+	if _, err := vmExecErr("command -v systemctl"); err != nil {
+		stop = "service samba_server stop || service samba_server onestop"
+		running = "service samba_server status"
+	}
+	// Leave Samba running for whatever runs next, whatever happens here.
+	t.Cleanup(func() {
+		if _, err := vmExecErr(running); err != nil {
+			_, _ = vmExecErr("systemctl start smbd nmbd 2>/dev/null || service samba_server start || service samba_server onestart")
+		}
+	})
+
+	vmExec(t, stop)
+	if _, err := vmExecErr(running); err == nil {
+		t.Fatal("Samba still running after stop — test setup failed")
+	}
+
+	ds := testPool + "/itest-tm-stopped"
+	const share = "itest-tm-stopped"
+	createDataset(t, ds)
+	t.Cleanup(func() { _, _ = api(t, "DELETE", v1("/smb/timemachine/%s", share), nil) })
+	assertTasks(t, apiOK(t, "PUT", v1("/smb/timemachine/%s", share), map[string]string{"dataset": ds}))
+
+	if _, err := vmExecErr(running); err != nil {
+		t.Fatalf("Samba not running after a config write while it was stopped: %v", err)
+	}
+}
