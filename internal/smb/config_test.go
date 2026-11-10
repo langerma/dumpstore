@@ -134,3 +134,26 @@ func TestDirsToCreate(t *testing.T) {
 		t.Errorf("dirs[1]: got %q want /tank/tm", dirs[1])
 	}
 }
+
+// TestIsManaged: only a file rendered from the template counts as owned by
+// dumpstore (#193); a distro-default smb.conf does not.
+func TestIsManaged(t *testing.T) {
+	cfg := SMBConfig{Global: SMBGlobal{Workgroup: "WORKGROUP", ServerString: "Samba"}}
+	dst := filepath.Join(t.TempDir(), "smb.conf")
+	if err := cfg.RenderToFile(dst, "linux"); err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isManaged(rendered) {
+		t.Errorf("rendered smb.conf not recognised as managed:\n%s", rendered)
+	}
+	distro := "#\n# Sample configuration file for the Samba suite for Debian GNU/Linux.\n#\n[global]\n   workgroup = WORKGROUP\n"
+	for _, data := range []string{distro, "", "\n" + confHeader + "\n"} {
+		if isManaged([]byte(data)) {
+			t.Errorf("isManaged(%q) = true, want false", data)
+		}
+	}
+}

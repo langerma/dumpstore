@@ -73,7 +73,7 @@ playbooks/smb_apply.yml (example)
 
 Sub-features are gated behind an **init gate**: writes return `409` and the UI offers an *Initialize* action until the service has been bootstrapped.
 
-- **Samba** (`POST /api/v1/smb/init`) — the gate only checks that `smb.conf` **exists**, so a distro-default `smb.conf` already counts as initialised and the first share write re-renders it straight away. The original survives only as Ansible's timestamped backup (`smb.conf.<n>.<date>~`), not as `smb.conf.pre-dumpstore`; run *Initialize Samba* first on a fresh host to get the named backup.
+- **Samba** (`POST /api/v1/smb/init`) — the gate checks for dumpstore's header (`# This file is managed by dumpstore.`) on the first line of `smb.conf`, which every rendered file has carried since #82. A distro-default or hand-written `smb.conf` therefore isn't initialised: writes return `409` until *Initialize Samba* has backed it up to `smb.conf.pre-dumpstore` and rendered dumpstore's own, carrying over workgroup, server string, `[homes]` and Time Machine shares (#193). A file block-patched by a dumpstore older than #82 has no header and goes through the same init.
 - **ctld** (`POST /api/v1/iscsi/init`, FreeBSD) — the gate checks for dumpstore's ownership header on the first line of `/etc/ctl.conf`, so a pre-existing file is never overwritten before init has backed it up and imported its targets.
 
 ### Reference guard

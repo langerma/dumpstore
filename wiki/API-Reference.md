@@ -1526,7 +1526,7 @@ Append `&recursive=true` (POSIX only) to remove recursively.
 
 dumpstore owns `smb.conf` (`/etc/samba/smb.conf` on Linux, `/usr/local/etc/smb4.conf` on FreeBSD) and renders it from a template on every config write. Per-dataset shares are Samba **usershares** (`net usershare`), stored in dumpstore's own directory (`/etc/dumpstore/smb/usershares`, or `/usr/local/etc/dumpstore/smb/usershares` on FreeBSD).
 
-**Init gate:** `GET /api/v1/smb/shares`, `PUT`/`DELETE /api/v1/smb/shares/{name}`, `POST`/`DELETE /api/v1/smb/users/{name}` (as well as homes, Time Machine and wsdd writes) return `409 "Samba not initialised — run POST /api/v1/smb/init first"` while `smb.conf` doesn't exist.
+**Init gate:** `GET /api/v1/smb/shares`, `PUT`/`DELETE /api/v1/smb/shares/{name}`, `POST`/`DELETE /api/v1/smb/users/{name}` (as well as homes, Time Machine and wsdd writes) return `409 "Samba not initialised — run POST /api/v1/smb/init first"` until `smb.conf` was rendered by dumpstore (its first line is `# This file is managed by dumpstore.`). A missing, distro-default or hand-written `smb.conf` doesn't count.
 
 ### GET /api/v1/smb/status
 
@@ -1543,7 +1543,7 @@ dumpstore owns `smb.conf` (`/etc/samba/smb.conf` on Linux, `/usr/local/etc/smb4.
 
 | Field | Description |
 |-------|-------------|
-| `initialized` | `smb.conf` exists at `conf_path` |
+| `initialized` | `smb.conf` at `conf_path` was rendered by dumpstore (starts with its header) |
 | `conf_path` | OS-specific `smb.conf` path |
 | `os` | `linux` or `freebsd` |
 | `conf_mtime` | UTC mtime of `smb.conf`; omitted when the file is missing |

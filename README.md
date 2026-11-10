@@ -38,7 +38,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 **Sharing**
 - NFS via the ZFS `sharenfs` property
-- SMB usershares, Samba users, `[homes]`, and Time Machine shares — dumpstore owns `smb.conf`
+- SMB usershares, Samba users, `[homes]`, and Time Machine shares — dumpstore owns `smb.conf`, after a one-time *Initialize Samba* that backs up the original to `smb.conf.pre-dumpstore`
 - Windows network discovery via wsdd, kept in sync with Samba's workgroup
 - iSCSI targets for zvols (`targetcli`/LIO on Linux, `ctld` on FreeBSD — dumpstore owns `/etc/ctl.conf`) with CHAP and initiator ACLs
 - Start, stop, enable, and disable Samba, NFS, iSCSI, and wsdd from the Services tab

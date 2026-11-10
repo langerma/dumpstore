@@ -17,8 +17,8 @@ import (
 	"dumpstore/internal/zfs"
 )
 
-// requireSMBInit returns a 409 error if smb.conf does not exist at the
-// expected OS path.
+// requireSMBInit returns a 409 error unless smb.conf was rendered by
+// dumpstore (smb.IsInitialized).
 func requireSMBInit() error {
 	if !smb.IsInitialized(runtime.GOOS) {
 		return errStatus(http.StatusConflict,
@@ -198,8 +198,9 @@ type SMBInitResult struct {
 }
 
 // initSamba handles POST /api/v1/smb/init
-// Checks smbd is installed, backs up any existing config, creates the
-// usershares directory, then writes dumpstore's own smb.conf from template.
+// Checks smbd is installed, backs up any existing config to
+// smb.conf.pre-dumpstore, creates the usershares directory, then writes
+// dumpstore's own smb.conf from template.
 // Preserves workgroup and server string from an existing config if present.
 // Safe to call multiple times.
 func (h *Handler) initSamba(ctx context.Context, _ struct{}) (SMBInitResult, error) {

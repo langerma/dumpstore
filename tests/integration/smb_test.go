@@ -15,19 +15,35 @@ import (
 func TestSMBSurface(t *testing.T) {
 	skipUnlessVMTool(t, "smbd")
 
-	status := decode[struct {
-		Initialized bool `json:"initialized"`
-	}](t, apiOK(t, "GET", "/api/v1/smb/status", nil))
-	if !status.Initialized {
-		// Init gate: share writes are refused until smb.conf exists. Debian's
-		// samba package ships one, so this only runs on hosts without it.
-		apiStatus(t, http.StatusConflict, "GET", "/api/v1/smb/shares", nil)
+	type smbStatus struct {
+		Initialized bool   `json:"initialized"`
+		ConfPath    string `json:"conf_path"`
 	}
+	conf := decode[smbStatus](t, apiOK(t, "GET", "/api/v1/smb/status", nil)).ConfPath
+
+	// Init gate (#193): a distro-default smb.conf (no dumpstore header) is
+	// not initialised; init backs it up to .pre-dumpstore and renders ours.
+	// The VM's smb.conf and backup are set aside and restored afterwards.
+	const distro = "# Sample configuration file for the Samba suite.\n[global]\n   workgroup = ITESTGROUP\n"
+	vmExec(t, "for f in "+conf+" "+conf+".pre-dumpstore; do rm -f $f.itest-bak; [ -e $f ] && cp -p $f $f.itest-bak; done; true")
+	t.Cleanup(func() {
+		_, _ = vmExecErr("for f in " + conf + " " + conf + ".pre-dumpstore; do if [ -e $f.itest-bak ]; then mv $f.itest-bak $f; else rm -f $f; fi; done; smbcontrol all reload-config >/dev/null 2>&1; true")
+	})
+	vmExec(t, "rm -f "+conf+".pre-dumpstore; printf '"+distro+"' > "+conf)
+	if decode[smbStatus](t, apiOK(t, "GET", "/api/v1/smb/status", nil)).Initialized {
+		t.Fatalf("distro-default %s counted as initialized", conf)
+	}
+	apiStatus(t, http.StatusConflict, "GET", "/api/v1/smb/shares", nil)
+
 	assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
-	if !decode[struct {
-		Initialized bool `json:"initialized"`
-	}](t, apiOK(t, "GET", "/api/v1/smb/status", nil)).Initialized {
+	if !decode[smbStatus](t, apiOK(t, "GET", "/api/v1/smb/status", nil)).Initialized {
 		t.Fatalf("smb not initialized after POST /api/v1/smb/init")
+	}
+	if got := vmExec(t, "cat "+conf+".pre-dumpstore"); strings.TrimSpace(got) != strings.TrimSpace(distro) {
+		t.Fatalf("%s.pre-dumpstore = %q, want the distro file", conf, got)
+	}
+	if got := vmExec(t, "grep -c 'workgroup = ITESTGROUP' "+conf); strings.TrimSpace(got) != "1" {
+		t.Fatalf("init did not carry the workgroup over into %s", conf)
 	}
 	smbdPID := smbdMainPID(t)
 
