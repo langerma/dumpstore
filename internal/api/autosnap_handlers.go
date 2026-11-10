@@ -31,11 +31,14 @@ func (h *Handler) getAutoSnapshotStatus(context.Context, struct{}) (autoSnapshot
 	return resp, nil
 }
 
-// autosnapPlaybookVars carries where takeover records the systemd timers it
-// disabled, so release re-enables exactly those.
+// autosnapPlaybookVars carries where takeover records what it disabled —
+// the systemd timers (Linux) and the periodic.conf settings (FreeBSD) — so
+// release restores exactly those.
 func autosnapPlaybookVars() map[string]string {
+	dir := platform.StateDir(runtime.GOOS)
 	return map[string]string{
-		"timer_state_file": filepath.Join(platform.StateDir(runtime.GOOS), "autosnap-disabled-timers"),
+		"timer_state_file":    filepath.Join(dir, "autosnap-disabled-timers"),
+		"periodic_state_file": filepath.Join(dir, "autosnap-disabled-periodic.json"),
 	}
 }
 
