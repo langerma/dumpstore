@@ -65,7 +65,8 @@ Contributions are welcome. See [CONTRIBUTING.md](https://github.com/langerma/dum
 
 ## Pages
 
-- [[Installation]] — requirements, install options, authentication, service configuration, observability, versioning
+- [[Installation]] — requirements, install options, authentication, TLS/HTTPS, command-line flags, service configuration, versioning
+- [[Observability]] — Prometheus metrics reference, OpenTelemetry setup (traces, logs, metrics), log and audit format
 - [[Architecture]] — execution lanes, service ownership, frontend, observability internals, project layout, testing
 - [[API Reference]] — every endpoint with request/response examples, and the SSE event stream
 - [[Screenshots]] — every tab and dialog

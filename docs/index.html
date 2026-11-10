@@ -633,7 +633,7 @@
           <span class="pool-name">auto-snapshot scheduling</span>
           <span class="health-badge badge-green">com.sun:auto-snapshot</span>
         </div>
-        <p>Manage <code>com.sun:auto-snapshot*</code> ZFS properties per dataset. dumpstore runs the bucket snapshots itself via the built-in 5-field cron scheduler — no <code>zfs-auto-snapshot</code> or <code>zfstools</code> daemon required. Inheritance honoured correctly on FreeBSD (fixes the upstream <code>zfstools</code> bug). One-click takeover/release for hosts where the OS daemon is still active — both the cron and systemd-timer packaging of <code>zfs-auto-snapshot</code>; release restores exactly what takeover disabled. Button state updates live via SSE (<code>autosnapshot.query</code>, <code>autosnap.status</code>).</p>
+        <p>Manage <code>com.sun:auto-snapshot*</code> ZFS properties per dataset. dumpstore runs the bucket snapshots itself via the built-in 5-field cron scheduler — no <code>zfs-auto-snapshot</code> or <code>zfstools</code> daemon required. Inheritance honoured correctly on FreeBSD (fixes the upstream <code>zfstools</code> bug). One-click takeover/release for hosts where the OS daemon is still active — both the cron and systemd-timer packaging of <code>zfs-auto-snapshot</code>; release re-enables what takeover disabled on Linux. Unlike <code>zfs-auto-snapshot</code>'s opt-out model, the built-in scheduler is opt-in: a dataset is snapshotted only when <code>com.sun:auto-snapshot=true</code> and the bucket has a keep-count. Button state updates live via SSE (<code>autosnapshot.query</code>, <code>autosnap.status</code>).</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -651,6 +651,13 @@
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
+          <span class="pool-name">Reference guard</span>
+          <span class="health-badge badge-green">safety</span>
+        </div>
+        <p>Destroying, renaming, or re-mounting a dataset is refused with a list of blockers while an SMB usershare, <code>[homes]</code>, Time Machine share, iSCSI target, or replication task still points at it (or at a descendant). Fails closed: if a consumer's config can't be read, nothing is destroyed.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
           <span class="pool-name">Per-operation progress</span>
           <span class="health-badge badge-blue">X-Operation-ID</span>
         </div>
@@ -661,7 +668,7 @@
           <span class="pool-name">TLS / HTTPS</span>
           <span class="health-badge badge-blue">--tls</span>
         </div>
-        <p>Enable HTTPS with <code>--tls</code>. Generate a self-signed ECDSA-P256 certificate via the UI (openssl, via Ansible), load an existing cert from disk (Let's Encrypt, Certbot, acme.sh), or issue and renew automatically via <strong>lego</strong> (ACME / Let's Encrypt). HTTP redirects to HTTPS automatically. Cert status card shows CN, SANs, and expiry countdown.</p>
+        <p>Enable HTTPS with <code>--tls</code>. Generate a self-signed ECDSA-P256 certificate via the UI (openssl, via Ansible), load an existing cert from disk (Let's Encrypt, Certbot, acme.sh), or issue one via <strong>lego</strong> (ACME / Let's Encrypt, TLS-ALPN-01 on port 443). HTTPS listens on <code>--tls-port</code> (443) with an HTTP → HTTPS redirect on <code>--http-port</code> (80); the certificate is loaded at startup, so restart after changing it. ACME renewal is not automated — renew with <code>lego</code> and restart. Cert status card shows CN, SANs, and expiry countdown.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -696,14 +703,19 @@
           <span class="pool-name">Prometheus metrics</span>
           <span class="health-badge badge-purple">/metrics</span>
         </div>
-        <p>Go runtime, HTTP request counters &amp; latency histograms, and Ansible playbook run metrics out of the box.</p>
+        <p><code>GET /metrics</code>, always on and unauthenticated by default: HTTP request counters and latency histograms (per route), run counters and durations for both write lanes (Ansible playbooks and in-process <code>zfs</code>/<code>zpool</code> commands), Go runtime, and build info. Pool and disk metrics are left to <code>node_exporter</code> / <code>zfs_exporter</code>. <a href="https://github.com/langerma/dumpstore/wiki/Observability" style="color:var(--accent)">Metric reference →</a></p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">OpenTelemetry export</span>
           <span class="health-badge badge-purple">OTLP</span>
         </div>
-        <p>Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and dumpstore pushes traces (per-request spans named after the route, Ansible/ops child spans, background job/replication/autosnap spans), logs with <code>trace_id</code> correlation, and Go runtime metrics to any OTLP collector. No-op without the env var.</p>
+        <p>Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and dumpstore pushes traces (per-request spans named after the route, Ansible/ops child spans, background job/replication/autosnap spans), logs with <code>trace_id</code> correlation, and Go runtime metrics to any OTLP collector (Grafana Alloy, OpenTelemetry Collector, Tempo/Loki/Mimir, Jaeger). No-op without the env var; the System tab shows whether export is active.</p>
+        <pre style="margin-top:0.6rem;font-size:0.78rem;white-space:pre-wrap"># systemd: systemctl edit dumpstore
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+# FreeBSD
+sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318"</pre>
+        <p><a href="https://github.com/langerma/dumpstore/wiki/Observability" style="color:var(--accent)">Variables, span names, log format →</a></p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -737,17 +749,59 @@
     <div class="card-grid">
       <div class="pool-card">
         <div class="pool-card-header">
-          <span class="pool-name">ZFS native encryption</span>
-          <span class="health-badge badge-blue">planned</span>
+          <span class="pool-name">privilege separation</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/116" style="color:inherit">#116</a></span>
         </div>
-        <p>Load/unload keys, show encryption status per dataset, support keyformat and keylocation.</p>
+        <p>Non-root web frontend with a narrow root helper over a unix socket.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
-          <span class="pool-name">log viewer</span>
-          <span class="health-badge badge-blue">planned</span>
+          <span class="pool-name">FreeBSD port</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/89" style="color:inherit">#89</a></span>
         </div>
-        <p>Tail dumpstore logs, the system journal, and ZFS events directly from the UI.</p>
+        <p><code>sysutils/dumpstore</code> in the ports tree.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">.deb / .rpm packages</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/142" style="color:inherit">#142</a></span>
+        </div>
+        <p>Native Linux packages with the systemd unit, playbooks, and static assets.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">special / dedup vdevs</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/180" style="color:inherit">#180</a></span>
+        </div>
+        <p>Add special and dedup vdevs (mirrored by default), manage their disks, edit <code>special_small_blocks</code>.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">OpenAPI + /api/v1</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/181" style="color:inherit">#181</a></span>
+        </div>
+        <p>OpenAPI 3.x spec generated from the route registry, served at <code>/api/v1/openapi.json</code>.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">ZFS native encryption</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/20" style="color:inherit">#20</a></span>
+        </div>
+        <p>Load/unload keys and show key status per dataset.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">OTEL: ZFS read spans</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/167" style="color:inherit">#167</a></span>
+        </div>
+        <p>Child spans for the <code>zfs</code>/<code>zpool</code> read commands.</p>
+      </div>
+      <div class="pool-card">
+        <div class="pool-card-header">
+          <span class="pool-name">OTEL: metrics migration</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/168" style="color:inherit">#168</a></span>
+        </div>
+        <p>Move the Prometheus metrics onto the OTEL meter, keeping <code>/metrics</code> names stable.</p>
       </div>
     </div>
   </section>
@@ -946,6 +1000,16 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
             <td class="muted">targetcli-fb</td>
             <td class="muted">built-in ctld</td>
           </tr>
+            <tr>
+              <td>Windows discovery<span class="opt-badge">optional</span></td>
+              <td class="muted">wsdd-server (Debian/Ubuntu) / wsdd</td>
+              <td class="muted">py3*-wsdd pkg</td>
+            </tr>
+            <tr>
+              <td>TLS / ACME<span class="opt-badge">optional</span></td>
+              <td class="muted">openssl; lego for ACME</td>
+              <td class="muted">openssl; lego for ACME</td>
+            </tr>
         </tbody>
       </table>
     </div>

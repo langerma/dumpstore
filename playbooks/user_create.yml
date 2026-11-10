@@ -5,7 +5,7 @@
 # Optional extra vars:
 #   uid         - explicit UID (omit for auto-assignment)
 #   group       - primary group name (created if it does not exist)
-#   groups      - comma-separated supplementary groups
+#   user_groups - comma-separated supplementary groups
 #   password    - plaintext password; set via chpasswd (Linux) / pw usermod -h 0 (FreeBSD), hashed by the OS
 #   create_group - "true" to ensure a group named <username> is created first
 #   smb_user    - "true" to also register the user in Samba's tdbsam database

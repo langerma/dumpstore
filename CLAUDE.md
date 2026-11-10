@@ -21,9 +21,9 @@ dumpstore is a thin, auditable layer over the OS, not a NAS distribution. Every 
 
 **Integrate** (read, display, link out — minimal in-tree surface):
 
-- Identity (lldap): auth bind + read-only directory display; user/group management stays in lldap's own UI
+- Identity (lldap): auth bind + read-only directory display; user/group management stays in lldap's own UI — currently not pursued (#62 closed, won't fix)
 - Observability (Prometheus/Grafana/OTEL): export metrics/traces/logs; never embed dashboards, log viewers, or alerting pipelines
-- Power (NUT): status display + a thin shutdown hook; no UPS configuration management
+- Power (NUT): status display + a thin shutdown hook; no UPS configuration management — currently not pursued (#52 closed, won't fix)
 - Notifications: emit to syslog/webhook; no in-tree notification subsystem
 
 The test: *does the feature make dumpstore better at running ZFS + shares, or does it rebuild a tool that already exists?* If a mature tool owns the domain, dumpstore integrates with it and links out. Feature requests that only make sense in the "manage" bucket for an "integrate" domain are declined with a pointer to this section (see issue #121).
@@ -226,7 +226,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `playbooks/acl_set_nfs4.yml` | Adds an NFSv4 ACL entry; vars: `dataset`, `entry`, `recursive` |
 | `playbooks/acl_remove_nfs4.yml` | Removes an NFSv4 ACL entry; vars: `mountpoint`, `entry`, `recursive` |
 | `playbooks/dataset_chown.yml` | Sets owner/group on a dataset mountpoint; vars: `mountpoint`, `owner`, `group` |
-| `playbooks/user_create.yml` | Creates local Unix user; vars: `username`, `shell`, optional `uid`, `group`, `groups`, `password`, `create_group` |
+| `playbooks/user_create.yml` | Creates local Unix user; vars: `username`, `shell`, optional `uid`, `group`, `user_groups`, `password`, `create_group` |
 | `playbooks/user_modify.yml` | Modifies local Unix user; vars: `username`, `uid`, optional `shell`, `groups`, `password` |
 | `playbooks/user_delete.yml` | Deletes local Unix user; vars: `username`, `uid` |
 | `playbooks/group_create.yml` | Creates local Unix group; vars: `groupname`, optional `gid` |

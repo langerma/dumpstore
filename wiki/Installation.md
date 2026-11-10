@@ -141,6 +141,9 @@ If the config file is missing or has no `password_hash`, the service starts but 
 | `session_ttl` | `24h` | How long a session cookie stays valid |
 | `trusted_proxies` | `[]` | CIDRs from which `X-Remote-User` header is trusted |
 | `unprotected_paths` | `["/metrics"]` | Paths that bypass auth (prefix match) |
+| `tls_enabled` | `false` | Set to `true` by every TLS action in the UI; informational only — HTTPS starts only with `--tls` (see [TLS / HTTPS](#tls--https)) |
+| `tls_cert_path` / `tls_key_path` | — | PEM certificate and key served with `--tls` |
+| `acme_enabled` / `acme_email` / `acme_domain` | — | Read at startup, but currently **not written** by *Let's Encrypt (ACME)* — the UI keeps them in memory only, so *Renew (ACME)* stops working after a restart |
 
 ### Reverse proxy delegation
 
@@ -156,6 +159,39 @@ Go to **Users & Groups → Authentication** and use the Change Password or Chang
 
 ---
 
+## TLS / HTTPS
+
+dumpstore serves plain HTTP on `-addr` by default. HTTPS is a two-step setup: put a certificate in place, then restart dumpstore with `--tls`.
+
+**1. Certificate** — **Users & Groups → TLS / HTTPS** offers three ways; each writes the paths into `dumpstore.conf`:
+
+| Action | What it does |
+|---|---|
+| *Generate self-signed* | ECDSA P-256 certificate valid 10 years for the given hostname (CN + DNS SAN), written as `cert.pem` / `key.pem` (key `0600`) to `<config dir>/tls` by default |
+| *Load existing cert* | Uses a certificate and key already on disk (e.g. from your own CA or certbot) |
+| *Let's Encrypt (ACME)* | Runs [`lego`](https://go-acme.github.io/lego/) with the **TLS-ALPN-01** challenge: Let's Encrypt must reach this host on **port 443**, and nothing — including dumpstore itself — may be listening there while it runs. Certificates go to `<config dir>/tls/acme/certificates/<domain>.crt` / `.key` |
+
+**2. Restart with `--tls`** — HTTPS starts only when the `--tls` flag is set *and* both cert paths are configured; otherwise dumpstore keeps serving HTTP on `-addr`. With `--tls`, `-addr` is ignored: HTTPS listens on `--tls-port` (default `443`) and a redirect server on `--http-port` (default `80`) answers every plain-HTTP request with `301` to `https://`.
+
+```bash
+# Linux: add --tls to ExecStart
+sudo systemctl edit dumpstore
+# [Service]
+# ExecStart=
+# ExecStart=/usr/local/lib/dumpstore/dumpstore --tls -dir /usr/local/lib/dumpstore -config /etc/dumpstore/dumpstore.conf
+sudo systemctl daemon-reload && sudo systemctl restart dumpstore
+```
+
+On FreeBSD the shipped rc.d script has no variable for extra flags, so `--tls` cannot be set from `rc.conf` yet.
+
+Things to know:
+
+- **The certificate is loaded once at startup.** After replacing or renewing it, restart dumpstore.
+- **ACME renewal is manual, and in practice has to happen outside dumpstore.** There is no renewal timer. The *Renew (ACME)* action (`POST /api/tls/acme/renew`, renews when fewer than 30 days remain) only works until dumpstore restarts — the ACME settings are not saved to `dumpstore.conf` — and HTTPS needs a restart. It also uses TLS-ALPN-01 on port 443, which fails while dumpstore itself serves HTTPS there. Renew the 90-day certificate with `lego renew` directly (e.g. from cron, with its HTTP-01 or DNS-01 challenge, `--path <config dir>/tls/acme`) and restart dumpstore afterwards. If ACME matters to you, a certificate managed by your reverse proxy or certbot plus *Load existing cert* is the more robust setup.
+- Behind a reverse proxy, terminate TLS at the proxy instead and leave dumpstore on HTTP (see [Reverse proxy delegation](#reverse-proxy-delegation)).
+
+---
+
 ## Run without installing
 
 ```bash
@@ -164,6 +200,21 @@ sudo ./dumpstore -addr :8080 -dir .
 ```
 
 `-dir` must point to the directory that contains `playbooks/` and `static/`. It defaults to the directory of the executable.
+
+### Command-line flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `-addr` | `:8080` | Listen address for HTTP. Forced to `127.0.0.1:8080` while no password is configured; ignored with `--tls` |
+| `-dir` | executable's directory | Base directory containing `playbooks/` and `static/` |
+| `-config` | `/etc/dumpstore/dumpstore.conf` (Linux), `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD) | Config file (auth, TLS) |
+| `-set-password` | `false` | Prompt for a new admin password, write its hash to `-config`, and exit |
+| `-tls` | `false` | Serve HTTPS with the configured certificate (see [TLS / HTTPS](#tls--https)) |
+| `-tls-port` | `443` | HTTPS port when `--tls` is set |
+| `-http-port` | `80` | Port of the HTTP → HTTPS redirect server when `--tls` is set |
+| `-debug` | `false` | Log at debug level |
+| `-log-stdout` | `true` | Write logs to stdout (journald / log file); set `false` only when shipping logs via OTLP (see [Observability](#observability)) |
+| `-version` | — | Print the version and exit |
 
 ---
 
@@ -202,28 +253,20 @@ Then restart: `service dumpstore restart`. Logs go to `/var/log/dumpstore.log` i
 
 ## Observability
 
-Both exports integrate with an external stack — dumpstore never embeds dashboards or alerting.
-
-**Prometheus (pull)** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), write-lane metrics (`ansible_runs_total`, `ansible_run_duration_seconds`, `dumpstore_op_runs_total`, `dumpstore_op_duration_seconds`), and `dumpstore_build_info`. Always on; `/metrics` bypasses login by default (`unprotected_paths`).
-
-**OpenTelemetry (push)** — set the standard OTLP environment variables and dumpstore exports traces, logs, and runtime metrics to your collector (Alloy, Tempo/Loki/Mimir, Jaeger, …). Without them every OTEL code path is a no-op.
+- **Prometheus** — `GET /metrics` is always on (and unauthenticated by default via `unprotected_paths`); point a scrape job at it.
+- **OpenTelemetry** — set `OTEL_EXPORTER_OTLP_ENDPOINT` on the service to push traces, logs, and runtime metrics to an OTLP collector:
 
 ```bash
-# Linux (systemd): systemctl edit dumpstore, or uncomment the examples in the unit
-Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318
-Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf   # default; "grpc" also supported
-Environment=OTEL_SERVICE_NAME=dumpstore                 # default
-
-# FreeBSD (rc.d): rc.subr passes ${name}_env to the daemon
-sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318"
-service dumpstore restart
+# Linux (systemd)
+sudo systemctl edit dumpstore   # [Service] Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318
+sudo systemctl restart dumpstore
+# FreeBSD (rc.d)
+sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.example:4318" && service dumpstore restart
 ```
 
-When enabled you get a trace per API request (with child spans for every Ansible playbook and ops command, and root spans for jobs, scheduled replication, and auto-snapshot runs), the full log stream with `trace_id`/`span_id` correlation, and Go runtime + `http.server.*` metrics. All standard OTEL SDK env vars are honoured (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_TRACES_SAMPLER`, `OTEL_SDK_DISABLED`, …). If the collector is down, OTLP records buffer and drop in the background — local logs are never affected.
+- **Logs** — journald on Linux, `/var/log/dumpstore.log` on FreeBSD; every request line carries a `req_id`, every write an audit line.
 
-Local logs are unchanged by OTEL: on Linux they go to the systemd journal (with syslog priority prefixes), on FreeBSD to `/var/log/dumpstore.log`. Every line for a request carries its `req_id` (taken from an upstream `X-Request-ID` header if present, and echoed back on the response), and every mutating operation emits an audit line with `remote_ip`, `action`, `target`, and `outcome`. For OTLP-only setups, `-log-stdout=false` turns local logging off; with no OTLP endpoint configured that would discard all logs, so dumpstore warns at startup.
-
-See [[Architecture]] → Observability for how the pipeline is built.
+The full metric list, all OTEL variables, span names, and the log/audit format are on the [[Observability]] page.
 
 ---
 

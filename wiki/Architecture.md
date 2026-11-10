@@ -42,16 +42,16 @@ When dumpstore manages a service it takes **full ownership** of that service's c
 
 The rule is binary: **own it completely, or don't touch it at all.**
 
-This is one half of the project's **scope boundary** (#121). The other half: domains dumpstore does *not* manage, it only **integrates** with — identity (lldap: auth bind + read-only display), observability (Prometheus/OTEL: export only, no embedded dashboards or alerting), power (NUT: status + thin shutdown hook), notifications (syslog/webhook out). The test for every feature: does it make dumpstore better at running ZFS + shares, or does it rebuild a tool that already exists?
+This is one half of the project's **scope boundary** (#121). The other half: domains dumpstore does *not* manage, it only **integrates** with — observability (Prometheus/OTEL: export only, no embedded dashboards or alerting) and notifications (syslog/webhook out). Identity (lldap) and power (NUT) would fall in this bucket too, but neither is pursued (#62 and #52 closed as won't fix): local users are the only identity source, and UPS shutdown stays with NUT itself. The test for every feature: does it make dumpstore better at running ZFS + shares, or does it rebuild a tool that already exists?
 
 | Service | Owned? | Config file | Restart mechanism |
 |---------|--------|-------------|-------------------|
-| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | reload `smbd`/`nmbd` / `samba_server` (started if not running) |
+| Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | reload `smbd`/`nmbd` (systemd starts them if stopped) / `samba_server` (FreeBSD: the reload fails while Samba is stopped — start it from the Services tab) |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
 | iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf`, rendered from `internal/iscsi/ctl.conf.tmpl`; init gate `POST /api/iscsi/init` | `service ctld reload` (start if stopped), verified via `ctladm portlist` + listening sockets, rolled back on failure |
 | iSCSI (Linux) | ✅ via CLI | `targetcli saveconfig` | `targetcli` |
-| TLS | ✅ full | `dumpstore.conf` cert fields | dumpstore reload |
+| TLS | ✅ full | `dumpstore.conf` cert fields; certificates under `<config dir>/tls` | restart dumpstore with `--tls` (the certificate is loaded once at startup) |
 | Users / Groups | — | OS is source of truth | n/a |
 | ZFS datasets | — | ZFS kernel properties | n/a |
 
@@ -69,7 +69,10 @@ playbooks/smb_apply.yml (example)
   └──────────────────────────────────┘
 ```
 
-Sub-features (shares, home dirs, Time Machine targets) are gated behind an **init gate** — they are disabled in the UI until the service has been bootstrapped with `POST /api/smb/init` (or equivalent). This prevents partial config states where the config file exists but hasn't been initialised by dumpstore yet.
+Sub-features are gated behind an **init gate**: writes return `409` and the UI offers an *Initialize* action until the service has been bootstrapped.
+
+- **Samba** (`POST /api/smb/init`) — the gate only checks that `smb.conf` **exists**, so a distro-default `smb.conf` already counts as initialised and the first share write re-renders it straight away. The original survives only as Ansible's timestamped backup (`smb.conf.<n>.<date>~`), not as `smb.conf.pre-dumpstore`; run *Initialize Samba* first on a fresh host to get the named backup.
+- **ctld** (`POST /api/iscsi/init`, FreeBSD) — the gate checks for dumpstore's ownership header on the first line of `/etc/ctl.conf`, so a pre-existing file is never overwritten before init has backed it up and imported its targets.
 
 ### Reference guard
 
@@ -140,7 +143,7 @@ All playbooks target `localhost` with `gather_facts: false`. Each playbook:
 
 ## Observability
 
-How to enable it is in [[Installation]] → Observability; this section covers the design.
+How to enable it, the metric list, and the log format are on the [[Observability]] page; this section covers the design.
 
 Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the push path, gated entirely by the standard `OTEL_EXPORTER_OTLP_*` env vars — unset means every OTEL call site is a no-op.
 

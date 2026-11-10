@@ -90,9 +90,7 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | Privilege separation               | Medium   | internal | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
 | FreeBSD port (sysutils/dumpstore)  | Medium   | internal | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
 | .deb / .rpm packages               | Medium   | internal | [#142](https://github.com/langerma/dumpstore/issues/142) | Linux counterpart to the FreeBSD port (#89): native packages with the systemd unit, playbooks, and static assets |
-| lldap integration                  | Medium   | integrate | [#62](https://github.com/langerma/dumpstore/issues/62) | Auth bind + read-only directory display; user/group management stays in lldap's UI (scope trimmed per #121) |
-| UPS / NUT integration              | Low      | integrate | [#52](https://github.com/langerma/dumpstore/issues/52) | Status display via `upsc` + thin low-battery shutdown hook; no NUT configuration management (scope trimmed per #121) |
-| ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display. **Deferred until [#51](https://github.com/langerma/dumpstore/issues/51) + [#52](https://github.com/langerma/dumpstore/issues/52) land** |
+| ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display |
 | OTEL ZFS read-path spans           | Low      | integrate | [#167](https://github.com/langerma/dumpstore/issues/167) | Child spans for `internal/zfs` read commands; needs ctx threaded through read helpers. Split out of #49 |
 | OTEL meter migration (phase 3)     | Low      | integrate | [#168](https://github.com/langerma/dumpstore/issues/168) | Move the Prometheus registry onto the OTEL meter + Prometheus exporter, keeping `/metrics` names stable. Split out of #49 |
 | Special / dedup vdevs              | Medium   | manage | [#180](https://github.com/langerma/dumpstore/issues/180) | Add special (metadata/small blocks) and dedup vdevs via Expand (mirrored by default, type-to-confirm); Replace/Offline/Online for their disks; `special_small_blocks` in the dataset drawer |
@@ -105,8 +103,8 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | Feature           | Reason                                                               |
 |-------------------|----------------------------------------------------------------------|
 | Snapshot rollback | Not aligned with project goals; too destructive for a lightweight UI |
-| Historical I/O graphs ([#61](https://github.com/langerma/dumpstore/issues/61)) | Delegated to Grafana/Prometheus via [#49](https://github.com/langerma/dumpstore/issues/49); a standard dashboard ships in `contrib/observability/` instead of in-UI charting |
-| Alerts ([#27](https://github.com/langerma/dumpstore/issues/27)) | Delegated to Grafana/Alertmanager via [#49](https://github.com/langerma/dumpstore/issues/49); standard alert rules ship in `contrib/observability/` instead of a built-in alert engine |
+| Historical I/O graphs ([#61](https://github.com/langerma/dumpstore/issues/61)) | Delegated to Grafana/Prometheus via [#49](https://github.com/langerma/dumpstore/issues/49); build dashboards on the exported `/metrics` and OTLP data instead of in-UI charting |
+| Alerts ([#27](https://github.com/langerma/dumpstore/issues/27)) | Delegated to Grafana/Alertmanager via [#49](https://github.com/langerma/dumpstore/issues/49); write alert rules against the exported metrics instead of a built-in alert engine |
 | Log viewer ([#59](https://github.com/langerma/dumpstore/issues/59)) | Delegated to Grafana/Loki via [#49](https://github.com/langerma/dumpstore/issues/49); structured logs are already journald-friendly — no in-UI log tailing |
 | File browser      | Scope creep; out of charter for a storage management tool            |
 | btrfs support     | Linux-only (breaks FreeBSD support); pool/RAID model too different from ZFS to share a UI cleanly; better served by a separate sibling project |
@@ -115,3 +113,5 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | bcachefs          | Promising (checksums, CoW, snapshots, compression) but too immature for production NAS use; revisit when ecosystem stabilises (est. 2027+) |
 | HAMMER2           | Technically excellent but DragonFly BSD only — too niche to justify the abstraction cost |
 | Multi-filesystem abstraction | Adds significant complexity for little gain; dumpstore is ZFS + Linux/FreeBSD, period |
+| lldap integration ([#62](https://github.com/langerma/dumpstore/issues/62)) | Won't fix — not pursued; local users/groups stay the only identity source |
+| UPS / NUT integration ([#52](https://github.com/langerma/dumpstore/issues/52)) | Won't fix — not pursued; UPS monitoring and shutdown stay with NUT itself |
