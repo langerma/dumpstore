@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"runtime"
 
+	"dumpstore/internal/ansible"
 	"dumpstore/internal/system"
 )
 
@@ -37,38 +38,38 @@ func (h *Handler) getServices(context.Context, struct{}) ([]system.ServiceStatus
 
 // mutateService handles POST /api/services/{service}/{action}
 // Valid actions: start, stop, restart, enable, disable.
-func (h *Handler) mutateService(w http.ResponseWriter, r *http.Request) {
-	svc := r.PathValue("service")
-	action := r.PathValue("action")
+func (h *Handler) mutateService(ctx context.Context, in serviceActionParam) (ServiceResult, error) {
+	svc, action := in.Service, in.Action
 
 	if !validServiceName.MatchString(svc) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid service name"), nil)
-		return
+		return ServiceResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid service name"))
 	}
 	if !validServiceActions[action] {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid action %q", action), nil)
-		return
+		return ServiceResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid action %q", action))
 	}
 
 	st, ok := system.LookupService(svc)
 	if !ok {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("unknown service: %s", svc), nil)
-		return
+		return ServiceResult{}, errStatus(http.StatusNotFound, fmt.Errorf("unknown service: %s", svc))
 	}
 	if !st.Installed {
-		writeError(r.Context(), w, http.StatusConflict,
-			fmt.Errorf("%s is not installed (no %s service on this host)", st.DisplayName, st.UnitName), nil)
-		return
+		return ServiceResult{}, errStatus(http.StatusConflict,
+			fmt.Errorf("%s is not installed (no %s service on this host)", st.DisplayName, st.UnitName))
 	}
 
-	out, err := h.runOp(r.Context(), servicePlaybook(), map[string]string{
+	out, err := h.runOp(ctx, servicePlaybook(), map[string]string{
 		"service_name": st.UnitName,
 		"action":       action,
 	})
-	auditLog(r.Context(), r, "service."+action, svc, err)
+	auditLog(ctx, "service."+action, svc, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ServiceResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"service": svc, "tasks": out.Steps()})
+	return ServiceResult{Service: svc, Tasks: out.Steps()}, nil
+}
+
+// ServiceResult is the result of a service action.
+type ServiceResult struct {
+	Service string             `json:"service"`
+	Tasks   []ansible.TaskStep `json:"tasks"`
 }

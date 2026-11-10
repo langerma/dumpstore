@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dumpstore/internal/ansible"
 	"dumpstore/internal/ops"
 	"dumpstore/internal/zfs"
 )
@@ -25,63 +26,86 @@ var vdevTypeMinDevices = map[string]int{
 	"draid3": 4,
 }
 
+// CreatePoolRequest is the POST /api/pools body.
+type CreatePoolRequest struct {
+	Name        string   `json:"name"`
+	VdevType    string   `json:"vdev_type" enum:"single,mirror,raidz1,raidz2,raidz3,draid,draid2,draid3"`
+	Devices     []string `json:"devices"`
+	Ashift      string   `json:"ashift,omitempty" doc:"9–16; empty for the zpool default"`
+	Compression string   `json:"compression,omitempty" doc:"Root dataset compression; empty for the default"`
+}
+
+// AddVdevRequest is the POST /api/pools/{pool}/vdevs body.
+type AddVdevRequest struct {
+	VdevType string   `json:"vdev_type" enum:"single,mirror,raidz1,raidz2,raidz3"`
+	Devices  []string `json:"devices"`
+}
+
+// AddDevicesRequest is the body for adding cache or spare devices.
+type AddDevicesRequest struct {
+	Devices []string `json:"devices"`
+}
+
+// AddLogRequest is the POST /api/pools/{pool}/log body.
+type AddLogRequest struct {
+	Devices []string `json:"devices"`
+	Mirror  bool     `json:"mirror,omitempty"`
+}
+
+// ImportPoolRequest is the POST /api/pools/import body.
+type ImportPoolRequest struct {
+	Pool  string `json:"pool"`
+	Force bool   `json:"force,omitempty"`
+}
+
+// PoolResult is the result of a write on one pool: its name and the
+// op-log steps.
+type PoolResult struct {
+	Pool  string             `json:"pool"`
+	Tasks []ansible.TaskStep `json:"tasks"`
+}
+
 // createPool handles POST /api/pools
 // Body: { "name": "tank", "vdev_type": "mirror", "devices": ["/dev/sdb", ...],
 //
 //	"ashift": "12", "compression": "zstd" }
 //
 // Creates a new pool via `zpool create`.
-func (h *Handler) createPool(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name        string   `json:"name"`
-		VdevType    string   `json:"vdev_type"`
-		Devices     []string `json:"devices"`
-		Ashift      string   `json:"ashift"`
-		Compression string   `json:"compression"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) createPool(ctx context.Context, in struct {
+	Body CreatePoolRequest `body:""`
+}) (PoolResult, error) {
+	req := in.Body
 	if !validPoolName(req.Name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
 	minDevs, ok := vdevTypeMinDevices[req.VdevType]
 	if !ok {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid vdev_type (single, mirror, raidz1-3, draid, draid2, draid3)"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid vdev_type (single, mirror, raidz1-3, draid, draid2, draid3)"))
 	}
 	if len(req.Devices) < minDevs {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("%s requires at least %d devices", req.VdevType, minDevs), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("%s requires at least %d devices", req.VdevType, minDevs))
 	}
 	for _, d := range req.Devices {
 		if !validVdevName(d) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device %q", d), nil)
-			return
+			return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid device %q", d))
 		}
 	}
 	if req.Ashift != "" {
 		if v, err := strconv.Atoi(req.Ashift); err != nil || v < 9 || v > 16 {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("ashift must be between 9 and 16"), nil)
-			return
+			return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("ashift must be between 9 and 16"))
 		}
 	}
 	if req.Compression != "" && !reCompressionValue.MatchString(req.Compression) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid compression value"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid compression value"))
 	}
 	// Refuse to overwrite an existing pool of the same name.
 	pools, err := zfs.ListPools()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return PoolResult{}, err
 	}
 	for _, p := range pools {
 		if p.Name == req.Name {
-			writeError(r.Context(), w, http.StatusConflict, fmt.Errorf("pool %q already exists", req.Name), nil)
-			return
+			return PoolResult{}, errStatus(http.StatusConflict, fmt.Errorf("pool %q already exists", req.Name))
 		}
 	}
 
@@ -99,103 +123,77 @@ func (h *Handler) createPool(w http.ResponseWriter, r *http.Request) {
 		argv = append(argv, req.VdevType)
 	}
 	argv = append(argv, req.Devices...)
-	out, err := h.runLocal(r.Context(), ops.Step{Name: "Create pool " + req.Name, Argv: argv})
-	auditLog(r.Context(), r, "pool.create", req.Name+" "+req.VdevType+" ["+strings.Join(req.Devices, " ")+"]", err)
+	out, err := h.runLocal(ctx, ops.Step{Name: "Create pool " + req.Name, Argv: argv})
+	auditLog(ctx, "pool.create", req.Name+" "+req.VdevType+" ["+strings.Join(req.Devices, " ")+"]", err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
 	h.publishDatasets()
-	writeJSON(r.Context(), w, map[string]any{"pool": req.Name, "tasks": out.Steps()})
+	return PoolResult{Pool: req.Name, Tasks: out.Steps()}, nil
 }
 
 // addDataVdev handles POST /api/pools/{pool}/vdevs
 // Body: { "vdev_type": "mirror", "devices": ["/dev/sdd", "/dev/sde"] }
 // Adding a data vdev is irreversible on most pool layouts — the UI gates this
 // behind confirm-by-typing.
-func (h *Handler) addDataVdev(w http.ResponseWriter, r *http.Request) {
-	pool := r.PathValue("pool")
-	var req struct {
-		VdevType string   `json:"vdev_type"`
-		Devices  []string `json:"devices"`
+func (h *Handler) addDataVdev(ctx context.Context, in struct {
+	poolParam
+	Body AddVdevRequest `body:""`
+}) (PoolResult, error) {
+	minDevs, ok := vdevTypeMinDevices[in.Body.VdevType]
+	if !ok || strings.HasPrefix(in.Body.VdevType, "draid") {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid vdev_type (single, mirror, raidz1-3)"))
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
+	if len(in.Body.Devices) < minDevs {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("%s requires at least %d devices", in.Body.VdevType, minDevs))
 	}
-	minDevs, ok := vdevTypeMinDevices[req.VdevType]
-	if !ok || strings.HasPrefix(req.VdevType, "draid") {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid vdev_type (single, mirror, raidz1-3)"), nil)
-		return
-	}
-	if len(req.Devices) < minDevs {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("%s requires at least %d devices", req.VdevType, minDevs), nil)
-		return
-	}
-	h.addPoolDevices(w, r, pool, "data", req.VdevType, req.Devices)
+	return h.addPoolDevices(ctx, in.Pool, "data", in.Body.VdevType, in.Body.Devices)
 }
 
 // addCacheDevice handles POST /api/pools/{pool}/cache — body { "devices": [...] }.
-func (h *Handler) addCacheDevice(w http.ResponseWriter, r *http.Request) {
-	h.addAuxDevices(w, r, "cache")
+func (h *Handler) addCacheDevice(ctx context.Context, in struct {
+	poolParam
+	Body AddDevicesRequest `body:""`
+}) (PoolResult, error) {
+	return h.addPoolDevices(ctx, in.Pool, "cache", "", in.Body.Devices)
 }
 
 // addSpareDevice handles POST /api/pools/{pool}/spare — body { "devices": [...] }.
-func (h *Handler) addSpareDevice(w http.ResponseWriter, r *http.Request) {
-	h.addAuxDevices(w, r, "spare")
+func (h *Handler) addSpareDevice(ctx context.Context, in struct {
+	poolParam
+	Body AddDevicesRequest `body:""`
+}) (PoolResult, error) {
+	return h.addPoolDevices(ctx, in.Pool, "spare", "", in.Body.Devices)
 }
 
 // addLogDevice handles POST /api/pools/{pool}/log
 // Body: { "devices": [...], "mirror": bool }
-func (h *Handler) addLogDevice(w http.ResponseWriter, r *http.Request) {
-	pool := r.PathValue("pool")
-	var req struct {
-		Devices []string `json:"devices"`
-		Mirror  bool     `json:"mirror"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) addLogDevice(ctx context.Context, in struct {
+	poolParam
+	Body AddLogRequest `body:""`
+}) (PoolResult, error) {
 	vdevType := ""
-	if req.Mirror {
-		if len(req.Devices) < 2 {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("a mirrored log requires at least 2 devices"), nil)
-			return
+	if in.Body.Mirror {
+		if len(in.Body.Devices) < 2 {
+			return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("a mirrored log requires at least 2 devices"))
 		}
 		vdevType = "mirror"
 	}
-	h.addPoolDevices(w, r, pool, "log", vdevType, req.Devices)
-}
-
-// addAuxDevices is the shared body for cache and spare additions.
-func (h *Handler) addAuxDevices(w http.ResponseWriter, r *http.Request, kind string) {
-	pool := r.PathValue("pool")
-	var req struct {
-		Devices []string `json:"devices"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
-	h.addPoolDevices(w, r, pool, kind, "", req.Devices)
+	return h.addPoolDevices(ctx, in.Pool, "log", vdevType, in.Body.Devices)
 }
 
 // addPoolDevices validates and dispatches a `zpool add`.
-func (h *Handler) addPoolDevices(w http.ResponseWriter, r *http.Request, pool, kind, vdevType string, devices []string) {
+func (h *Handler) addPoolDevices(ctx context.Context, pool, kind, vdevType string, devices []string) (PoolResult, error) {
 	if !validPoolName(pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
 	if len(devices) == 0 {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("at least one device required"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("at least one device required"))
 	}
 	for _, d := range devices {
 		if !validVdevName(d) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device %q", d), nil)
-			return
+			return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid device %q", d))
 		}
 	}
 	// Data vdevs take an optional topology keyword; cache/log/spare use the
@@ -215,41 +213,35 @@ func (h *Handler) addPoolDevices(w http.ResponseWriter, r *http.Request, pool, k
 		argv = append(argv, kind)
 	}
 	argv = append(argv, devices...)
-	out, err := h.runLocal(r.Context(), ops.Step{Name: "Add " + kind + " devices to " + pool, Argv: argv})
-	auditLog(r.Context(), r, "pool.add_"+kind, pool+" ["+strings.Join(devices, " ")+"]", err)
+	out, err := h.runLocal(ctx, ops.Step{Name: "Add " + kind + " devices to " + pool, Argv: argv})
+	auditLog(ctx, "pool.add_"+kind, pool+" ["+strings.Join(devices, " ")+"]", err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
-	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	return PoolResult{Pool: pool, Tasks: out.Steps()}, nil
 }
 
 // removePoolDevice handles DELETE /api/pools/{pool}/devices/{device...}
 // Removes a cache, log, or spare device via `zpool remove`. (zpool itself
 // decides whether the removal is legal for the given vdev.)
-func (h *Handler) removePoolDevice(w http.ResponseWriter, r *http.Request) {
-	pool := r.PathValue("pool")
-	device := r.PathValue("device")
-	if !validPoolName(pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+func (h *Handler) removePoolDevice(ctx context.Context, in poolDeviceParam) (PoolResult, error) {
+	if !validPoolName(in.Pool) {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
-	if !validVdevName(device) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid device identifier"), nil)
-		return
+	if !validVdevName(in.Device) {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid device identifier"))
 	}
-	out, err := h.runLocal(r.Context(), ops.Step{
-		Name: "Remove " + device + " from " + pool,
-		Argv: []string{"zpool", "remove", pool, device},
+	out, err := h.runLocal(ctx, ops.Step{
+		Name: "Remove " + in.Device + " from " + in.Pool,
+		Argv: []string{"zpool", "remove", in.Pool, in.Device},
 	})
-	auditLog(r.Context(), r, "pool.remove_device", pool+" "+device, err)
+	auditLog(ctx, "pool.remove_device", in.Pool+" "+in.Device, err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
-	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	return PoolResult{Pool: in.Pool, Tasks: out.Steps()}, nil
 }
 
 // getImportablePools handles GET /api/pools/importable
@@ -259,50 +251,40 @@ func (h *Handler) getImportablePools(context.Context, struct{}) ([]zfs.Importabl
 
 // importPool handles POST /api/pools/import
 // Body: { "pool": "tank", "force": false }
-func (h *Handler) importPool(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Pool  string `json:"pool"`
-		Force bool   `json:"force"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) importPool(ctx context.Context, in struct {
+	Body ImportPoolRequest `body:""`
+}) (PoolResult, error) {
+	req := in.Body
 	if !validPoolName(req.Pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
 	argv := []string{"zpool", "import"}
 	if req.Force {
 		argv = append(argv, "-f")
 	}
 	argv = append(argv, req.Pool)
-	out, err := h.runLocal(r.Context(), ops.Step{Name: "Import pool " + req.Pool, Argv: argv})
-	auditLog(r.Context(), r, "pool.import", req.Pool, err)
+	out, err := h.runLocal(ctx, ops.Step{Name: "Import pool " + req.Pool, Argv: argv})
+	auditLog(ctx, "pool.import", req.Pool, err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
 	h.publishDatasets()
-	writeJSON(r.Context(), w, map[string]any{"pool": req.Pool, "tasks": out.Steps()})
+	return PoolResult{Pool: req.Pool, Tasks: out.Steps()}, nil
 }
 
 // exportPool handles POST /api/pools/{pool}/export
 // Fails (surfaced via the op-log) when the pool is busy.
-func (h *Handler) exportPool(w http.ResponseWriter, r *http.Request) {
-	pool := r.PathValue("pool")
-	if !validPoolName(pool) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
-		return
+func (h *Handler) exportPool(ctx context.Context, in poolParam) (PoolResult, error) {
+	if !validPoolName(in.Pool) {
+		return PoolResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid pool name"))
 	}
-	out, err := h.runLocal(r.Context(), ops.Step{Name: "Export pool " + pool, Argv: []string{"zpool", "export", pool}})
-	auditLog(r.Context(), r, "pool.export", pool, err)
+	out, err := h.runLocal(ctx, ops.Step{Name: "Export pool " + in.Pool, Argv: []string{"zpool", "export", in.Pool}})
+	auditLog(ctx, "pool.export", in.Pool, err)
 	if err != nil {
-		writeOpsError(r.Context(), w, err, out)
-		return
+		return PoolResult{}, localError(err, out)
 	}
 	h.publishPools()
 	h.publishDatasets()
-	writeJSON(r.Context(), w, map[string]any{"pool": pool, "tasks": out.Steps()})
+	return PoolResult{Pool: in.Pool, Tasks: out.Steps()}, nil
 }

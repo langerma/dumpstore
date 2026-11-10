@@ -52,6 +52,168 @@
         ],
         "type": "object"
       },
+      "ACLEntryResult": {
+        "properties": {
+          "ace": {
+            "type": "string"
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "ace",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "ACLRemoveResult": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "entry": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "entry",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "ACMEIssueRequest": {
+        "properties": {
+          "cert_dir": {
+            "description": "Default: <config dir>/tls/acme",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "domain"
+        ],
+        "type": "object"
+      },
+      "AddDevicesRequest": {
+        "properties": {
+          "devices": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "type": "object"
+      },
+      "AddLogRequest": {
+        "properties": {
+          "devices": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mirror": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "type": "object"
+      },
+      "AddSambaUserRequest": {
+        "properties": {
+          "password": {
+            "description": "Samba password; must not contain newlines",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "AddVdevRequest": {
+        "properties": {
+          "devices": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "vdev_type": {
+            "enum": [
+              "single",
+              "mirror",
+              "raidz1",
+              "raidz2",
+              "raidz3"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "vdev_type",
+          "devices"
+        ],
+        "type": "object"
+      },
+      "AuthConfigResponse": {
+        "properties": {
+          "session_ttl": {
+            "description": "Go duration string, e.g. 24h0m0s",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "session_ttl"
+        ],
+        "type": "object"
+      },
       "AutoSnapshotProps": {
         "properties": {
           "com.sun:auto-snapshot": {
@@ -134,6 +296,392 @@
           "size_bytes",
           "model",
           "in_use_by"
+        ],
+        "type": "object"
+      },
+      "Capabilities": {
+        "properties": {
+          "draid": {
+            "type": "boolean"
+          },
+          "rewrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rewrite",
+          "draid"
+        ],
+        "type": "object"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "type": "object"
+      },
+      "ChangeUsernameRequest": {
+        "properties": {
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
+      "CloneSnapshotRequest": {
+        "properties": {
+          "snapshot": {
+            "description": "Snapshot to clone, e.g. tank/data@snap1",
+            "type": "string"
+          },
+          "target": {
+            "description": "New dataset, e.g. tank/data-clone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot",
+          "target"
+        ],
+        "type": "object"
+      },
+      "CloneSnapshotResult": {
+        "properties": {
+          "snapshot": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshot",
+          "target",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "CreateDatasetRequest": {
+        "properties": {
+          "atime": {
+            "type": "string"
+          },
+          "compression": {
+            "type": "string"
+          },
+          "copies": {
+            "type": "string"
+          },
+          "dedup": {
+            "type": "string"
+          },
+          "exec": {
+            "type": "string"
+          },
+          "mountpoint": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "quota": {
+            "type": "string"
+          },
+          "recordsize": {
+            "type": "string"
+          },
+          "sparse": {
+            "description": "Volumes: thin-provisioned (no reservation)",
+            "type": "boolean"
+          },
+          "sync": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "filesystem",
+              "volume"
+            ],
+            "type": "string"
+          },
+          "volblocksize": {
+            "type": "string"
+          },
+          "volsize": {
+            "description": "Required for volumes, e.g. 10G",
+            "type": "string"
+          },
+          "xattr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "CreateDatasetResult": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "CreateGroupRequest": {
+        "properties": {
+          "gid": {
+            "description": "Numeric GID; empty lets the OS choose",
+            "type": "string"
+          },
+          "groupname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "groupname"
+        ],
+        "type": "object"
+      },
+      "CreateISCSITargetRequest": {
+        "properties": {
+          "auth_mode": {
+            "enum": [
+              "none",
+              "chap"
+            ],
+            "type": "string"
+          },
+          "chap_password": {
+            "description": "Required when auth_mode is chap",
+            "type": "string"
+          },
+          "chap_user": {
+            "description": "Required when auth_mode is chap",
+            "type": "string"
+          },
+          "initiators": {
+            "description": "Allowed initiator IQNs",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "iqn": {
+            "description": "Target IQN",
+            "type": "string"
+          },
+          "portal_ip": {
+            "description": "Portal IP address (default 0.0.0.0)",
+            "type": "string"
+          },
+          "portal_port": {
+            "description": "Portal TCP port (default 3260)",
+            "type": "string"
+          },
+          "zvol": {
+            "description": "Backing zvol, e.g. tank/vol1",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zvol",
+          "iqn",
+          "auth_mode"
+        ],
+        "type": "object"
+      },
+      "CreatePoolRequest": {
+        "properties": {
+          "ashift": {
+            "description": "9–16; empty for the zpool default",
+            "type": "string"
+          },
+          "compression": {
+            "description": "Root dataset compression; empty for the default",
+            "type": "string"
+          },
+          "devices": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "vdev_type": {
+            "enum": [
+              "single",
+              "mirror",
+              "raidz1",
+              "raidz2",
+              "raidz3",
+              "draid",
+              "draid2",
+              "draid3"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "vdev_type",
+          "devices"
+        ],
+        "type": "object"
+      },
+      "CreateSnapshotRequest": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "recursive": {
+            "description": "Also snapshot all descendant datasets",
+            "type": "boolean"
+          },
+          "snapname": {
+            "description": "Snapshot label (the part after '@')",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "snapname"
+        ],
+        "type": "object"
+      },
+      "CreateSnapshotResult": {
+        "properties": {
+          "created": {
+            "description": "RFC 3339 UTC timestamp",
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshot",
+          "created",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "CreateTimeMachineShareRequest": {
+        "properties": {
+          "dataset": {
+            "description": "Dataset whose mountpoint becomes the path (used when path is empty)",
+            "type": "string"
+          },
+          "max_size": {
+            "description": "Time Machine size limit, e.g. 500G",
+            "type": "string"
+          },
+          "path": {
+            "description": "Share path; required unless dataset is given",
+            "type": "string"
+          },
+          "sharename": {
+            "type": "string"
+          },
+          "valid_users": {
+            "description": "Samba valid users list",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sharename"
+        ],
+        "type": "object"
+      },
+      "CreateUserRequest": {
+        "properties": {
+          "create_group": {
+            "description": "Create the primary group (named after the user unless group is set)",
+            "type": "boolean"
+          },
+          "group": {
+            "description": "Primary group",
+            "type": "string"
+          },
+          "groups": {
+            "description": "Comma-separated supplementary groups",
+            "type": "string"
+          },
+          "password": {
+            "description": "Plaintext password; must not contain newlines",
+            "type": "string"
+          },
+          "shell": {
+            "description": "Login shell (default /bin/bash)",
+            "type": "string"
+          },
+          "smb_user": {
+            "description": "Also register the user with Samba",
+            "type": "boolean"
+          },
+          "uid": {
+            "description": "Numeric UID; empty lets the OS choose",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
         ],
         "type": "object"
       },
@@ -238,6 +786,29 @@
         ],
         "type": "object"
       },
+      "DatasetOwnership": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "mountpoint": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "mountpoint",
+          "owner",
+          "group"
+        ],
+        "type": "object"
+      },
       "DatasetProp": {
         "properties": {
           "source": {
@@ -250,6 +821,122 @@
         "required": [
           "value",
           "source"
+        ],
+        "type": "object"
+      },
+      "DatasetResult": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "DatasetTaskResult": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "DeleteSnapshotsRequest": {
+        "properties": {
+          "snapshots": {
+            "description": "1–100 snapshot names (dataset@label)",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshots"
+        ],
+        "type": "object"
+      },
+      "DeleteSnapshotsResult": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshots",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "DeviceRequest": {
+        "properties": {
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      },
+      "DiffEntry": {
+        "properties": {
+          "change": {
+            "type": "string"
+          },
+          "new_path": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "change",
+          "path"
         ],
         "type": "object"
       },
@@ -339,6 +1026,21 @@
         ],
         "type": "object"
       },
+      "GenCertRequest": {
+        "properties": {
+          "cert_dir": {
+            "description": "Default: <config dir>/tls",
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname"
+        ],
+        "type": "object"
+      },
       "Group": {
         "properties": {
           "gid": {
@@ -361,6 +1063,27 @@
           "name",
           "gid",
           "members"
+        ],
+        "type": "object"
+      },
+      "GroupResult": {
+        "properties": {
+          "groupname": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "groupname",
+          "tasks"
         ],
         "type": "object"
       },
@@ -388,6 +1111,62 @@
           "write_ops",
           "read_bw",
           "write_bw"
+        ],
+        "type": "object"
+      },
+      "ISCSIInitResult": {
+        "properties": {
+          "imported": {
+            "description": "Targets imported from the existing ctl.conf",
+            "type": "integer"
+          },
+          "initialized": {
+            "type": "boolean"
+          },
+          "skipped": {
+            "description": "ctl.conf entries dumpstore cannot represent (kept in the backup)",
+            "type": "integer"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialized",
+          "imported",
+          "skipped",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "ISCSIStatus": {
+        "properties": {
+          "backend": {
+            "description": "linux (targetcli), freebsd (ctld), or empty when no backend is installed",
+            "type": "string"
+          },
+          "conf_exists": {
+            "type": "boolean"
+          },
+          "conf_path": {
+            "description": "ctl.conf path (FreeBSD); empty on Linux",
+            "type": "string"
+          },
+          "initialized": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "backend",
+          "initialized",
+          "conf_path",
+          "conf_exists"
         ],
         "type": "object"
       },
@@ -435,6 +1214,45 @@
           "portals",
           "auth_mode",
           "initiators"
+        ],
+        "type": "object"
+      },
+      "ISCSITargetResult": {
+        "properties": {
+          "iqn": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "zvol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "iqn",
+          "zvol",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "ImportPoolRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "pool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pool"
         ],
         "type": "object"
       },
@@ -523,6 +1341,56 @@
           "username",
           "password"
         ],
+        "type": "object"
+      },
+      "ModifyGroupRequest": {
+        "properties": {
+          "gid": {
+            "description": "New numeric GID",
+            "type": "string"
+          },
+          "members": {
+            "description": "Comma-separated member list; replaces the current members (empty clears them)",
+            "type": "string"
+          },
+          "new_name": {
+            "description": "Rename the group",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModifyUserRequest": {
+        "properties": {
+          "group": {
+            "description": "Primary group",
+            "type": "string"
+          },
+          "home": {
+            "description": "Home directory",
+            "type": "string"
+          },
+          "move_home": {
+            "description": "Move the contents of the old home directory to the new one",
+            "type": "boolean"
+          },
+          "password": {
+            "description": "Plaintext password; must not contain newlines",
+            "type": "string"
+          },
+          "shell": {
+            "description": "Login shell",
+            "type": "string"
+          },
+          "smb_sync": {
+            "description": "Also update the user's Samba password",
+            "type": "boolean"
+          },
+          "user_groups": {
+            "description": "Comma-separated supplementary groups",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "NetworkInterface": {
@@ -641,6 +1509,24 @@
         ],
         "type": "object"
       },
+      "Option": {
+        "properties": {
+          "default": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "type": "object"
+      },
       "Pool": {
         "properties": {
           "alloc": {
@@ -723,6 +1609,70 @@
         ],
         "type": "object"
       },
+      "PoolResult": {
+        "properties": {
+          "pool": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "pool",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "Property": {
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "create": {
+            "type": "boolean"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "input_type": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "input_type",
+          "editable",
+          "create",
+          "applies_to"
+        ],
+        "type": "object"
+      },
       "RefConflict": {
         "properties": {
           "dataset": {
@@ -749,6 +1699,62 @@
           "dataset",
           "name",
           "describe"
+        ],
+        "type": "object"
+      },
+      "RenameDatasetRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "new_name": {
+            "description": "New name; must share the parent dataset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "new_name"
+        ],
+        "type": "object"
+      },
+      "RenameDatasetResult": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "new_name": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "new_name",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "ReplaceDeviceRequest": {
+        "properties": {
+          "new_device": {
+            "type": "string"
+          },
+          "old_device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "old_device",
+          "new_device"
         ],
         "type": "object"
       },
@@ -780,6 +1786,27 @@
           "snapshot",
           "started_at",
           "status"
+        ],
+        "type": "object"
+      },
+      "ReplicationRunStarted": {
+        "properties": {
+          "job_id": {
+            "description": "Background job carrying the transfer; poll GET /api/jobs/{id}",
+            "type": "string"
+          },
+          "snapshot": {
+            "description": "Snapshot taken for this run",
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "job_id",
+          "snapshot"
         ],
         "type": "object"
       },
@@ -915,6 +1942,241 @@
         ],
         "type": "object"
       },
+      "RewriteRequest": {
+        "properties": {
+          "recursive": {
+            "description": "zfs rewrite -r",
+            "type": "boolean"
+          },
+          "skip_clone_shared": {
+            "description": "zfs rewrite -C: skip blocks shared with clones",
+            "type": "boolean"
+          },
+          "skip_snapshot_shared": {
+            "description": "zfs rewrite -S: skip blocks shared with snapshots",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "RewriteResult": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "mountpoint": {
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "type",
+          "started_at",
+          "dataset",
+          "mountpoint"
+        ],
+        "type": "object"
+      },
+      "SMBHomes": {
+        "properties": {
+          "browseable": {
+            "type": "string"
+          },
+          "create_mask": {
+            "type": "string"
+          },
+          "directory_mask": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "SMBInitResult": {
+        "properties": {
+          "initialized": {
+            "type": "boolean"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialized",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "SMBShareResult": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "sharename": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "sharename",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "SMBStatus": {
+        "properties": {
+          "conf_mtime": {
+            "description": "smb.conf modification time (RFC 3339, UTC); absent if the file does not exist",
+            "type": "string"
+          },
+          "conf_path": {
+            "type": "string"
+          },
+          "initialized": {
+            "type": "boolean"
+          },
+          "os": {
+            "type": "string"
+          },
+          "wsdd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WSDDStatus"
+              }
+            ],
+            "description": "Absent if smb.conf cannot be parsed"
+          }
+        },
+        "required": [
+          "initialized",
+          "conf_path",
+          "os"
+        ],
+        "type": "object"
+      },
+      "SSHKeyList": {
+        "properties": {
+          "keys": {
+            "description": "Lines of the user's ~/.ssh/authorized_keys",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "SSHKeyRequest": {
+        "properties": {
+          "key": {
+            "description": "Public key line, e.g. ssh-ed25519 AAAA... comment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "SambaUserList": {
+        "properties": {
+          "available": {
+            "description": "false if Samba is not available; users is then empty",
+            "type": "boolean"
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "users"
+        ],
+        "type": "object"
+      },
+      "SchemaInfo": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/Capabilities"
+          },
+          "dataset_properties": {
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "os": {
+            "type": "string"
+          },
+          "user_shells": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "os",
+          "dataset_properties",
+          "user_shells",
+          "capabilities"
+        ],
+        "type": "object"
+      },
       "ScrubSchedule": {
         "properties": {
           "pool": {
@@ -950,6 +2212,94 @@
         ],
         "type": "object"
       },
+      "ScrubScheduleRequest": {
+        "properties": {
+          "threshold_days": {
+            "description": "FreeBSD periodic(8): scrub when the last scrub is older than this many days (default 35). Ignored on Linux.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SendSnapshotRequest": {
+        "properties": {
+          "incremental_from": {
+            "description": "Earlier snapshot for an incremental send",
+            "type": "string"
+          },
+          "raw": {
+            "description": "zfs send --raw (keeps encrypted data encrypted)",
+            "type": "boolean"
+          },
+          "remote": {
+            "description": "user@host to receive over SSH; omit for a local receive",
+            "type": "string"
+          },
+          "snapshot": {
+            "description": "Snapshot to send, e.g. tank/data@snap1",
+            "type": "string"
+          },
+          "target": {
+            "description": "Receiving dataset, e.g. backup/data",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot",
+          "target"
+        ],
+        "type": "object"
+      },
+      "SendSnapshotResult": {
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "target": {
+            "description": "Receiving dataset, prefixed with remote: for SSH sends",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "type",
+          "started_at",
+          "snapshot",
+          "target"
+        ],
+        "type": "object"
+      },
+      "ServiceResult": {
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "tasks"
+        ],
+        "type": "object"
+      },
       "ServiceStatus": {
         "properties": {
           "active": {
@@ -982,6 +2332,155 @@
           "enabled",
           "state",
           "installed"
+        ],
+        "type": "object"
+      },
+      "SetACLEntryRequest": {
+        "properties": {
+          "ace": {
+            "description": "POSIX (user:alice:rwx) or NFSv4 (A::alice@localdomain:rwaDxtTnNcCoy) entry",
+            "type": "string"
+          },
+          "recursive": {
+            "description": "Apply to all files below the mountpoint",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ace"
+        ],
+        "type": "object"
+      },
+      "SetOwnershipRequest": {
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "recursive": {
+            "description": "chown -R",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "owner",
+          "group"
+        ],
+        "type": "object"
+      },
+      "SetSMBHomesRequest": {
+        "properties": {
+          "browseable": {
+            "description": "Default no",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "type": "string"
+          },
+          "create_mask": {
+            "description": "3- or 4-digit octal (default 0644)",
+            "type": "string"
+          },
+          "dataset": {
+            "description": "Dataset whose mountpoint + /%U becomes the path (used when path is empty)",
+            "type": "string"
+          },
+          "directory_mask": {
+            "description": "3- or 4-digit octal (default 0755)",
+            "type": "string"
+          },
+          "path": {
+            "description": "Share path; required unless dataset is given",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "Default no",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SetSMBHomesResult": {
+        "properties": {
+          "browseable": {
+            "type": "string"
+          },
+          "create_mask": {
+            "type": "string"
+          },
+          "directory_mask": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "path",
+          "browseable",
+          "read_only",
+          "create_mask",
+          "directory_mask",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "SetSMBShareRequest": {
+        "properties": {
+          "sharename": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sharename"
+        ],
+        "type": "object"
+      },
+      "SetUserQuotaRequest": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "user",
+              "group"
+            ],
+            "type": "string"
+          },
+          "principal": {
+            "description": "User or group name",
+            "type": "string"
+          },
+          "quota": {
+            "description": "Size like 10G, or 'none' to clear",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "principal",
+          "quota"
         ],
         "type": "object"
       },
@@ -1043,6 +2542,58 @@
         ],
         "type": "object"
       },
+      "SnapshotDiffResult": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "description": "Empty when diffing against the live filesystem",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "True when the diff was cut at 10000 entries",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "entries",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "SnapshotResult": {
+        "properties": {
+          "snapshot": {
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "snapshot",
+          "tasks"
+        ],
+        "type": "object"
+      },
       "SoftwareTool": {
         "properties": {
           "feature": {
@@ -1062,6 +2613,27 @@
           "name",
           "version",
           "required"
+        ],
+        "type": "object"
+      },
+      "SpaceRow": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quota": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "used": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "used",
+          "quota"
         ],
         "type": "object"
       },
@@ -1154,6 +2726,21 @@
         ],
         "type": "object"
       },
+      "TLSConfigRequest": {
+        "properties": {
+          "cert_path": {
+            "type": "string"
+          },
+          "key_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cert_path",
+          "key_path"
+        ],
+        "type": "object"
+      },
       "TLSStatus": {
         "properties": {
           "acme_domain": {
@@ -1192,6 +2779,23 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "TaskResult": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "tasks"
         ],
         "type": "object"
       },
@@ -1236,6 +2840,34 @@
         ],
         "type": "object"
       },
+      "TimeMachineSharesResult": {
+        "properties": {
+          "shares": {
+            "description": "All Time Machine shares after the change",
+            "items": {
+              "$ref": "#/components/schemas/TimeMachineShare"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "shares",
+          "tasks"
+        ],
+        "type": "object"
+      },
       "User": {
         "properties": {
           "gid": {
@@ -1260,6 +2892,56 @@
           "gid",
           "home",
           "shell"
+        ],
+        "type": "object"
+      },
+      "UserResult": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "UserSpaceResult": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "group"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SpaceRow"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "kind",
+          "rows"
         ],
         "type": "object"
       },
@@ -1313,6 +2995,69 @@
           "write",
           "cksum",
           "depth"
+        ],
+        "type": "object"
+      },
+      "VersionInfo": {
+        "properties": {
+          "version": {
+            "description": "OpenZFS version; empty when it cannot be determined",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "WSDDStatus": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "conf_path": {
+            "description": "Options file dumpstore renders; empty on FreeBSD and for units that do not read $WSDD_PARAMS",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "install_hint": {
+            "description": "Package-manager command to install wsdd (only when not installed)",
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "manageable": {
+            "type": "boolean"
+          },
+          "managed": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "workgroup": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed"
+        ],
+        "type": "object"
+      },
+      "WhoamiResponse": {
+        "properties": {
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user"
         ],
         "type": "object"
       }
@@ -1396,20 +3141,24 @@
             "description": "ACL entry to remove, in the form returned by GET /api/acl/{dataset}",
             "in": "query",
             "name": "entry",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "ACL entry to remove, in the form returned by GET /api/acl/{dataset}",
               "type": "string"
             }
           },
           {
-            "description": "Apply to all files below the mountpoint",
+            "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
             "in": "query",
             "name": "recursive",
             "required": false,
             "schema": {
-              "description": "Apply to all files below the mountpoint",
-              "type": "boolean"
+              "description": "Apply to all files below the mountpoint (only the exact value true enables it)",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
             }
           },
           {
@@ -1420,7 +3169,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ACLRemoveResult"
+                }
               }
             },
             "description": "OK",
@@ -1437,6 +3188,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -1485,6 +3239,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
             "$ref": "#/components/responses/Error"
           },
@@ -1520,8 +3277,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SetACLEntryRequest"
               }
             }
           },
@@ -1531,7 +3287,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ACLEntryResult"
+                }
               }
             },
             "description": "OK",
@@ -1548,6 +3306,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -1567,6 +3328,7 @@
     },
     "/api/auth/change-password": {
       "post": {
+        "description": "401 when the current password is wrong.",
         "operationId": "authSetPassword",
         "parameters": [
           {
@@ -1577,8 +3339,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ChangePasswordRequest"
               }
             }
           },
@@ -1588,7 +3349,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -1634,8 +3397,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ChangeUsernameRequest"
               }
             }
           },
@@ -1645,7 +3407,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -1671,7 +3435,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Change the admin username",
+        "summary": "Change the admin username (ends all sessions)",
         "tags": [
           "auth"
         ],
@@ -1687,13 +3451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": [
-                    "object",
-                    "null"
-                  ]
+                  "$ref": "#/components/schemas/AuthConfigResponse"
                 }
               }
             },
@@ -1761,7 +3519,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -1836,7 +3596,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -1896,6 +3658,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
             "$ref": "#/components/responses/Error"
           },
@@ -1944,7 +3709,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResult"
+                }
               }
             },
             "description": "OK",
@@ -1961,6 +3728,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -1997,10 +3767,15 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetOwnership"
+                }
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           },
           "401": {
             "$ref": "#/components/responses/Error"
@@ -2037,8 +3812,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SetOwnershipRequest"
               }
             }
           },
@@ -2048,7 +3822,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetTaskResult"
+                }
               }
             },
             "description": "OK",
@@ -2065,6 +3841,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2113,6 +3892,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           },
           "401": {
             "$ref": "#/components/responses/Error"
@@ -2174,8 +3956,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateDatasetRequest"
               }
             }
           },
@@ -2185,7 +3966,9 @@
           "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CreateDatasetResult"
+                }
               }
             },
             "description": "Created",
@@ -2231,8 +4014,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/RenameDatasetRequest"
               }
             }
           },
@@ -2242,7 +4024,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RenameDatasetResult"
+                }
               }
             },
             "description": "OK",
@@ -2259,6 +4043,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2292,13 +4079,17 @@
             }
           },
           {
-            "description": "Also destroy descendant datasets and snapshots",
+            "description": "Also destroy descendant datasets and snapshots (only the exact value true enables it)",
             "in": "query",
             "name": "recursive",
             "required": false,
             "schema": {
-              "description": "Also destroy descendant datasets and snapshots",
-              "type": "boolean"
+              "description": "Also destroy descendant datasets and snapshots (only the exact value true enables it)",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
             }
           },
           {
@@ -2309,7 +4100,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResult"
+                }
               }
             },
             "description": "OK",
@@ -2328,6 +4121,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -2343,6 +4139,7 @@
         "x-fern-sdk-method-name": "delete"
       },
       "patch": {
+        "description": "A mountpoint change is refused with 409 while shares reference the moving paths (#183).",
         "operationId": "datasetsUpdate",
         "parameters": [
           {
@@ -2376,7 +4173,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResult"
+                }
               }
             },
             "description": "OK",
@@ -2393,6 +4192,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2454,7 +4256,7 @@
             "description": "Comma-separated topic names",
             "in": "query",
             "name": "topics",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "Comma-separated topic names",
               "type": "string"
@@ -2471,6 +4273,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           },
           "401": {
             "$ref": "#/components/responses/Error"
@@ -2533,21 +4338,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateGroupRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResult"
+                }
               }
             },
-            "description": "OK",
+            "description": "Created",
             "headers": {
               "X-Operation-ID": {
                 "description": "ID of this operation.",
@@ -2600,7 +4406,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResult"
+                }
               }
             },
             "description": "OK",
@@ -2617,6 +4425,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2654,8 +4468,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ModifyGroupRequest"
               }
             }
           },
@@ -2665,7 +4478,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResult"
+                }
               }
             },
             "description": "OK",
@@ -2682,6 +4497,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2736,13 +4557,14 @@
     },
     "/api/iscsi-targets": {
       "delete": {
+        "description": "On FreeBSD, refused with 409 until POST /api/iscsi/init has run; 404 when no target matches iqn and zvol.",
         "operationId": "iscsiTargetsDelete",
         "parameters": [
           {
             "description": "Target IQN",
             "in": "query",
             "name": "iqn",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "Target IQN",
               "type": "string"
@@ -2752,7 +4574,7 @@
             "description": "Backing zvol, e.g. tank/vol1",
             "in": "query",
             "name": "zvol",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "Backing zvol, e.g. tank/vol1",
               "type": "string"
@@ -2766,7 +4588,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ISCSITargetResult"
+                }
               }
             },
             "description": "OK",
@@ -2783,6 +4607,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -2833,6 +4660,7 @@
         "x-fern-sdk-method-name": "list"
       },
       "post": {
+        "description": "On FreeBSD, refused with 409 until POST /api/iscsi/init has run, or when the IQN or zvol is already exported.",
         "operationId": "iscsiTargetsCreate",
         "parameters": [
           {
@@ -2843,8 +4671,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateISCSITargetRequest"
               }
             }
           },
@@ -2854,7 +4681,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ISCSITargetResult"
+                }
               }
             },
             "description": "OK",
@@ -2900,7 +4729,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ISCSIInitResult"
+                }
               }
             },
             "description": "OK",
@@ -2941,7 +4772,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ISCSIStatus"
+                }
               }
             },
             "description": "OK"
@@ -2998,6 +4831,7 @@
     },
     "/api/jobs/{id}": {
       "delete": {
+        "description": "400 also covers an unknown or still running job.",
         "operationId": "jobsDelete",
         "parameters": [
           {
@@ -3070,6 +4904,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "default": {
             "$ref": "#/components/responses/Error"
           }
@@ -3084,6 +4921,7 @@
     },
     "/api/jobs/{id}/cancel": {
       "post": {
+        "description": "400 also covers an unknown or already finished job.",
         "operationId": "jobsCancel",
         "parameters": [
           {
@@ -3204,7 +5042,13 @@
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
@@ -3264,8 +5108,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreatePoolRequest"
               }
             }
           },
@@ -3275,7 +5118,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3321,8 +5166,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ImportPoolRequest"
               }
             }
           },
@@ -3332,7 +5176,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3423,8 +5269,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/AddDevicesRequest"
               }
             }
           },
@@ -3434,7 +5279,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3500,7 +5347,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3556,7 +5405,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3612,8 +5463,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/AddLogRequest"
               }
             }
           },
@@ -3623,7 +5473,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3679,8 +5531,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/DeviceRequest"
               }
             }
           },
@@ -3690,7 +5541,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3746,8 +5599,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/DeviceRequest"
               }
             }
           },
@@ -3757,7 +5609,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3813,8 +5667,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ReplaceDeviceRequest"
               }
             }
           },
@@ -3824,7 +5677,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3880,8 +5735,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/AddDevicesRequest"
               }
             }
           },
@@ -3891,7 +5745,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -3947,8 +5803,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/AddVdevRequest"
               }
             }
           },
@@ -3958,7 +5813,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -4152,6 +6009,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4216,6 +6076,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4261,7 +6124,13 @@
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
@@ -4296,7 +6165,9 @@
           "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ReplicationRunStarted"
+                }
               }
             },
             "description": "Accepted",
@@ -4313,6 +6184,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -4352,8 +6226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/RewriteRequest"
               }
             }
           },
@@ -4363,7 +6236,9 @@
           "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RewriteResult"
+                }
               }
             },
             "description": "Accepted",
@@ -4380,6 +6255,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -4404,7 +6282,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaInfo"
+                }
               }
             },
             "description": "OK"
@@ -4446,7 +6326,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -4500,18 +6382,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ScrubScheduleRequest"
               }
             }
           },
-          "required": true
+          "required": false
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -4596,7 +6479,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -4650,7 +6535,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PoolResult"
+                }
               }
             },
             "description": "OK",
@@ -4721,6 +6608,7 @@
     },
     "/api/services/{service}/{action}": {
       "post": {
+        "description": "409 when the service is not installed on this host.",
         "operationId": "servicesControl",
         "parameters": [
           {
@@ -4756,7 +6644,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceResult"
+                }
               }
             },
             "description": "OK",
@@ -4773,6 +6663,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -4837,7 +6730,7 @@
             "description": "Share name",
             "in": "query",
             "name": "name",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "Share name",
               "type": "string"
@@ -4851,7 +6744,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SMBShareResult"
+                }
               }
             },
             "description": "OK",
@@ -4905,8 +6800,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SetSMBShareRequest"
               }
             }
           },
@@ -4916,7 +6810,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SMBShareResult"
+                }
               }
             },
             "description": "OK",
@@ -4973,6 +6869,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
           "default": {
             "$ref": "#/components/responses/Error"
           }
@@ -4992,7 +6891,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SambaUserList"
+                }
               }
             },
             "description": "OK"
@@ -5034,7 +6935,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
               }
             },
             "description": "OK",
@@ -5088,8 +6991,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/AddSambaUserRequest"
               }
             }
           },
@@ -5099,7 +7001,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
               }
             },
             "description": "OK",
@@ -5145,7 +7049,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -5184,7 +7090,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SMBHomes"
+                }
               }
             },
             "description": "OK"
@@ -5214,8 +7122,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SetSMBHomesRequest"
               }
             }
           },
@@ -5225,7 +7132,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SetSMBHomesResult"
+                }
               }
             },
             "description": "OK",
@@ -5271,7 +7180,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SMBInitResult"
+                }
               }
             },
             "description": "OK",
@@ -5293,6 +7204,9 @@
           "409": {
             "$ref": "#/components/responses/Error"
           },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
           "default": {
             "$ref": "#/components/responses/Error"
           }
@@ -5312,7 +7226,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SMBStatus"
+                }
               }
             },
             "description": "OK"
@@ -5377,8 +7293,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateTimeMachineShareRequest"
               }
             }
           },
@@ -5388,7 +7303,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TimeMachineSharesResult"
+                }
               }
             },
             "description": "OK",
@@ -5444,7 +7361,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -5490,7 +7409,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -5569,8 +7490,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateSnapshotRequest"
               }
             }
           },
@@ -5580,7 +7500,9 @@
           "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSnapshotResult"
+                }
               }
             },
             "description": "Created",
@@ -5597,6 +7519,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -5626,8 +7551,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CloneSnapshotRequest"
               }
             }
           },
@@ -5637,7 +7561,9 @@
           "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CloneSnapshotResult"
+                }
               }
             },
             "description": "Created",
@@ -5683,8 +7609,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/DeleteSnapshotsRequest"
               }
             }
           },
@@ -5694,7 +7619,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSnapshotsResult"
+                }
               }
             },
             "description": "OK",
@@ -5736,7 +7663,7 @@
             "description": "Snapshot to diff from, e.g. tank/data@before",
             "in": "query",
             "name": "from",
-            "required": false,
+            "required": true,
             "schema": {
               "description": "Snapshot to diff from, e.g. tank/data@before",
               "type": "string"
@@ -5757,12 +7684,20 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotDiffResult"
+                }
               }
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
@@ -5789,8 +7724,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SendSnapshotRequest"
               }
             }
           },
@@ -5800,7 +7734,9 @@
           "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SendSnapshotResult"
+                }
               }
             },
             "description": "Accepted",
@@ -5817,6 +7753,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -5849,13 +7788,17 @@
             }
           },
           {
-            "description": "Also destroy same-named snapshots of descendant datasets",
+            "description": "Also destroy same-named snapshots of descendant datasets (only the exact value true enables it)",
             "in": "query",
             "name": "recursive",
             "required": false,
             "schema": {
-              "description": "Also destroy same-named snapshots of descendant datasets",
-              "type": "boolean"
+              "description": "Also destroy same-named snapshots of descendant datasets (only the exact value true enables it)",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
             }
           },
           {
@@ -5866,7 +7809,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotResult"
+                }
               }
             },
             "description": "OK",
@@ -5883,6 +7828,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -5941,8 +7889,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ACMEIssueRequest"
               }
             }
           },
@@ -5952,7 +7899,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -5998,7 +7947,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6044,8 +7995,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/TLSConfigRequest"
               }
             }
           },
@@ -6055,7 +8005,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6081,7 +8033,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Update the TLS configuration",
+        "summary": "Use an existing certificate and key",
         "tags": [
           "tls"
         ],
@@ -6101,8 +8053,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/GenCertRequest"
               }
             }
           },
@@ -6112,7 +8063,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6197,8 +8150,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SetUserQuotaRequest"
               }
             }
           },
@@ -6208,7 +8160,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetTaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6225,6 +8179,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -6287,8 +8244,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/CreateUserRequest"
               }
             }
           },
@@ -6298,7 +8254,9 @@
           "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
               }
             },
             "description": "Created",
@@ -6354,7 +8312,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
               }
             },
             "description": "OK",
@@ -6371,6 +8331,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -6408,8 +8374,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/ModifyUserRequest"
               }
             }
           },
@@ -6419,7 +8384,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
               }
             },
             "description": "OK",
@@ -6436,6 +8403,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -6475,8 +8448,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SSHKeyRequest"
               }
             }
           },
@@ -6486,7 +8458,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6503,6 +8477,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -6537,12 +8517,20 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SSHKeyList"
+                }
               }
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
@@ -6577,8 +8565,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": {},
-                "type": "object"
+                "$ref": "#/components/schemas/SSHKeyRequest"
               }
             }
           },
@@ -6588,7 +8575,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResult"
+                }
               }
             },
             "description": "OK",
@@ -6605,6 +8594,12 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -6655,12 +8650,20 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserSpaceResult"
+                }
               }
             },
             "description": "OK"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "default": {
@@ -6716,7 +8719,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
               }
             },
             "description": "OK"
@@ -6728,7 +8733,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "dumpstore version",
+        "summary": "OpenZFS version",
         "tags": [
           "system"
         ],
@@ -6744,13 +8749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": [
-                    "object",
-                    "null"
-                  ]
+                  "$ref": "#/components/schemas/WhoamiResponse"
                 }
               }
             },

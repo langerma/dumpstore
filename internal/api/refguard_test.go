@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -343,13 +344,17 @@ func TestFindConflictsStableOrder(t *testing.T) {
 	}
 }
 
-func TestWriteConflictsText(t *testing.T) {
+func TestConflictErrorText(t *testing.T) {
 	c := []refConflict{
 		us("data", "tank/data", "/tank/data"),
 		{Kind: kindReplSource, Dataset: "tank/data", Name: "nightly", ID: "r1"},
 	}
+	// Serve through the typed adapter so the 409 body is checked as sent.
+	fn := func(context.Context, struct{}) (struct{}, error) {
+		return struct{}{}, conflictError(refDestroy, "tank/data", c)
+	}
 	w := httptest.NewRecorder()
-	writeConflicts(t.Context(), w, refDestroy, "tank/data", c)
+	typed(fn, 0).ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/datasets/tank%2Fdata", nil))
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status %d", w.Code)
 	}

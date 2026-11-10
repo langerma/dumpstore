@@ -95,9 +95,15 @@ Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) 
 
 Routes are not registered on the `ServeMux` directly. Each one goes through `internal/apispec.Registry.Handle` with its metadata: SDK group and method (`x-fern-sdk-group-name` / `x-fern-sdk-method-name`, from which `operationId` and the docs tag are derived), summary, parameter, request and response types, success status, and whether it is public or internal (#181). `Registry.Spec()` builds the OpenAPI 3.1 document from exactly these registrations, reflecting JSON schemas from the Go types, so the spec cannot list a route the server doesn't serve or miss one it does.
 
-New handlers should use the typed adapter `handle(reg, route(...), fn)` with `fn func(ctx, Params) (Resp, error)`: the adapter binds `path:"x"` / `query:"x"` fields and an optional `body:""` field, writes the response or the error (`errStatus(code, err)` for 4xx, anything else is a 500), and the spec takes its parameter, request and response schemas from `Params` and `Resp`, so they can't disagree with the code. Routes still on plain handlers (`raw(...)`) declare their types with route options.
+Every JSON route uses the typed adapter `handle(reg, route(...), fn)` with `fn func(ctx, In) (Out, error)` (#181 Phase 2):
+- **Binding.** The adapter binds `path:"x"` / `query:"x"` fields, which may come from embedded shared param structs, and one `body:""` field (`body:"optional"` accepts an empty body).
+- **Responses.** It writes the route's success status (201/202, or 204 with no body) and the client address the audit log needs.
+- **Errors:** `errStatus(code, err)` for 4xx; `playbookError` / `localError` for a failed write (500 with its op-log steps); `conflictError` for the reference guard's 409. Anything else is a 500.
+- **Spec types.** The spec takes its parameter, request and response schemas from `In` and `Out`, so they can't disagree with the code.
+- **Error statuses.** Each route lists its 4xx statuses with `fails(...)`.
+- **Exceptions.** Only non-JSON or streaming routes (SSE, `/metrics`, the spec itself, the HTML login flow) are plain handlers; `TestNoUntypedRoutes` keeps it that way.
 
-The committed `api/openapi.json` is regenerated with `make openapi`; `TestOpenAPISpec` fails while it is stale, `TestSpecPathsResolve` requests every documented path with percent-encoded names and checks it reaches the same mux pattern, and CI lints the file with Redocly (`redocly.yaml`, `recommended-strict`). The integration suite validates live GET responses against the published schemas.
+The committed `api/openapi.json` is regenerated with `make openapi`; `TestOpenAPISpec` fails while it is stale, `TestSpecPathsResolve` requests every documented path with percent-encoded names and checks it reaches the same mux pattern, and CI lints the file with Redocly (`redocly.yaml`, `recommended-strict`). The integration suite records every JSON response it receives. After the run it validates each one against the served spec's schema for that operation and status, and fails on any 4xx status the operation doesn't list. This covers writes and error responses too.
 
 ## Write operation request flow
 

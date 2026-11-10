@@ -9,9 +9,9 @@ import (
 func handleAuthConfig(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"username":    cfg.Username,
-			"session_ttl": cfg.SessionTTL.String(),
+		_ = json.NewEncoder(w).Encode(AuthConfigResponse{
+			Username:   cfg.Username,
+			SessionTTL: cfg.SessionTTL.String(),
 		})
 	}
 }

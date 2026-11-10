@@ -48,14 +48,18 @@ type Route struct {
 	Description string
 
 	// Params is a struct type whose fields carry path:"x" / query:"x" tags
-	// (plus optional doc:"…"). Every {x} in Path must be declared.
+	// (plus optional doc:"…", and required:"true" for a mandatory query
+	// parameter). Every {x} in Path must be declared.
 	Params reflect.Type
 	// Request is the request body type (nil: no body).
 	Request reflect.Type
+	// RequestOptional marks the body as optional (requestBody.required: false).
+	RequestOptional bool
 	// Response is the success body type (nil: undocumented — see Untyped).
 	Response reflect.Type
 
 	Status       int    // success status; 0 means 200
+	Errors       []int  // documented 4xx statuses (500 is the default response)
 	RequestType  string // request content type; "" means JSON
 	ResponseType string // success content type; "" means JSON
 
@@ -182,7 +186,7 @@ func (r Route) validate() error {
 		if r.Params.Kind() != reflect.Struct {
 			return fmt.Errorf("params must be a struct, got %s", r.Params)
 		}
-		for f := range r.Params.Fields() {
+		for _, f := range reflect.VisibleFields(r.Params) {
 			if p := f.Tag.Get("path"); p != "" {
 				got[p] = true
 			}
@@ -317,7 +321,10 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 
 	var params []any
 	if r.Params != nil {
-		for sf := range r.Params.Fields() {
+		for _, sf := range reflect.VisibleFields(r.Params) {
+			if sf.Anonymous {
+				continue
+			}
 			in, name := "path", sf.Tag.Get("path")
 			if name == "" {
 				in, name = "query", sf.Tag.Get("query")
@@ -329,7 +336,10 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 			if err != nil {
 				return nil, fmt.Errorf("param %s: %w", name, err)
 			}
-			p := Schema{"name": name, "in": in, "required": in == "path", "schema": nonNull(annotate(s, sf.Tag))}
+			// Path parameters are always required; a query parameter only
+			// with required:"true".
+			required := in == "path" || sf.Tag.Get("required") == "true"
+			p := Schema{"name": name, "in": in, "required": required, "schema": nonNull(annotate(s, sf.Tag))}
 			if d := sf.Tag.Get("doc"); d != "" {
 				p["description"] = d
 			}
@@ -349,7 +359,7 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 			return nil, fmt.Errorf("request: %w", err)
 		}
 		op["requestBody"] = Schema{
-			"required": true,
+			"required": !r.RequestOptional,
 			"content":  Schema{orDefault(r.RequestType, JSON): Schema{"schema": nonNull(s)}},
 		}
 	}
@@ -398,6 +408,12 @@ func (reg *Registry) operation(g *generator, r Route) (Schema, error) {
 	if r.isWrite() {
 		responses["400"] = errRef
 		responses["409"] = errRef
+	}
+	for _, code := range r.Errors {
+		if code < 400 || code >= 500 {
+			return nil, fmt.Errorf("Errors lists %d; only 4xx statuses are documented explicitly", code)
+		}
+		responses[fmt.Sprint(code)] = errRef
 	}
 	op["responses"] = responses
 	return op, nil

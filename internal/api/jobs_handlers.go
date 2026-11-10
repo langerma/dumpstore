@@ -22,25 +22,21 @@ func (h *Handler) getJob(_ context.Context, p idParam) (jobs.Job, error) {
 }
 
 // cancelJob handles POST /api/jobs/{id}/cancel
-func (h *Handler) cancelJob(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := h.jobs.Cancel(id); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+func (h *Handler) cancelJob(ctx context.Context, in idParam) (struct{}, error) {
+	if err := h.jobs.Cancel(in.ID); err != nil {
+		return struct{}{}, errStatus(http.StatusBadRequest, err)
 	}
-	auditLog(r.Context(), r, "job.cancel", id, nil)
-	w.WriteHeader(http.StatusNoContent)
+	auditLog(ctx, "job.cancel", in.ID, nil)
+	return struct{}{}, nil
 }
 
 // removeJob handles DELETE /api/jobs/{id}
 // Drops a terminal job from the list and from disk. Refuses to remove a
 // running job — clients must cancel it first.
-func (h *Handler) removeJob(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := h.jobs.Remove(id); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err, nil)
-		return
+func (h *Handler) removeJob(ctx context.Context, in idParam) (struct{}, error) {
+	if err := h.jobs.Remove(in.ID); err != nil {
+		return struct{}{}, errStatus(http.StatusBadRequest, err)
 	}
-	auditLog(r.Context(), r, "job.remove", id, nil)
-	w.WriteHeader(http.StatusNoContent)
+	auditLog(ctx, "job.remove", in.ID, nil)
+	return struct{}{}, nil
 }

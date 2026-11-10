@@ -8,7 +8,6 @@ package api
 // same path.
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"path"
@@ -74,7 +73,7 @@ type refConflict struct {
 	Name    string `json:"name"`           // share name, target IQN, or task name
 	ID      string `json:"id,omitempty"`   // replication task ID
 	Path    string `json:"path,omitempty"` // shared path (SMB kinds)
-	// Describe is a human-readable one-liner for the UI; set by writeConflicts.
+	// Describe is a human-readable one-liner for the UI; set by conflictError.
 	Describe string `json:"describe"`
 }
 
@@ -320,15 +319,15 @@ func (h *Handler) collectRefs() (refSnapshot, error) {
 	return s, nil
 }
 
-// checkDatasetRefs runs the reference guard for op on name. It writes the
-// response and returns false when the caller must abort: 500 if references
-// can't be read, 404 if the dataset doesn't exist, 409 on conflicts. The
-// caller must hold h.refMu until its operation has finished.
-func (h *Handler) checkDatasetRefs(w http.ResponseWriter, r *http.Request, op refOp, name string, recursive bool, newMountpoint string) bool {
+// checkDatasetRefs runs the reference guard for op on name. It returns
+// nil when the operation may proceed, else the error to answer with: 500 if
+// references can't be read, 404 if the dataset doesn't exist, 409
+// (conflictError) on conflicts. The caller must hold h.refMu until its
+// operation has finished.
+func (h *Handler) checkDatasetRefs(op refOp, name string, recursive bool, newMountpoint string) error {
 	s, err := h.collectRefs()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("reference check failed: %w", err), nil)
-		return false
+		return fmt.Errorf("reference check failed: %w", err)
 	}
 	found := false
 	for _, d := range s.Datasets {
@@ -338,19 +337,17 @@ func (h *Handler) checkDatasetRefs(w http.ResponseWriter, r *http.Request, op re
 		}
 	}
 	if !found {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
-		return false
+		return errStatus(http.StatusNotFound, fmt.Errorf("dataset %q not found", name))
 	}
 	if c := findConflicts(s, op, name, recursive, newMountpoint); len(c) > 0 {
-		writeConflicts(r.Context(), w, op, name, c)
-		return false
+		return conflictError(op, name, c)
 	}
-	return true
+	return nil
 }
 
-// writeConflicts writes a 409 whose error text lists every conflict (the
-// op-log renders it as-is) plus the structured list for API clients.
-func writeConflicts(ctx context.Context, w http.ResponseWriter, op refOp, name string, conflicts []refConflict) {
+// conflictError is a 409 whose error text lists every conflict (the op-log
+// renders it as-is) plus the structured list for API clients.
+func conflictError(op refOp, name string, conflicts []refConflict) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "cannot %s %s: still in use by dumpstore-managed configuration:\n", op.verb(), name)
 	for i := range conflicts {
@@ -358,5 +355,5 @@ func writeConflicts(ctx context.Context, w http.ResponseWriter, op refOp, name s
 		b.WriteString("  - " + conflicts[i].Describe + "\n")
 	}
 	b.WriteString("Remove these references first, then retry.")
-	writeAPIError(ctx, w, http.StatusConflict, apiError{Error: b.String(), Conflicts: conflicts})
+	return &httpError{code: http.StatusConflict, body: apiError{Error: b.String(), Conflicts: conflicts}}
 }

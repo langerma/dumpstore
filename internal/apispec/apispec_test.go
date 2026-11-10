@@ -231,6 +231,7 @@ func TestSpecDocument(t *testing.T) {
 	type params struct {
 		Name  string `path:"name" doc:"dataset name"`
 		After int    `query:"after"`
+		Must  string `query:"must" required:"true"`
 	}
 	type body struct {
 		Label string `json:"label"`
@@ -274,7 +275,7 @@ func TestSpecDocument(t *testing.T) {
 	if get["operationId"] != "thingsGet" || get["x-fern-sdk-group-name"] != "things" || get["x-fern-sdk-method-name"] != "get" {
 		t.Errorf("get metadata: %v", get)
 	}
-	if got := jsonOf(get["parameters"]); got != `[{"description":"dataset name","in":"path","name":"name","required":true,"schema":{"description":"dataset name","type":"string"}},{"in":"query","name":"after","required":false,"schema":{"type":"integer"}}]` {
+	if got := jsonOf(get["parameters"]); got != `[{"description":"dataset name","in":"path","name":"name","required":true,"schema":{"description":"dataset name","type":"string"}},{"in":"query","name":"after","required":false,"schema":{"type":"integer"}},{"in":"query","name":"must","required":true,"schema":{"type":"string"}}]` {
 		t.Errorf("parameters = %s", got)
 	}
 	resp := get["responses"].(map[string]any)
@@ -321,5 +322,53 @@ func TestSpecDocument(t *testing.T) {
 	errSchema := doc["components"].(map[string]any)["responses"].(map[string]any)["Error"]
 	if !strings.Contains(jsonOf(errSchema), `#/components/schemas/ErrBody`) {
 		t.Errorf("error response = %s", jsonOf(errSchema))
+	}
+}
+
+type homesShare struct {
+	Path     string `json:"path"`
+	ReadOnly bool   `json:"read_only"`
+}
+
+type homes struct {
+	Enabled bool `json:"enabled"`
+	*homesShare
+}
+
+func TestEmbeddedPointerFieldsOptional(t *testing.T) {
+	_, g := gen(t, reflect.TypeFor[homes]())
+	obj := g.components["Homes"]
+	if got := jsonOf(obj["required"]); got != `["enabled"]` {
+		t.Errorf("required = %s; fields of a nil-able embedded pointer must be optional", got)
+	}
+	if got := jsonOf(obj["properties"]); got != `{"enabled":{"type":"boolean"},"path":{"type":"string"},"read_only":{"type":"boolean"}}` {
+		t.Errorf("properties = %s", got)
+	}
+}
+
+func TestRouteErrors(t *testing.T) {
+	reg := New(http.NewServeMux())
+	reg.Tags = map[string]string{"x": "X"}
+	reg.Handle(Route{Method: "GET", Path: "/api/x", Group: "x", Name: "get", Summary: "s",
+		Errors: []int{404, 409}, Handler: http.NotFoundHandler()})
+	raw, err := reg.Spec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	_ = json.Unmarshal(raw, &doc)
+	resp := doc["paths"].(map[string]any)["/api/x"].(map[string]any)["get"].(map[string]any)["responses"].(map[string]any)
+	for _, code := range []string{"404", "409"} {
+		if got := jsonOf(resp[code]); got != `{"$ref":"#/components/responses/Error"}` {
+			t.Errorf("%s = %s", code, got)
+		}
+	}
+
+	bad := New(http.NewServeMux())
+	bad.Tags = reg.Tags
+	bad.Handle(Route{Method: "GET", Path: "/api/x", Group: "x", Name: "get", Summary: "s",
+		Errors: []int{500}, Handler: http.NotFoundHandler()})
+	if _, err := bad.Spec(); err == nil {
+		t.Error("Errors with a non-4xx status must fail")
 	}
 }

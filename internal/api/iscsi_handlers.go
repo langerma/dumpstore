@@ -31,15 +31,14 @@ func validIQN(s string) bool { return reIQN.MatchString(s) }
 // string, which has no escape sequences: no quote, backslash, or newline.
 func validCHAPSecret(s string) bool { return !strings.ContainsAny(s, "\"\\\n\r") }
 
-// requireCtldInit writes a 409 error if /etc/ctl.conf is not yet owned by
-// dumpstore. Returns true if the caller should abort.
-func (h *Handler) requireCtldInit(w http.ResponseWriter, r *http.Request) bool {
+// requireCtldInit returns a 409 error if /etc/ctl.conf is not yet owned by
+// dumpstore.
+func requireCtldInit() error {
 	if !iscsi.CtldInitialized() {
-		writeError(r.Context(), w, http.StatusConflict,
-			fmt.Errorf("ctld not initialised — run POST /api/iscsi/init first"), nil)
-		return true
+		return errStatus(http.StatusConflict,
+			fmt.Errorf("ctld not initialised — run POST /api/iscsi/init first"))
 	}
-	return false
+	return nil
 }
 
 // applyCtlConf renders targets and runs iscsi_ctld_apply.yml to validate,
@@ -116,24 +115,38 @@ func writeTemp(pattern string, data []byte) (string, error) {
 	return f.Name(), nil
 }
 
+// ISCSIStatus is the iSCSI backend and its initialisation state.
+type ISCSIStatus struct {
+	Backend     string `json:"backend" doc:"linux (targetcli), freebsd (ctld), or empty when no backend is installed"`
+	Initialized bool   `json:"initialized"`
+	ConfPath    string `json:"conf_path" doc:"ctl.conf path (FreeBSD); empty on Linux"`
+	ConfExists  bool   `json:"conf_exists"`
+}
+
 // getISCSIStatus handles GET /api/iscsi/status
 // Returns {backend, initialized, conf_path, conf_exists}. Only ctld (FreeBSD)
 // has an init gate; targetcli (Linux) always reports initialized.
-func (h *Handler) getISCSIStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getISCSIStatus(context.Context, struct{}) (ISCSIStatus, error) {
 	backend := iscsi.Backend()
-	resp := map[string]any{
-		"backend":     backend,
-		"initialized": backend == "linux",
-		"conf_path":   "",
-		"conf_exists": false,
+	resp := ISCSIStatus{
+		Backend:     backend,
+		Initialized: backend == "linux",
 	}
 	if backend == "freebsd" {
 		_, err := os.Stat(iscsi.CtlConfPath)
-		resp["initialized"] = iscsi.CtldInitialized()
-		resp["conf_path"] = iscsi.CtlConfPath
-		resp["conf_exists"] = err == nil
+		resp.Initialized = iscsi.CtldInitialized()
+		resp.ConfPath = iscsi.CtlConfPath
+		resp.ConfExists = err == nil
 	}
-	writeJSON(r.Context(), w, resp)
+	return resp, nil
+}
+
+// ISCSIInitResult is the result of taking over /etc/ctl.conf.
+type ISCSIInitResult struct {
+	Initialized bool               `json:"initialized"`
+	Imported    int                `json:"imported" doc:"Targets imported from the existing ctl.conf"`
+	Skipped     int                `json:"skipped" doc:"ctl.conf entries dumpstore cannot represent (kept in the backup)"`
+	Tasks       []ansible.TaskStep `json:"tasks"`
 }
 
 // initISCSI handles POST /api/iscsi/init (FreeBSD/ctld only).
@@ -141,17 +154,15 @@ func (h *Handler) getISCSIStatus(w http.ResponseWriter, r *http.Request) {
 // ctl.conf.pre-dumpstore, imports the targets dumpstore's model represents
 // (reporting everything else as skipped steps), and renders the file from
 // template. Safe to call multiple times.
-func (h *Handler) initISCSI(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) initISCSI(ctx context.Context, _ struct{}) (ISCSIInitResult, error) {
 	switch iscsi.Backend() {
 	case "freebsd":
 	case "linux":
-		writeError(r.Context(), w, http.StatusBadRequest,
-			fmt.Errorf("init applies to ctld (FreeBSD) only — targetcli needs no initialisation"), nil)
-		return
+		return ISCSIInitResult{}, errStatus(http.StatusBadRequest,
+			fmt.Errorf("init applies to ctld (FreeBSD) only — targetcli needs no initialisation"))
 	default:
-		writeError(r.Context(), w, http.StatusNotImplemented,
-			fmt.Errorf("ctld not installed"), nil)
-		return
+		return ISCSIInitResult{}, errStatus(http.StatusNotImplemented,
+			fmt.Errorf("ctld not installed"))
 	}
 
 	h.iscsiMu.Lock()
@@ -159,12 +170,11 @@ func (h *Handler) initISCSI(w http.ResponseWriter, r *http.Request) {
 
 	raw, err := iscsi.ReadCtlConfRaw()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ISCSIInitResult{}, err
 	}
 	targets, skipped := iscsi.Import(raw)
 
-	id := operations.IDFromContext(r.Context())
+	id := operations.IDFromContext(ctx)
 	var steps []ansible.TaskStep
 	for _, s := range skipped {
 		step := ansible.TaskStep{Name: "Not imported: " + s, Status: "skipped", Msg: "kept in " + iscsi.CtlConfBackupPath}
@@ -172,21 +182,20 @@ func (h *Handler) initISCSI(w http.ResponseWriter, r *http.Request) {
 		steps = append(steps, step)
 	}
 
-	out, err := h.applyCtlConf(r.Context(), targets, true)
-	auditLog(r.Context(), r, "iscsi.init", "", err)
+	out, err := h.applyCtlConf(ctx, targets, true)
+	auditLog(ctx, "iscsi.init", "", err)
 	if out != nil {
 		steps = append(steps, out.Steps()...)
 	}
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, steps)
-		return
+		return ISCSIInitResult{}, opError(err, steps)
 	}
-	writeJSON(r.Context(), w, map[string]any{
-		"initialized": iscsi.CtldInitialized(),
-		"imported":    len(targets),
-		"skipped":     len(skipped),
-		"tasks":       steps,
-	})
+	return ISCSIInitResult{
+		Initialized: iscsi.CtldInitialized(),
+		Imported:    len(targets),
+		Skipped:     len(skipped),
+		Tasks:       steps,
+	}, nil
 }
 
 // getISCSITargets handles GET /api/iscsi-targets
@@ -195,83 +204,80 @@ func (h *Handler) getISCSITargets(context.Context, struct{}) ([]iscsi.Target, er
 	return iscsi.ListTargets()
 }
 
+// CreateISCSITargetRequest is the body of POST /api/iscsi-targets.
+type CreateISCSITargetRequest struct {
+	Zvol         string   `json:"zvol" doc:"Backing zvol, e.g. tank/vol1"`
+	IQN          string   `json:"iqn" doc:"Target IQN"`
+	PortalIP     string   `json:"portal_ip,omitempty" doc:"Portal IP address (default 0.0.0.0)"`
+	PortalPort   string   `json:"portal_port,omitempty" doc:"Portal TCP port (default 3260)"`
+	AuthMode     string   `json:"auth_mode" enum:"none,chap"`
+	CHAPUser     string   `json:"chap_user,omitempty" doc:"Required when auth_mode is chap"`
+	CHAPPassword string   `json:"chap_password,omitempty" doc:"Required when auth_mode is chap"`
+	Initiators   []string `json:"initiators,omitempty" doc:"Allowed initiator IQNs"`
+}
+
+// ISCSITargetResult is the result of creating or deleting an iSCSI target.
+type ISCSITargetResult struct {
+	IQN   string             `json:"iqn"`
+	Zvol  string             `json:"zvol"`
+	Tasks []ansible.TaskStep `json:"tasks"`
+}
+
 // createISCSITarget handles POST /api/iscsi-targets
 // Body: {zvol, iqn, portal_ip, portal_port, auth_mode, chap_user, chap_password, initiators}
-func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Zvol         string   `json:"zvol"`
-		IQN          string   `json:"iqn"`
-		PortalIP     string   `json:"portal_ip"`
-		PortalPort   string   `json:"portal_port"`
-		AuthMode     string   `json:"auth_mode"`
-		CHAPUser     string   `json:"chap_user"`
-		CHAPPassword string   `json:"chap_password"`
-		Initiators   []string `json:"initiators"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
-
+func (h *Handler) createISCSITarget(ctx context.Context, in struct {
+	Body CreateISCSITargetRequest `body:""`
+}) (ISCSITargetResult, error) {
+	req := in.Body
 	if !validZFSName(req.Zvol) || !strings.Contains(req.Zvol, "/") {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid zvol name"))
 	}
 	if !validIQN(req.IQN) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid IQN format"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid IQN format"))
 	}
 	if req.PortalIP == "" {
 		req.PortalIP = "0.0.0.0"
 	}
 	if !validPortalIP(req.PortalIP) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid portal IP address"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid portal IP address"))
 	}
 	if req.PortalPort == "" {
 		req.PortalPort = "3260"
 	}
 	if !validPort(req.PortalPort) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid portal port"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid portal port"))
 	}
 	if req.AuthMode != "none" && req.AuthMode != "chap" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("auth_mode must be 'none' or 'chap'"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("auth_mode must be 'none' or 'chap'"))
 	}
 	if req.AuthMode == "chap" {
 		if req.CHAPUser == "" || req.CHAPPassword == "" {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("chap_user and chap_password required when auth_mode is 'chap'"), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("chap_user and chap_password required when auth_mode is 'chap'"))
 		}
 		if !safePropertyValue(req.CHAPUser) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP username"), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid characters in CHAP username"))
 		}
 		if !validCHAPSecret(req.CHAPPassword) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("CHAP password must not contain quotes, backslashes, or newlines"), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("CHAP password must not contain quotes, backslashes, or newlines"))
 		}
 	}
 	for _, ini := range req.Initiators {
 		if !validIQN(ini) {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid initiator IQN: %s", ini), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid initiator IQN: %s", ini))
 		}
 	}
 
 	backend := iscsi.Backend()
 	if backend == "" {
-		writeError(r.Context(), w, http.StatusNotImplemented,
-			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusNotImplemented,
+			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"))
 	}
 
 	h.refMu.Lock() // the zvol must not be destroyed or renamed while the target is added (#183)
 	defer h.refMu.Unlock()
 
 	if backend == "freebsd" {
-		h.createCtldTarget(w, r, iscsi.Target{
+		return h.createCtldTarget(ctx, iscsi.Target{
 			IQN:        req.IQN,
 			ZvolName:   req.Zvol,
 			Portals:    []string{net.JoinHostPort(req.PortalIP, req.PortalPort)},
@@ -280,10 +286,9 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 			CHAPUser:   req.CHAPUser,
 			CHAPSecret: req.CHAPPassword,
 		})
-		return
 	}
 
-	out, err := h.runOp(r.Context(), "iscsi_target_create.yml", map[string]string{
+	out, err := h.runOp(ctx, "iscsi_target_create.yml", map[string]string{
 		"zvol":          req.Zvol,
 		"iqn":           req.IQN,
 		"portal_ip":     req.PortalIP,
@@ -293,70 +298,60 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		"chap_password": req.CHAPPassword,
 		"initiators":    strings.Join(req.Initiators, ","),
 	})
-	auditLog(r.Context(), r, "iscsi.create", req.Zvol, err)
+	auditLog(ctx, "iscsi.create", req.Zvol, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ISCSITargetResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"zvol": req.Zvol, "iqn": req.IQN, "tasks": out.Steps()})
+	return ISCSITargetResult{Zvol: req.Zvol, IQN: req.IQN, Tasks: out.Steps()}, nil
 }
 
 // deleteISCSITarget handles DELETE /api/iscsi-targets?iqn=...&zvol=...
-func (h *Handler) deleteISCSITarget(w http.ResponseWriter, r *http.Request) {
-	iqn := r.URL.Query().Get("iqn")
-	zvol := r.URL.Query().Get("zvol")
+func (h *Handler) deleteISCSITarget(ctx context.Context, in deleteISCSIParams) (ISCSITargetResult, error) {
+	iqn, zvol := in.IQN, in.Zvol
 
 	if !validIQN(iqn) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid IQN"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid IQN"))
 	}
 	if !validZFSName(zvol) || !strings.Contains(zvol, "/") {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid zvol name"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid zvol name"))
 	}
 
 	backend := iscsi.Backend()
 	if backend == "" {
-		writeError(r.Context(), w, http.StatusNotImplemented,
-			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusNotImplemented,
+			fmt.Errorf("no iSCSI backend detected (targetcli or ctld required)"))
 	}
 	if backend == "freebsd" {
-		h.deleteCtldTarget(w, r, iqn, zvol)
-		return
+		return h.deleteCtldTarget(ctx, iqn, zvol)
 	}
 
-	out, err := h.runOp(r.Context(), "iscsi_target_delete.yml", map[string]string{"iqn": iqn, "zvol": zvol})
-	auditLog(r.Context(), r, "iscsi.delete", zvol, err)
+	out, err := h.runOp(ctx, "iscsi_target_delete.yml", map[string]string{"iqn": iqn, "zvol": zvol})
+	auditLog(ctx, "iscsi.delete", zvol, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ISCSITargetResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"iqn": iqn, "zvol": zvol, "tasks": out.Steps()})
+	return ISCSITargetResult{IQN: iqn, Zvol: zvol, Tasks: out.Steps()}, nil
 }
 
 // createCtldTarget adds t to the dumpstore-owned ctl.conf and applies it.
 // Caller holds refMu.
-func (h *Handler) createCtldTarget(w http.ResponseWriter, r *http.Request, t iscsi.Target) {
+func (h *Handler) createCtldTarget(ctx context.Context, t iscsi.Target) (ISCSITargetResult, error) {
 	h.iscsiMu.Lock()
 	defer h.iscsiMu.Unlock()
-	if h.requireCtldInit(w, r) {
-		return
+	if err := requireCtldInit(); err != nil {
+		return ISCSITargetResult{}, err
 	}
 	targets, err := iscsi.LoadCtld()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ISCSITargetResult{}, err
 	}
 	for _, e := range targets {
 		if strings.EqualFold(e.IQN, t.IQN) {
-			writeError(r.Context(), w, http.StatusConflict, fmt.Errorf("iSCSI target %s already exists", t.IQN), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusConflict, fmt.Errorf("iSCSI target %s already exists", t.IQN))
 		}
 		if e.ZvolName == t.ZvolName {
-			writeError(r.Context(), w, http.StatusConflict,
-				fmt.Errorf("zvol %s is already exported as %s", t.ZvolName, e.IQN), nil)
-			return
+			return ISCSITargetResult{}, errStatus(http.StatusConflict,
+				fmt.Errorf("zvol %s is already exported as %s", t.ZvolName, e.IQN))
 		}
 	}
 	if t.Initiators == nil {
@@ -364,32 +359,29 @@ func (h *Handler) createCtldTarget(w http.ResponseWriter, r *http.Request, t isc
 	}
 	// ctld only logs a warning for a missing LUN path and exports nothing.
 	if _, err := os.Stat("/dev/zvol/" + t.ZvolName); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest,
-			fmt.Errorf("zvol device /dev/zvol/%s not found", t.ZvolName), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusBadRequest,
+			fmt.Errorf("zvol device /dev/zvol/%s not found", t.ZvolName))
 	}
 
-	out, err := h.applyCtlConf(r.Context(), append(targets, t), false)
-	auditLog(r.Context(), r, "iscsi.create", t.ZvolName, err)
+	out, err := h.applyCtlConf(ctx, append(targets, t), false)
+	auditLog(ctx, "iscsi.create", t.ZvolName, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ISCSITargetResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"zvol": t.ZvolName, "iqn": t.IQN, "tasks": out.Steps()})
+	return ISCSITargetResult{Zvol: t.ZvolName, IQN: t.IQN, Tasks: out.Steps()}, nil
 }
 
 // deleteCtldTarget removes the target iqn (exporting zvol) from the
 // dumpstore-owned ctl.conf and applies it.
-func (h *Handler) deleteCtldTarget(w http.ResponseWriter, r *http.Request, iqn, zvol string) {
+func (h *Handler) deleteCtldTarget(ctx context.Context, iqn, zvol string) (ISCSITargetResult, error) {
 	h.iscsiMu.Lock()
 	defer h.iscsiMu.Unlock()
-	if h.requireCtldInit(w, r) {
-		return
+	if err := requireCtldInit(); err != nil {
+		return ISCSITargetResult{}, err
 	}
 	targets, err := iscsi.LoadCtld()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return ISCSITargetResult{}, err
 	}
 	kept := make([]iscsi.Target, 0, len(targets))
 	for _, t := range targets {
@@ -398,16 +390,14 @@ func (h *Handler) deleteCtldTarget(w http.ResponseWriter, r *http.Request, iqn, 
 		}
 	}
 	if len(kept) == len(targets) {
-		writeError(r.Context(), w, http.StatusNotFound,
-			fmt.Errorf("no iSCSI target %s for zvol %s", iqn, zvol), nil)
-		return
+		return ISCSITargetResult{}, errStatus(http.StatusNotFound,
+			fmt.Errorf("no iSCSI target %s for zvol %s", iqn, zvol))
 	}
 
-	out, err := h.applyCtlConf(r.Context(), kept, false)
-	auditLog(r.Context(), r, "iscsi.delete", zvol, err)
+	out, err := h.applyCtlConf(ctx, kept, false)
+	auditLog(ctx, "iscsi.delete", zvol, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return ISCSITargetResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"iqn": iqn, "zvol": zvol, "tasks": out.Steps()})
+	return ISCSITargetResult{IQN: iqn, Zvol: zvol, Tasks: out.Steps()}, nil
 }

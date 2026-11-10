@@ -247,8 +247,8 @@ func (h *Handler) AuthCfgWrite(fn func(*auth.Config)) {
 // auditLog emits a structured audit log line for every mutating API operation.
 // req_id is injected automatically by the journalHandler middleware.
 // Since the service has no authentication, operator identity is the client IP.
-func auditLog(ctx context.Context, r *http.Request, action, target string, err error) {
-	args := []any{"remote_ip", r.RemoteAddr, "action", action, "target", target, "outcome", "ok"}
+func auditLog(ctx context.Context, action, target string, err error) {
+	args := []any{"remote_ip", remoteAddr(ctx), "action", action, "target", target, "outcome", "ok"}
 	if err != nil {
 		args[7] = "err"
 		args = append(args, "error", err.Error())
@@ -298,13 +298,18 @@ func (h *Handler) getNetwork(context.Context, struct{}) ([]system.NetworkInterfa
 	return system.GetNetworkInterfaces()
 }
 
-func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getVersion(ctx context.Context, _ struct{}) (VersionInfo, error) {
 	v, err := zfs.Version()
 	if err != nil {
-		slog.WarnContext(r.Context(), "zpool version failed", "err", err)
+		slog.WarnContext(ctx, "zpool version failed", "err", err)
 		v = ""
 	}
-	writeJSON(r.Context(), w, map[string]string{"version": v})
+	return VersionInfo{Version: v}, nil
+}
+
+// VersionInfo is the GET /api/version response.
+type VersionInfo struct {
+	Version string `json:"version" doc:"OpenZFS version; empty when it cannot be determined"`
 }
 
 // getEvents handles GET /api/events?topics=pool.query,dataset.query,...
@@ -449,11 +454,20 @@ func writeAPIError(ctx context.Context, w http.ResponseWriter, code int, e apiEr
 
 // getSchema handles GET /api/schema
 // Returns property definitions and system metadata filtered for the current OS.
-func (h *Handler) getSchema(w http.ResponseWriter, r *http.Request) {
-	writeJSON(r.Context(), w, map[string]any{
-		"os":                 runtime.GOOS,
-		"dataset_properties": schema.ForOS(runtime.GOOS),
-		"user_shells":        system.ListShells(),
-		"capabilities":       zfs.Caps(),
-	})
+func (h *Handler) getSchema(context.Context, struct{}) (SchemaInfo, error) {
+	return SchemaInfo{
+		OS:                runtime.GOOS,
+		DatasetProperties: schema.ForOS(runtime.GOOS),
+		UserShells:        system.ListShells(),
+		Capabilities:      zfs.Caps(),
+	}, nil
+}
+
+// SchemaInfo is the GET /api/schema response: what the UI needs to render
+// dataset and user forms for this host.
+type SchemaInfo struct {
+	OS                string            `json:"os"`
+	DatasetProperties []schema.Property `json:"dataset_properties"`
+	UserShells        []string          `json:"user_shells"`
+	Capabilities      zfs.Capabilities  `json:"capabilities"`
 }

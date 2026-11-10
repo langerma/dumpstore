@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -42,40 +41,35 @@ func autosnapPlaybookVars() map[string]string {
 
 // takeoverAutoSnapshot disables the OS daemon then registers dumpstore's
 // bucket tasks with the scheduler. Returns 200 + ansible task steps.
-func (h *Handler) takeoverAutoSnapshot(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) takeoverAutoSnapshot(ctx context.Context, _ struct{}) (TaskResult, error) {
 	if h.autosnap == nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("autosnap runner not initialised"), nil)
-		return
+		return TaskResult{}, fmt.Errorf("autosnap runner not initialised")
 	}
-	out, err := h.runOp(r.Context(), "auto_snapshot_takeover.yml", autosnapPlaybookVars())
-	auditLog(r.Context(), r, "auto_snapshot.takeover", "", err)
+	out, err := h.runOp(ctx, "auto_snapshot_takeover.yml", autosnapPlaybookVars())
+	auditLog(ctx, "auto_snapshot.takeover", "", err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 	if err := h.autosnap.Register(); err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("register scheduler tasks: %w", err), nil)
-		return
+		return TaskResult{}, fmt.Errorf("register scheduler tasks: %w", err)
 	}
 	h.publishAutoSnapStatus()
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	return TaskResult{Tasks: out.Steps()}, nil
 }
 
 // releaseAutoSnapshot unregisters dumpstore's tasks and re-enables the OS daemon.
-func (h *Handler) releaseAutoSnapshot(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) releaseAutoSnapshot(ctx context.Context, _ struct{}) (TaskResult, error) {
 	if h.autosnap == nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, fmt.Errorf("autosnap runner not initialised"), nil)
-		return
+		return TaskResult{}, fmt.Errorf("autosnap runner not initialised")
 	}
 	h.autosnap.Unregister()
-	out, err := h.runOp(r.Context(), "auto_snapshot_release.yml", autosnapPlaybookVars())
-	auditLog(r.Context(), r, "auto_snapshot.release", "", err)
+	out, err := h.runOp(ctx, "auto_snapshot_release.yml", autosnapPlaybookVars())
+	auditLog(ctx, "auto_snapshot.release", "", err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
 	h.publishAutoSnapStatus()
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	return TaskResult{Tasks: out.Steps()}, nil
 }
 
 // publishAutoSnapStatus pushes the fresh status to all SSE subscribers.

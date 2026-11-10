@@ -2,11 +2,11 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"dumpstore/internal/ansible"
 	"dumpstore/internal/system"
 )
 
@@ -20,49 +20,61 @@ func (h *Handler) getGroups(context.Context, struct{}) ([]system.Group, error) {
 	return system.ListGroups()
 }
 
+// UserResult is the result of a write on one local user.
+type UserResult struct {
+	Username string             `json:"username"`
+	Tasks    []ansible.TaskStep `json:"tasks"`
+}
+
+// GroupResult is the result of a write on one local group.
+type GroupResult struct {
+	Groupname string             `json:"groupname"`
+	Tasks     []ansible.TaskStep `json:"tasks"`
+}
+
+// SSHKeyList is the GET /api/users/{name}/sshkeys response.
+type SSHKeyList struct {
+	Keys []string `json:"keys" doc:"Lines of the user's ~/.ssh/authorized_keys"`
+}
+
+// CreateUserRequest is the POST /api/users body.
+type CreateUserRequest struct {
+	Username    string `json:"username"`
+	Shell       string `json:"shell,omitempty" doc:"Login shell (default /bin/bash)"`
+	UID         string `json:"uid,omitempty" doc:"Numeric UID; empty lets the OS choose"`
+	Group       string `json:"group,omitempty" doc:"Primary group"`
+	Groups      string `json:"groups,omitempty" doc:"Comma-separated supplementary groups"`
+	Password    string `json:"password,omitempty" doc:"Plaintext password; must not contain newlines"`
+	CreateGroup bool   `json:"create_group,omitempty" doc:"Create the primary group (named after the user unless group is set)"`
+	SMBUser     bool   `json:"smb_user,omitempty" doc:"Also register the user with Samba"`
+}
+
 // createUser handles POST /api/users
 // Body: {"username":"alice","shell":"/bin/bash","uid":"1001","group":"storage","groups":"wheel,backup","password":"<plaintext>","create_group":true,"smb_user":false}
-func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username    string `json:"username"`
-		Shell       string `json:"shell"`
-		UID         string `json:"uid"`
-		Group       string `json:"group"`
-		Groups      string `json:"groups"`
-		Password    string `json:"password"`
-		CreateGroup bool   `json:"create_group"`
-		SMBUser     bool   `json:"smb_user"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) createUser(ctx context.Context, in struct {
+	Body CreateUserRequest `body:""`
+}) (UserResult, error) {
+	req := in.Body
 	if req.Username == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username is required"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("username is required"))
 	}
 	if req.Shell == "" {
 		req.Shell = "/bin/bash"
 	}
 	if !validUnixName(req.Username) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
 	if !validShellPath(req.Shell) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid shell path"))
 	}
 	if req.Group != "" && !validUnixName(req.Group) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid group name"))
 	}
 	if !validUnixNameList(req.Groups) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"))
 	}
 	if req.Password != "" && !safePassword(req.Password) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"))
 	}
 
 	createGroup := "false"
@@ -85,16 +97,13 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		"create_group": createGroup,
 		"smb_user":     smbUser,
 	}
-	out, err := h.runOp(r.Context(), "user_create.yml", vars)
-	auditLog(r.Context(), r, "user.create", req.Username, err)
+	out, err := h.runOp(ctx, "user_create.yml", vars)
+	auditLog(ctx, "user.create", req.Username, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return UserResult{}, playbookError(err, out)
 	}
 	h.publishUserGroup()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"username": req.Username, "tasks": out.Steps()})
+	return UserResult{Username: req.Username, Tasks: out.Steps()}, nil
 }
 
 // protectedUsers lists accounts that must never be deleted regardless of UID.
@@ -103,128 +112,121 @@ var protectedUsers = map[string]bool{"nobody": true, "nfsnobody": true}
 // protectedGroups lists groups that must never be deleted regardless of GID.
 var protectedGroups = map[string]bool{"nogroup": true, "nobody": true, "nfsnobody": true}
 
-// deleteUser handles DELETE /api/users/{name}
-// Looks up the user's UID and rejects system users (uid < UIDMin).
-func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
-		return
-	}
-	if !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
-	}
-
+// findUser returns the local user called name, or a 404 error.
+func findUser(name string) (*system.User, error) {
 	users, err := system.ListUsers()
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return nil, err
 	}
-	var target *system.User
 	for i := range users {
 		if users[i].Username == name {
-			target = &users[i]
-			break
+			return &users[i], nil
 		}
 	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
-		return
+	return nil, errStatus(http.StatusNotFound, fmt.Errorf("user %q not found", name))
+}
+
+// findGroup returns the local group called name, or a 404 error.
+func findGroup(name string) (*system.Group, error) {
+	groups, err := system.ListGroups()
+	if err != nil {
+		return nil, err
+	}
+	for i := range groups {
+		if groups[i].Name == name {
+			return &groups[i], nil
+		}
+	}
+	return nil, errStatus(http.StatusNotFound, fmt.Errorf("group %q not found", name))
+}
+
+// deleteUser handles DELETE /api/users/{name}
+// Looks up the user's UID and rejects system users (uid < UIDMin).
+func (h *Handler) deleteUser(ctx context.Context, in userParam) (UserResult, error) {
+	name := in.Name
+	if name == "" {
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("username required"))
+	}
+	if !validUnixName(name) {
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
+	}
+
+	target, err := findUser(name)
+	if err != nil {
+		return UserResult{}, err
 	}
 	if protectedUsers[name] {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete protected user %q", name), nil)
-		return
+		return UserResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to delete protected user %q", name))
 	}
 	if target.UID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
-		return
+		return UserResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to delete system user (uid %d < %d)", target.UID, system.UIDMin()))
 	}
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp(r.Context(), "user_delete.yml", map[string]string{
+	out, err := h.runOp(ctx, "user_delete.yml", map[string]string{
 		"username": name,
 		"uid":      fmt.Sprintf("%d", target.UID),
 	})
-	auditLog(r.Context(), r, "user.delete", name, err)
+	auditLog(ctx, "user.delete", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return UserResult{}, playbookError(err, out)
 	}
 	h.publishUserGroup()
-	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
+	return UserResult{Username: name, Tasks: out.Steps()}, nil
+}
+
+// ModifyUserRequest is the PUT /api/users/{name} body. Empty fields are
+// left unchanged.
+type ModifyUserRequest struct {
+	Shell      string `json:"shell,omitempty" doc:"Login shell"`
+	Group      string `json:"group,omitempty" doc:"Primary group"`
+	UserGroups string `json:"user_groups,omitempty" doc:"Comma-separated supplementary groups"`
+	Password   string `json:"password,omitempty" doc:"Plaintext password; must not contain newlines"`
+	Home       string `json:"home,omitempty" doc:"Home directory"`
+	MoveHome   bool   `json:"move_home,omitempty" doc:"Move the contents of the old home directory to the new one"`
+	SMBSync    bool   `json:"smb_sync,omitempty" doc:"Also update the user's Samba password"`
 }
 
 // modifyUser handles PUT /api/users/{name}
 // Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"<plaintext>","home":"/home/foo","move_home":true}
-func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) modifyUser(ctx context.Context, in struct {
+	userParam
+	Body ModifyUserRequest `body:""`
+}) (UserResult, error) {
+	name := in.Name
 	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("username required"))
 	}
 	if !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
-	var req struct {
-		Shell      string `json:"shell"`
-		Group      string `json:"group"`
-		UserGroups string `json:"user_groups"`
-		Password   string `json:"password"`
-		Home       string `json:"home"`
-		MoveHome   bool   `json:"move_home"`
-		SMBSync    bool   `json:"smb_sync"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+	req := in.Body
 	if req.Shell != "" && !validShellPath(req.Shell) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid shell path"))
 	}
 	if req.Group != "" && !validUnixName(req.Group) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid group name"))
 	}
 	if !validUnixNameList(req.UserGroups) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"))
 	}
 	if req.Home != "" && !validShellPath(req.Home) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid home directory path"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid home directory path"))
 	}
 	if req.Password != "" && !safePassword(req.Password) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"), nil)
-		return
+		return UserResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("password must not contain newline characters"))
 	}
 
-	users, err := system.ListUsers()
+	target, err := findUser(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.User
-	for i := range users {
-		if users[i].Username == name {
-			target = &users[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
-		return
+		return UserResult{}, err
 	}
 	if protectedUsers[name] {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name), nil)
-		return
+		return UserResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify protected user %q", name))
 	}
 	if target.UID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user (uid %d < %d)", target.UID, system.UIDMin()), nil)
-		return
+		return UserResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user (uid %d < %d)", target.UID, system.UIDMin()))
 	}
 
 	moveHome := "false"
@@ -238,7 +240,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp(r.Context(), "user_modify.yml", map[string]string{
+	out, err := h.runOp(ctx, "user_modify.yml", map[string]string{
 		"username":      name,
 		"uid":           fmt.Sprintf("%d", target.UID),
 		"shell":         req.Shell,
@@ -249,305 +251,219 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		"move_home":     moveHome,
 		"smb_sync":      smbSync,
 	})
-	auditLog(r.Context(), r, "user.modify", name, err)
+	auditLog(ctx, "user.modify", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return UserResult{}, playbookError(err, out)
 	}
 	h.publishUserGroup()
-	writeJSON(r.Context(), w, map[string]any{"username": name, "tasks": out.Steps()})
+	return UserResult{Username: name, Tasks: out.Steps()}, nil
 }
 
 // listSSHKeys handles GET /api/users/{name}/sshkeys
-func (h *Handler) listSSHKeys(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) listSSHKeys(_ context.Context, in userParam) (SSHKeyList, error) {
+	name := in.Name
 	if name == "" || !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
+		return SSHKeyList{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
-	users, err := system.ListUsers()
+	target, err := findUser(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.User
-	for i := range users {
-		if users[i].Username == name {
-			target = &users[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
-		return
+		return SSHKeyList{}, err
 	}
 	keys, err := system.ListAuthorizedKeys(target.Home)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
+		return SSHKeyList{}, err
 	}
-	writeJSON(r.Context(), w, map[string]any{"keys": keys})
+	return SSHKeyList{Keys: keys}, nil
+}
+
+// SSHKeyRequest is the body of POST and DELETE /api/users/{name}/sshkeys.
+type SSHKeyRequest struct {
+	Key string `json:"key" doc:"Public key line, e.g. ssh-ed25519 AAAA... comment"`
 }
 
 // addSSHKey handles POST /api/users/{name}/sshkeys
 // Body: {"key":"ssh-ed25519 AAAA..."}
-func (h *Handler) addSSHKey(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) addSSHKey(ctx context.Context, in struct {
+	userParam
+	Body SSHKeyRequest `body:""`
+}) (TaskResult, error) {
+	name := in.Name
 	if name == "" || !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
-	var req struct {
-		Key string `json:"key"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+	req := in.Body
 	req.Key = strings.TrimSpace(req.Key)
 	if !validSSHKey(req.Key) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid SSH public key"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid SSH public key"))
 	}
 
-	users, err := system.ListUsers()
+	target, err := findUser(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.User
-	for i := range users {
-		if users[i].Username == name {
-			target = &users[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
-		return
+		return TaskResult{}, err
 	}
 	if target.UID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user"))
 	}
 
-	out, err := h.runOp(r.Context(), "user_ssh_key_add.yml", map[string]string{
+	out, err := h.runOp(ctx, "user_ssh_key_add.yml", map[string]string{
 		"username": name,
 		"home":     target.Home,
 		"key":      req.Key,
 	})
-	auditLog(r.Context(), r, "sshkey.add", name, err)
+	auditLog(ctx, "sshkey.add", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	return TaskResult{Tasks: out.Steps()}, nil
 }
 
 // removeSSHKey handles DELETE /api/users/{name}/sshkeys
 // Body: {"key":"ssh-ed25519 AAAA..."}
-func (h *Handler) removeSSHKey(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) removeSSHKey(ctx context.Context, in struct {
+	userParam
+	Body SSHKeyRequest `body:""`
+}) (TaskResult, error) {
+	name := in.Name
 	if name == "" || !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid username"))
 	}
-	var req struct {
-		Key string `json:"key"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+	req := in.Body
 	req.Key = strings.TrimSpace(req.Key)
 	if req.Key == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("key is required"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("key is required"))
 	}
 
-	users, err := system.ListUsers()
+	target, err := findUser(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.User
-	for i := range users {
-		if users[i].Username == name {
-			target = &users[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
-		return
+		return TaskResult{}, err
 	}
 	if target.UID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system user"), nil)
-		return
+		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user"))
 	}
 
-	out, err := h.runOp(r.Context(), "user_ssh_key_remove.yml", map[string]string{
+	out, err := h.runOp(ctx, "user_ssh_key_remove.yml", map[string]string{
 		"home": target.Home,
 		"key":  req.Key,
 	})
-	auditLog(r.Context(), r, "sshkey.remove", name, err)
+	auditLog(ctx, "sshkey.remove", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return TaskResult{}, playbookError(err, out)
 	}
-	writeJSON(r.Context(), w, map[string]any{"tasks": out.Steps()})
+	return TaskResult{Tasks: out.Steps()}, nil
+}
+
+// CreateGroupRequest is the POST /api/groups body.
+type CreateGroupRequest struct {
+	Groupname string `json:"groupname"`
+	GID       string `json:"gid,omitempty" doc:"Numeric GID; empty lets the OS choose"`
 }
 
 // createGroup handles POST /api/groups
 // Body: {"groupname":"storage","gid":"1500"}
-func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Groupname string `json:"groupname"`
-		GID       string `json:"gid"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+func (h *Handler) createGroup(ctx context.Context, in struct {
+	Body CreateGroupRequest `body:""`
+}) (GroupResult, error) {
+	req := in.Body
 	if req.Groupname == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname is required"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("groupname is required"))
 	}
 	if !validUnixName(req.Groupname) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid group name"))
 	}
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp(r.Context(), "group_create.yml", map[string]string{
+	out, err := h.runOp(ctx, "group_create.yml", map[string]string{
 		"groupname": req.Groupname,
 		"gid":       req.GID,
 	})
-	auditLog(r.Context(), r, "group.create", req.Groupname, err)
+	auditLog(ctx, "group.create", req.Groupname, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return GroupResult{}, playbookError(err, out)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 	h.publishUserGroup()
-	_ = json.NewEncoder(w).Encode(map[string]any{"groupname": req.Groupname, "tasks": out.Steps()})
+	return GroupResult{Groupname: req.Groupname, Tasks: out.Steps()}, nil
 }
 
 // deleteGroup handles DELETE /api/groups/{name}
 // Looks up the group's GID and rejects system groups (gid < UIDMin).
-func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) deleteGroup(ctx context.Context, in groupParam) (GroupResult, error) {
+	name := in.Name
 	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("groupname required"))
 	}
 	if !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid group name"))
 	}
 
-	groups, err := system.ListGroups()
+	target, err := findGroup(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.Group
-	for i := range groups {
-		if groups[i].Name == name {
-			target = &groups[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
-		return
+		return GroupResult{}, err
 	}
 	if protectedGroups[name] {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete protected group %q", name), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to delete protected group %q", name))
 	}
 	if target.GID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to delete system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to delete system group (gid %d < %d)", target.GID, system.UIDMin()))
 	}
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp(r.Context(), "group_delete.yml", map[string]string{
+	out, err := h.runOp(ctx, "group_delete.yml", map[string]string{
 		"groupname": name,
 		"gid":       fmt.Sprintf("%d", target.GID),
 	})
-	auditLog(r.Context(), r, "group.delete", name, err)
+	auditLog(ctx, "group.delete", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return GroupResult{}, playbookError(err, out)
 	}
 	h.publishUserGroup()
-	writeJSON(r.Context(), w, map[string]any{"groupname": name, "tasks": out.Steps()})
+	return GroupResult{Groupname: name, Tasks: out.Steps()}, nil
+}
+
+// ModifyGroupRequest is the PUT /api/groups/{name} body.
+type ModifyGroupRequest struct {
+	NewName string `json:"new_name,omitempty" doc:"Rename the group"`
+	GID     string `json:"gid,omitempty" doc:"New numeric GID"`
+	Members string `json:"members,omitempty" doc:"Comma-separated member list; replaces the current members (empty clears them)"`
 }
 
 // modifyGroup handles PUT /api/groups/{name}
 // Body: {"new_name":"newgrp","gid":"1501","members":"alice,bob"}
-func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (h *Handler) modifyGroup(ctx context.Context, in struct {
+	groupParam
+	Body ModifyGroupRequest `body:""`
+}) (GroupResult, error) {
+	name := in.Name
 	if name == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("groupname required"))
 	}
 	if !validUnixName(name) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid group name"))
 	}
-	var req struct {
-		NewName string `json:"new_name"`
-		GID     string `json:"gid"`
-		Members string `json:"members"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
-		return
-	}
+	req := in.Body
 	if req.NewName != "" && !validUnixName(req.NewName) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid new group name"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid new group name"))
 	}
 	if !validUnixNameList(req.Members) {
-		writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("invalid member name"), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid member name"))
 	}
 
-	groups, err := system.ListGroups()
+	target, err := findGroup(name)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	var target *system.Group
-	for i := range groups {
-		if groups[i].Name == name {
-			target = &groups[i]
-			break
-		}
-	}
-	if target == nil {
-		writeError(r.Context(), w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
-		return
+		return GroupResult{}, err
 	}
 	if protectedGroups[name] {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify protected group %q", name), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify protected group %q", name))
 	}
 	if target.GID < system.UIDMin() {
-		writeError(r.Context(), w, http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
-		return
+		return GroupResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()))
 	}
 
 	if req.Members != "" {
 		users, err := system.ListUsers()
 		if err != nil {
-			writeError(r.Context(), w, http.StatusInternalServerError, err, nil)
-			return
+			return GroupResult{}, err
 		}
 		knownUsers := make(map[string]bool, len(users))
 		for _, u := range users {
@@ -561,8 +477,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(unknown) > 0 {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Errorf("unknown member(s): %s", strings.Join(unknown, ", ")), nil)
-			return
+			return GroupResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("unknown member(s): %s", strings.Join(unknown, ", ")))
 		}
 	}
 
@@ -573,7 +488,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 
 	h.userMu.Lock()
 	defer h.userMu.Unlock()
-	out, err := h.runOp(r.Context(), "group_modify.yml", map[string]string{
+	out, err := h.runOp(ctx, "group_modify.yml", map[string]string{
 		"groupname":      name,
 		"gid":            fmt.Sprintf("%d", target.GID),
 		"new_name":       req.NewName,
@@ -581,13 +496,12 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		"members":        req.Members,
 		"update_members": "true",
 	})
-	auditLog(r.Context(), r, "group.modify", name, err)
+	auditLog(ctx, "group.modify", name, err)
 	if err != nil {
-		writeRunOpError(r.Context(), w, err, out)
-		return
+		return GroupResult{}, playbookError(err, out)
 	}
 	h.publishUserGroup()
-	writeJSON(r.Context(), w, map[string]any{"groupname": resultName, "tasks": out.Steps()})
+	return GroupResult{Groupname: resultName, Tasks: out.Steps()}, nil
 }
 
 // publishUserGroup re-reads /etc/passwd and /etc/group and immediately pushes
