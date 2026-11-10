@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"dumpstore/internal/autosnap"
@@ -47,6 +49,14 @@ func autosnapPlaybookVars() map[string]string {
 func (h *Handler) takeoverAutoSnapshot(ctx context.Context, _ struct{}) (TaskResult, error) {
 	if h.autosnap == nil {
 		return TaskResult{}, fmt.Errorf("autosnap runner not initialised")
+	}
+	// zfstools runs from crontab lines the admin wrote; dumpstore does not
+	// own crontabs, so it cannot disable them and refuses to run alongside.
+	if runtime.GOOS == "freebsd" {
+		if files := autosnap.ZfstoolsCronFiles(); len(files) > 0 {
+			return TaskResult{}, errStatus(http.StatusConflict, fmt.Errorf(
+				"zfstools runs from cron: remove the zfs-auto-snapshot lines from %s, then take over", strings.Join(files, ", ")))
+		}
 	}
 	out, err := h.runOp(ctx, "auto_snapshot_takeover.yml", autosnapPlaybookVars())
 	auditLog(ctx, "auto_snapshot.takeover", "", err)

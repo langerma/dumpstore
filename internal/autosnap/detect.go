@@ -3,6 +3,7 @@ package autosnap
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -11,9 +12,10 @@ import (
 // Used both by the startup decision (register the scheduler tasks?) and by
 // the UI banner.
 type Status struct {
-	OSDaemon          string `json:"os_daemon"`           // "zfs-auto-snapshot" | "zfstools" | ""
-	OSDaemonActive    bool   `json:"os_daemon_active"`    // daemon is enabled and would run
-	DumpstoreManaged  bool   `json:"dumpstore_managed"`   // dumpstore's scheduler tasks are registered
+	OSDaemon         string   `json:"os_daemon"`         // "zfs-auto-snapshot" | "zfs-periodic" | "zfstools" | ""
+	OSDaemonActive   bool     `json:"os_daemon_active"`  // daemon is enabled and would run
+	DumpstoreManaged bool     `json:"dumpstore_managed"` // dumpstore's scheduler tasks are registered
+	CronFiles        []string `json:"cron_files,omitempty" doc:"FreeBSD: crontab files with zfstools (zfs-auto-snapshot) lines. dumpstore never edits a crontab, so takeover is refused until these lines are removed"`
 }
 
 // DetectStatus inspects the host to determine whether the OS auto-snapshot
@@ -23,8 +25,9 @@ type Status struct {
 //
 // Linux: any of the five `zfs-auto-snapshot-*.timer` units being enabled,
 // OR any of the package's cron entry points existing, counts as active.
-// FreeBSD: any of {hourly,daily,weekly,monthly}_zfs_snapshot_enable
-// (zfs-periodic's periodic(8) switches) effectively YES in
+// FreeBSD: zfstools when a crontab runs zfs-auto-snapshot (ZfstoolsCronFiles);
+// otherwise zfs-periodic, active when any of
+// {hourly,daily,weekly,monthly}_zfs_snapshot_enable is effectively YES in
 // PeriodicConfFiles.
 func DetectStatus() Status {
 	switch runtime.GOOS {
@@ -96,7 +99,45 @@ var periodicSnapshotVars = []string{
 }
 
 func detectFreeBSD() Status {
-	return Status{OSDaemon: "zfstools", OSDaemonActive: periodicSnapshotsEnabled(PeriodicConfFiles)}
+	if files := ZfstoolsCronFiles(); len(files) > 0 {
+		return Status{OSDaemon: "zfstools", OSDaemonActive: true, CronFiles: files}
+	}
+	return Status{OSDaemon: "zfs-periodic", OSDaemonActive: periodicSnapshotsEnabled(PeriodicConfFiles)}
+}
+
+// cronPaths are the crontabs FreeBSD's cron(8) reads: the system crontab,
+// the cron.d directories, and the per-user tabs. zfstools has no periodic
+// or rc.d hook; its pkg-message tells the admin to add crontab lines.
+var cronPaths = []string{"/etc/crontab", "/etc/cron.d/*", "/usr/local/etc/cron.d/*", "/var/cron/tabs/*"}
+
+// ZfstoolsCronFiles returns the crontab files that run zfstools'
+// zfs-auto-snapshot. dumpstore does not own crontabs, so these lines are
+// the admin's to remove before takeover.
+func ZfstoolsCronFiles() []string {
+	return cronFilesRunning(cronPaths, "zfs-auto-snapshot")
+}
+
+// cronFilesRunning returns the files matching patterns that have a
+// non-comment line containing cmd.
+func cronFilesRunning(patterns []string, cmd string) []string {
+	var found []string
+	for _, pattern := range patterns {
+		paths, _ := filepath.Glob(pattern)
+		for _, path := range paths {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if !strings.HasPrefix(line, "#") && strings.Contains(line, cmd) {
+					found = append(found, path)
+					break
+				}
+			}
+		}
+	}
+	return found
 }
 
 // periodicSnapshotsEnabled reports whether any periodic snapshot switch is

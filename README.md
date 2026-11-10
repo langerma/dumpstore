@@ -29,7 +29,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - Per-pool dataset browser with a detail drawer for inline property editing, sharing, permissions, and snapshots
 - Create, rename, and destroy datasets and volumes; per-user/group space usage and quotas; `zfs rewrite` as a background job
 - Snapshot create, clone, diff, and (batch) delete
-- Native auto-snapshot scheduling for `com.sun:auto-snapshot*`, with takeover from / release back to the OS daemon (zfs-auto-snapshot timers or cron on Linux, zfs-periodic switches on FreeBSD); release restores exactly what takeover disabled
+- Native auto-snapshot scheduling for `com.sun:auto-snapshot*`, with takeover from / release back to the OS daemon (zfs-auto-snapshot timers or cron on Linux, zfs-periodic switches on FreeBSD); release restores exactly what takeover disabled. zfstools run from a crontab is detected, and takeover waits until the admin removes those lines
 
 **Replication & jobs**
 - One-shot `zfs send | zfs recv` to a local pool or over SSH, incremental and `--raw`

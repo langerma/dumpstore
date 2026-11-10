@@ -62,6 +62,7 @@ make vm-linux-destroy && make vm-linux-start && make vm-linux-deploy
 | `TestScrubSchedule` | scrub schedule add/remove (`/etc/default/zfs` backed up and restored) |
 | `TestAutosnapTakeoverRelease` | #152, Linux: zfs-auto-snapshot cron entry points disabled by takeover (twice), restored byte-for-byte by release — skipped unless the daemon owns auto-snapshots initially |
 | `TestAutosnapTakeoverReleaseFreeBSD` | #197, FreeBSD only: zfs-periodic switches in `/etc/periodic.conf` and `/etc/periodic.conf.local` set to `NO` by takeover (twice), restored byte-for-byte by release; the three conf files and the record are backed up and restored |
+| `TestAutosnapZfstoolsCron` | #208, FreeBSD only: a `zfs-auto-snapshot` line in `/etc/cron.d` → status `zfstools`, active, `cron_files`; takeover 409 with the file unchanged; a commented-out line is ignored |
 | `TestServices` | Samba restart + enable, unknown service 404, bad action/name 400 |
 | `TestTLSGencert` | self-signed cert generation, status, regeneration with another hostname (new CN), cert/key config; invalid input 400 |
 | `TestChangePassword` | wrong current 401, change → session survives, only the new password logs in → change back |

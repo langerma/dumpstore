@@ -4,7 +4,9 @@ import { api, esc, startOp, toast, v1 } from './utils.js';
 // renderAutoSnapStatus draws the banner above the Datasets table that reports
 // who currently owns auto-snapshot execution. Three states:
 //   1. dumpstore_managed=true  → green pill, no button.
-//   2. os_daemon_active=true   → yellow pill + "Take over" button.
+//   2. os_daemon_active=true   → yellow pill + "Take over" button, or — when
+//      zfstools runs from cron (cron_files) — the files to edit instead,
+//      since dumpstore never edits a crontab and takeover returns 409.
 //   3. neither                 → grey "Auto-snapshot not running" + "Enable" button
 //      (= register dumpstore's scheduler without running the takeover playbook).
 export function renderAutoSnapStatus() {
@@ -13,14 +15,28 @@ export function renderAutoSnapStatus() {
   const s = state.autosnapStatus;
   if (!s) { el.innerHTML = ''; return; }
 
+  const cronFiles = (s.cron_files || []).map(f => `<code>${esc(f)}</code>`).join(', ');
   if (s.dumpstore_managed) {
+    const both = cronFiles
+      ? ` <strong>zfstools also runs from cron</strong> (${cronFiles}) — remove its <code>zfs-auto-snapshot</code> lines so snapshots aren't taken twice.`
+      : '';
     el.innerHTML = `
-      <div class="autosnap-banner autosnap-banner-ok">
-        <span class="health-badge badge-green">auto-snapshot</span>
-        Managed by dumpstore — bucket snapshots run via the built-in scheduler.
+      <div class="autosnap-banner ${cronFiles ? 'autosnap-banner-warn' : 'autosnap-banner-ok'}">
+        <span class="health-badge ${cronFiles ? 'badge-yellow' : 'badge-green'}">auto-snapshot</span>
+        Managed by dumpstore — bucket snapshots run via the built-in scheduler.${both}
         <button class="btn-secondary btn-small" id="autosnapReleaseBtn">Release to OS daemon</button>
       </div>`;
     document.getElementById('autosnapReleaseBtn').addEventListener('click', doRelease);
+    return;
+  }
+  if (s.os_daemon_active && cronFiles) {
+    el.innerHTML = `
+      <div class="autosnap-banner autosnap-banner-warn">
+        <span class="health-badge badge-yellow">auto-snapshot</span>
+        Managed by <code>zfstools</code> from cron (${cronFiles}). To let dumpstore
+        take over, remove the <code>zfs-auto-snapshot</code> lines there — dumpstore
+        doesn't edit crontabs.
+      </div>`;
     return;
   }
   if (s.os_daemon_active) {

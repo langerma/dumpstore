@@ -964,7 +964,7 @@ Remove a pool from the periodic scrub schedule. Returns Ansible task steps.
 
 ## Auto-snapshot scheduling
 
-Manages `com.sun:auto-snapshot*` ZFS user properties per dataset. Snapshots are created and pruned either by **dumpstore's built-in scheduler** (registered at startup when no OS daemon is active, or via `POST /api/v1/auto-snapshot/takeover`) or by the OS daemon — `zfs-auto-snapshot` (Linux) or `zfstools` (FreeBSD). Both use the same properties and the `zfs-auto-snap_<bucket>-YYYY-MM-DD-HHMM` naming, so either can prune the other's snapshots. `GET /api/v1/auto-snapshot/status` shows which one is active.
+Manages `com.sun:auto-snapshot*` ZFS user properties per dataset. Snapshots are created and pruned either by **dumpstore's built-in scheduler** (registered at startup when no OS daemon is active, or via `POST /api/v1/auto-snapshot/takeover`) or by the OS daemon — `zfs-auto-snapshot` (Linux), or `zfs-periodic` or `zfstools` (FreeBSD). Both use the same properties and the `zfs-auto-snap_<bucket>-YYYY-MM-DD-HHMM` naming, so either can prune the other's snapshots. `GET /api/v1/auto-snapshot/status` shows which one is active.
 
 #### Default behaviour — important
 
@@ -1036,9 +1036,10 @@ Reports which component runs auto-snapshots: the OS daemon or dumpstore's built-
 }
 ```
 
-- `os_daemon` is `zfs-auto-snapshot` on Linux and `zfstools` on FreeBSD. On any other OS it is `""`. On Linux and FreeBSD it is reported whether or not the daemon is installed.
+- `os_daemon` is `zfs-auto-snapshot` on Linux. On FreeBSD it is `zfstools` when a crontab runs zfstools (see `cron_files`), otherwise `zfs-periodic`. On any other OS it is `""`. On Linux and FreeBSD it is reported whether or not the daemon is installed.
 - `os_daemon_active` on Linux is true if any `zfs-auto-snapshot-<bucket>.timer` is enabled, or if any of `/etc/cron.d/zfs-auto-snapshot` or `/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` exists.
-- `os_daemon_active` on FreeBSD is true if any of `{hourly,daily,weekly,monthly}_zfs_snapshot_enable` is `YES` after reading `/etc/periodic.conf`, `/etc/periodic.conf.local` and `/usr/local/etc/periodic.conf` in that order (a later file overrides an earlier one, as periodic(8) does). These are the switches of the `zfs-periodic` package's periodic scripts; zfstools has no periodic scripts, so crontab lines for it are not detected.
+- `os_daemon_active` on FreeBSD is true if any of `{hourly,daily,weekly,monthly}_zfs_snapshot_enable` is `YES` after reading `/etc/periodic.conf`, `/etc/periodic.conf.local` and `/usr/local/etc/periodic.conf` in that order (a later file overrides an earlier one, as periodic(8) does). These are the switches of the `zfs-periodic` package's periodic scripts.
+- On FreeBSD, `os_daemon_active` is also true when `zfstools` runs from cron: a line that isn't a comment and contains `zfs-auto-snapshot` in `/etc/crontab`, `/etc/cron.d/*`, `/usr/local/etc/cron.d/*` or `/var/cron/tabs/*`. zfstools has no periodic or rc.d hook; its pkg-message has the admin add crontab lines. `cron_files` lists those files (omitted when there are none).
 - `dumpstore_managed` is true when the five bucket tasks are registered with the internal scheduler. At startup they are registered automatically if the OS daemon is not active.
 - `last_runs` maps a bucket name (`frequent`, `hourly`, `daily`, `weekly`, `monthly`) to the time that bucket last fired. It is omitted when no bucket has fired.
 
@@ -1065,6 +1066,8 @@ On success, publishes `autosnap.status` (this payload has no `last_runs`).
 ```json
 { "tasks": [ { "name": "Linux — stop and disable zfs-auto-snapshot systemd timers", "status": "changed" } ] }
 ```
+
+Returns `409` on FreeBSD while zfstools runs from cron (`cron_files` in the status): dumpstore never edits a crontab, so remove the `zfs-auto-snapshot` lines from the named files first. Nothing is changed.
 
 Returns `500` if the autosnap runner is not initialised, if the playbook fails (with `tasks`), or if scheduler registration fails.
 

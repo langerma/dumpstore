@@ -39,7 +39,7 @@ export const state = {
   network: null,                // GET /api/v1/system/network response
   services: [],                 // GET /api/v1/services — [{name, display_name, unit_name, active, enabled, state}]
   replication: [],              // GET /api/v1/replication/tasks — [Task]
-  autosnapStatus: null,         // GET /api/v1/auto-snapshot/status — { os_daemon, os_daemon_active, dumpstore_managed, last_runs }
+  autosnapStatus: null,         // GET /api/v1/auto-snapshot/status — { os_daemon, os_daemon_active, dumpstore_managed, cron_files, last_runs }
 };
 
 // ── Reactive store ──────────────────────────────────────────────────────────
