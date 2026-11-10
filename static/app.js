@@ -9,7 +9,7 @@ import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
 import { renderReplications } from './js/replication.js';
 import { renderAutoSnapStatus } from './js/autosnap.js';
-import { api, esc, toast, startOp } from './js/utils.js';
+import { api, esc, toast, startOp, v1 } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
 subscribe(['sysinfo', 'version', 'schema'],                     renderSysInfo);
@@ -55,7 +55,7 @@ document.getElementById('refreshBtn').addEventListener('click', () => loadAll())
 // ── Auth header + config section ──────────────────────────────────────────────
 async function initAuthHeader() {
   try {
-    const data = await api('GET', '/api/whoami');
+    const data = await api('GET', v1`/auth/whoami`);
     const badge = document.getElementById('userBadge');
     const logoutBtn = document.getElementById('logoutBtn');
     if (data?.user) {
@@ -69,7 +69,7 @@ async function initAuthHeader() {
 async function initAuthConfig() {
   const wrap = document.getElementById('auth-config-wrap');
   try {
-    const data = await api('GET', '/api/auth/config');
+    const data = await api('GET', v1`/auth/config`);
     wrap.innerHTML = `
       <table class="data-table" style="max-width:420px">
         <tbody>
@@ -105,7 +105,7 @@ document.getElementById('changePasswordForm').addEventListener('submit', async e
   changePasswordDialog.close();
   const op = startOp('Change Password');
   try {
-    const result = await op.api('POST', '/api/auth/change-password', { current_password: cur, new_password: np });
+    const result = await op.api('PUT', v1`/auth/password`, { current_password: cur, new_password: np });
     op.done('Change Password', result?.tasks);
     toast('Password updated.', 'ok');
   } catch (err) { op.done('Change Password', err.tasks, err.message); }
@@ -122,7 +122,7 @@ document.getElementById('changeUsernameForm').addEventListener('submit', async e
   changeUsernameDialog.close();
   const op = startOp('Change Username');
   try {
-    const result = await op.api('POST', '/api/auth/change-username', { username });
+    const result = await op.api('PUT', v1`/auth/username`, { username });
     op.done('Change Username', result?.tasks);
     // Server invalidated all sessions — redirect after user closes the op-log.
     document.getElementById('opLogClose').addEventListener('click', () => { window.location.href = '/login'; }, { once: true });
@@ -133,7 +133,7 @@ document.getElementById('changeUsernameForm').addEventListener('submit', async e
 async function loadTLSStatus() {
   const wrap = document.getElementById('tls-status-wrap');
   try {
-    const d = await api('GET', '/api/tls/status');
+    const d = await api('GET', v1`/tls`);
     if (!d.enabled || !d.cert_path) {
       wrap.innerHTML = `<p class="muted">HTTPS is not enabled. Configure a certificate below, then restart dumpstore with <code>--tls</code>.</p>`;
       return;
@@ -173,7 +173,7 @@ document.getElementById('tlsGencertForm').addEventListener('submit', async e => 
   tlsGencertDialog.close();
   const op = startOp('Generate TLS Certificate');
   try {
-    const result = await op.api('POST', '/api/tls/gencert', { hostname, cert_dir: certDir });
+    const result = await op.api('POST', v1`/tls/self-signed`, { hostname, cert_dir: certDir });
     op.done('Generate TLS Certificate', result?.tasks);
     toast('Certificate generated. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
@@ -192,7 +192,7 @@ document.getElementById('tlsPathForm').addEventListener('submit', async e => {
   tlsPathDialog.close();
   const op = startOp('Load TLS Certificate');
   try {
-    const result = await op.api('PATCH', '/api/tls/config', { cert_path: certPath, key_path: keyPath });
+    const result = await op.api('PATCH', v1`/tls`, { cert_path: certPath, key_path: keyPath });
     op.done('Load TLS Certificate', result?.tasks);
     toast('Certificate loaded. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
@@ -212,7 +212,7 @@ document.getElementById('tlsAcmeForm').addEventListener('submit', async e => {
   tlsAcmeDialog.close();
   const op = startOp('Issue ACME Certificate');
   try {
-    const result = await op.api('POST', '/api/tls/acme/issue', { email, domain, cert_dir: certDir });
+    const result = await op.api('POST', v1`/tls/acme/issue`, { email, domain, cert_dir: certDir });
     op.done('Issue ACME Certificate', result?.tasks);
     toast('Certificate issued. Restart dumpstore with --tls to activate HTTPS.', 'ok');
     loadTLSStatus();
@@ -222,7 +222,7 @@ document.getElementById('tlsAcmeForm').addEventListener('submit', async e => {
 async function tlsAcmeRenew() {
   const op = startOp('Renew ACME Certificate');
   try {
-    const result = await op.api('POST', '/api/tls/acme/renew');
+    const result = await op.api('POST', v1`/tls/acme/renew`);
     op.done('Renew ACME Certificate', result?.tasks);
     toast('Certificate renewed. Restart dumpstore to load the new cert.', 'ok');
     loadTLSStatus();

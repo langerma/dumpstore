@@ -56,7 +56,12 @@ func (h *Handler) Operations(next http.Handler) http.Handler {
 		w.Header().Set(OperationIDHeader, id)
 		rec := &opRecorder{ResponseWriter: w, status: http.StatusOK}
 		defer func() { h.operations.Finish(id, rec.status, rec.body()) }()
-		next.ServeHTTP(rec, r.WithContext(operations.WithID(r.Context(), id)))
+		inner := r.WithContext(operations.WithID(r.Context(), id))
+		next.ServeHTTP(rec, inner)
+		// The mux records the matched route on the request it was given — the
+		// copy. Hand it back so outer middleware (RequestLogger's span name and
+		// HTTP metrics) sees the route for writes too.
+		r.Pattern = inner.Pattern
 	})
 }
 
@@ -88,7 +93,7 @@ func (o *opRecorder) Flush() {
 
 func (o *opRecorder) body() []byte { return o.buf.Bytes() }
 
-// getOperation handles GET /api/operations/{id}?after=<seq>.
+// getOperation handles GET /api/v1/operations/{id}?after=<seq>.
 // Returns the operation record with steps whose seq > after.
 type operationParams struct {
 	ID    string `path:"id" doc:"Operation ID (the X-Operation-ID of the write)"`

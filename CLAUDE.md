@@ -112,7 +112,7 @@ The service lifecycle (unit file, enable/disable) stays with the OS. dumpstore o
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd`), rendered from smb.conf with Samba; FreeBSD: none (rc.d reads `smb4.conf`) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) |
-| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf` — rendered from `internal/iscsi/ctl.conf.tmpl`, init gate `POST /api/iscsi/init` (backup `ctl.conf.pre-dumpstore`) |
+| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf` — rendered from `internal/iscsi/ctl.conf.tmpl`, init gate `POST /api/v1/iscsi/init` (backup `ctl.conf.pre-dumpstore`) |
 | iSCSI (Linux) | ✅ via CLI | `targetcli saveconfig` |
 | TLS | ✅ full | `dumpstore.conf` |
 | Users/Groups | — | OS is source of truth (`useradd`/`groupadd`) |
@@ -141,7 +141,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 2. **Single-command write**: validate inputs in the handler, build the argv, run it via `h.runLocal(ctx, ops.Step{Name: ..., Argv: ...})`; on error return `localError(err, res)` (500 with the op-log steps).
 3. **Configuration write** (owned config file / OS resource): add a playbook in `playbooks/`, wire it up in a handler using `h.runOp(ctx, ...)`; on error return `playbookError(err, out)`.
 4. **Data-plane write (long-running)**: build the argv in the handler, dispatch via `h.jobs.Run(type, argv)`, return `202` with the job metadata. Status appears in the Jobs tab.
-5. Register the route in `internal/api/routes.go:RegisterRoutes` with its OpenAPI metadata: `handle(reg, route("POST /api/x", "group.method", "Summary", fails(http.StatusBadRequest, …), status(http.StatusCreated)), h.createX)`.
+5. Register the route in `internal/api/routes.go:RegisterRoutes` with its OpenAPI metadata: `handle(reg, route("POST /api/v1/x", "group.method", "Summary", fails(http.StatusBadRequest, …), status(http.StatusCreated)), h.createX)`.
    - **Types:** every JSON handler is typed. Input is a struct with `path:`/`query:` fields (embed the shared param types) plus a `Body XRequest \`body:""\`` field. Output is a named struct. Never `map[string]any` or anonymous request structs; `TestNoUntypedRoutes` fails.
    - **Optional fields:** mark request fields a client may omit with `omitempty` so the spec's `required` list is right.
    - **`fails(...)`:** list every 4xx the handler or its helpers return. The integration suite fails on an undocumented one.
@@ -168,6 +168,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 - **Event wiring uses delegation.** Render functions emit `data-action` plus payload `data-*` attributes; each stable container gets one `delegate(container, handlers, type?)` call (helper in `utils.js`), bound **once at module init** — never inside a render function. Handlers receive `(dataset, element, event)` and destructure the payload: `edit: ({ ds, type }) => …`. Do not re-bind listeners after `innerHTML` renders, do not use inline `onclick=`, do not export handlers via `window.*`. Singleton elements (dialog buttons, filters) keep plain `addEventListener`.
 - Always escape user-controlled strings through `esc()` before inserting into HTML.
 - The `api()` helper throws on non-2xx responses with the server's `error` field.
+- **Build every API path with the `v1` tagged template** (`utils.js`): `api('GET', v1`/datasets/${name}/acl`)`. It prefixes `/api/v1` and percent-encodes every interpolated value, so names with `/` or `@` stay one path segment (#181). Pass raw names, never pre-encode, never interpolate a pre-built query string. Keep the method as a string literal right before the template: `TestFrontendPaths` checks every call against the server's routes.
 - **Every write runs in an op-log session** (#184): `const op = startOp(title)` opens the op-log; send each write with `op.api(method, path, body)` (tags it with a fresh `X-Operation-ID` so only this operation's live steps are shown, and recovers the result if the connection drops); finish with `op.done(title, tasks, errorMsg, conflicts)` on success **and** failure. Never call plain `api()` for a write, and never use `toast()` alone for write actions.
 
 #### UI consistency
@@ -197,7 +198,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
 | `internal/ansible/metrics.go` | OTEL counter/histogram for Ansible playbook runs (`ansible_runs_total`, `ansible_run_duration_seconds`) |
-| `internal/operations/operations.go` | Write-operation registry (#184): `Begin`/`Step`/`Finish`/`Get`, per-op `seq`, tagged `ansible.progress` publish, bounded in-memory retention; `api/operations.go` holds the `Operations` middleware (`X-Operation-ID`) and `GET /api/operations/{id}` |
+| `internal/operations/operations.go` | Write-operation registry (#184): `Begin`/`Step`/`Finish`/`Get`, per-op `seq`, tagged `ansible.progress` publish, bounded in-memory retention; `api/operations.go` holds the `Operations` middleware (`X-Operation-ID`) and `GET /api/v1/operations/{id}` |
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/apispec/` | Route registry + OpenAPI 3.1 generator (#181): `Registry.Handle` (route + metadata), `Spec()`, reflection schemas (`schema.go`) |
 | `internal/api/routes.go` | `RegisterRoutes` — every API route with SDK group/method, summary and types; shared param types; `NewRegistry` (error type, tag descriptions, schema names) |

@@ -49,7 +49,7 @@ This is one half of the project's **scope boundary** (#121). The other half: dom
 | Samba | ✅ full | `/etc/samba/smb.conf` / `/usr/local/etc/smb4.conf` | reload `smbd`/`nmbd` (systemd starts them if stopped) / `samba_server` (FreeBSD: the reload fails while Samba is stopped — start it from the Services tab) |
 | wsdd | ✅ full (Linux) | unit's EnvironmentFile (`/etc/default/wsdd` on Debian/Ubuntu), rendered from `smb.conf`; FreeBSD rc.d reads `smb4.conf` directly | `systemctl restart wsdd-server` (only if running and options changed) |
 | NFS | ✅ via ZFS | ZFS `sharenfs` property (ZFS manages `/etc/exports`) | automatic on `zfs set` |
-| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf`, rendered from `internal/iscsi/ctl.conf.tmpl`; init gate `POST /api/iscsi/init` | `service ctld reload` (start if stopped), verified via `ctladm portlist` + listening sockets, rolled back on failure |
+| iSCSI (FreeBSD) | ✅ full | `/etc/ctl.conf`, rendered from `internal/iscsi/ctl.conf.tmpl`; init gate `POST /api/v1/iscsi/init` | `service ctld reload` (start if stopped), verified via `ctladm portlist` + listening sockets, rolled back on failure |
 | iSCSI (Linux) | ✅ via CLI | `targetcli saveconfig` | `targetcli` |
 | TLS | ✅ full | `dumpstore.conf` cert fields; certificates under `<config dir>/tls` | restart dumpstore with `--tls` (the certificate is loaded once at startup) |
 | Users / Groups | — | OS is source of truth | n/a |
@@ -71,8 +71,8 @@ playbooks/smb_apply.yml (example)
 
 Sub-features are gated behind an **init gate**: writes return `409` and the UI offers an *Initialize* action until the service has been bootstrapped.
 
-- **Samba** (`POST /api/smb/init`) — the gate only checks that `smb.conf` **exists**, so a distro-default `smb.conf` already counts as initialised and the first share write re-renders it straight away. The original survives only as Ansible's timestamped backup (`smb.conf.<n>.<date>~`), not as `smb.conf.pre-dumpstore`; run *Initialize Samba* first on a fresh host to get the named backup.
-- **ctld** (`POST /api/iscsi/init`, FreeBSD) — the gate checks for dumpstore's ownership header on the first line of `/etc/ctl.conf`, so a pre-existing file is never overwritten before init has backed it up and imported its targets.
+- **Samba** (`POST /api/v1/smb/init`) — the gate only checks that `smb.conf` **exists**, so a distro-default `smb.conf` already counts as initialised and the first share write re-renders it straight away. The original survives only as Ansible's timestamped backup (`smb.conf.<n>.<date>~`), not as `smb.conf.pre-dumpstore`; run *Initialize Samba* first on a fresh host to get the named backup.
+- **ctld** (`POST /api/v1/iscsi/init`, FreeBSD) — the gate checks for dumpstore's ownership header on the first line of `/etc/ctl.conf`, so a pre-existing file is never overwritten before init has backed it up and imported its targets.
 
 ### Reference guard
 
@@ -89,7 +89,7 @@ Reads call ZFS/system CLI tools directly. Writes are split across three lanes by
 | **Config-file / OS-resource writes** | `exec.Command(ansible-playbook)` + ndjson callback | smb.conf rendering, users/groups, TLS, ACLs, dataset property playbooks, scrub schedules, service control |
 | **Long-running data-plane** | `internal/jobs` — background process groups | `zfs send \| recv`, `zfs rewrite` |
 
-Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) and stream live progress on the `ansible.progress` SSE topic — the frontend op-log cannot tell them apart. Each write request is an *operation* (`internal/operations`, #184): the `Handler.Operations` middleware registers it under the client's `X-Operation-ID` (or a generated ID) and records the final status and body; `runOp`/`runLocal` record every step with a per-operation `seq` and publish it tagged with the ID. The frontend shows only its own operation's steps and fills gaps or recovers a lost response from `GET /api/operations/{id}`. Records are in memory and bounded (running always kept; finished: 200 / 1 h). Input validation for ops-lane writes lives solely in the Go handlers. Ansible (and Python) remains a dependency only for the config-file / OS-resource features.
+Both write lanes return the same `tasks: [...]` step shape (`ansible.TaskStep`) and stream live progress on the `ansible.progress` SSE topic — the frontend op-log cannot tell them apart. Each write request is an *operation* (`internal/operations`, #184): the `Handler.Operations` middleware registers it under the client's `X-Operation-ID` (or a generated ID) and records the final status and body; `runOp`/`runLocal` record every step with a per-operation `seq` and publish it tagged with the ID. The frontend shows only its own operation's steps and fills gaps or recovers a lost response from `GET /api/v1/operations/{id}`. Records are in memory and bounded (running always kept; finished: 200 / 1 h). Input validation for ops-lane writes lives solely in the Go handlers. Ansible (and Python) remains a dependency only for the config-file / OS-resource features.
 
 ## Route registry and OpenAPI
 
@@ -105,11 +105,13 @@ Every JSON route uses the typed adapter `handle(reg, route(...), fn)` with `fn f
 
 The committed `api/openapi.json` is regenerated with `make openapi`; `TestOpenAPISpec` fails while it is stale, `TestSpecPathsResolve` requests every documented path with percent-encoded names and checks it reaches the same mux pattern, and CI lints the file with Redocly (`redocly.yaml`, `recommended-strict`). The integration suite records every JSON response it receives. After the run it validates each one against the served spec's schema for that operation and status, and fails on any 4xx status the operation doesn't list. This covers writes and error responses too.
 
+API paths live under `/api/v1` (#181 Phase 3). Every path parameter is one segment, so names are percent-encoded (`/datasets/tank%2Fdata/acl`); `TestSpecPathsResolve` requests each route with a `/`, `@` and space-containing value. The frontend builds all paths with the `v1` tagged template in `static/js/utils.js`, which encodes every interpolated value. `TestFrontendPaths` scans `static/` and fails on any path that doesn't resolve to a registered route with that method, or on a hand-written `/api/` path. HTTP metrics and span names use the matched route pattern; the Operations middleware hands the pattern back to the outer middleware.
+
 ## Write operation request flow
 
 ```
 Browser
-  │  POST /api/snapshots  {"dataset":"tank/data","snapname":"bkp"}
+  │  POST /api/v1/snapshots  {"dataset":"tank/data","snapname":"bkp"}
   │  X-Operation-ID: 3f9c0a…   (startOp() session, one ID per request)
   ▼
 zfs_handlers.go: createSnapshot()
@@ -139,11 +141,11 @@ A lightweight reactive store (`storeSet`/`storeBatch`/`subscribe`) automatically
 
 On boot:
 1. `loadAll()` fetches all fast endpoints in parallel, wrapped in `storeBatch()` — each render fires once
-2. `loadSlowMetrics()` fires in parallel for `/api/iostat` (~1 s) and `/api/smart` (drive scans), updating the I/O and disk health sections when ready
+2. `loadSlowMetrics()` fires in parallel for `/api/v1/pools/iostat` (~1 s) and `/api/v1/system/smart` (drive scans), updating the I/O and disk health sections when ready
 3. `startSSE()` opens a persistent `EventSource` connection; on each message `storeSet(key, data)` auto-dispatches the subscribed renderers
 4. If SSE drops, the client falls back to `setInterval(loadAll, 30_000)` and retries SSE after 5 s
 
-Writes run inside an op-log session: `const op = startOp(title)` opens the op-log, `op.api(...)` sends each write with a fresh `X-Operation-ID`, and `op.done(title, tasks, err)` renders the result. Live `ansible.progress` steps are appended only for the active session's IDs, in `seq` order; on SSE reconnect or a `seq` gap the missing steps are fetched from `GET /api/operations/{id}?after=<seq>`, and a write whose response was lost is resolved by polling that endpoint.
+Writes run inside an op-log session: `const op = startOp(title)` opens the op-log, `op.api(...)` sends each write with a fresh `X-Operation-ID`, and `op.done(title, tasks, err)` renders the result. Live `ansible.progress` steps are appended only for the active session's IDs, in `seq` order; on SSE reconnect or a `seq` gap the missing steps are fetched from `GET /api/v1/operations/{id}?after=<seq>`, and a write whose response was lost is resolved by polling that endpoint.
 
 UI-local state (`collapsedDatasets`, `selectedSnaps`, `hideSystemUsers`, `hideSystemGroups`) is mutated directly on `state` with explicit render calls — it is not managed by the store.
 

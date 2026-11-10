@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, startOp, toast } from './utils.js';
+import { api, delegate, esc, fmtBytes, startOp, toast, v1 } from './utils.js';
 import {
   openDeleteDatasetDialog, openRenameDatasetDialog, openRewriteDialog,
   openUserSpaceDialog, openACLDialog, openChownDialog,
@@ -20,7 +20,7 @@ const backdrop = document.getElementById('drawer-backdrop');
 let _renderedFor = '';     // dataset the drawer shell is currently built for
 let _propsDirty = false;   // user has touched the Properties form
 let _origProps = {};       // prop → display value at fetch time (local values only)
-let _fetchedProps = null;  // last fetched /api/dataset-props payload
+let _fetchedProps = null;  // last fetched GET /api/v1/datasets/{name}/properties payload
 
 export function openDatasetDrawer(name) {
   storeSet('selectedDataset', name);
@@ -137,8 +137,7 @@ function editableProps(d) {
 
 async function loadProps(name) {
   try {
-    const encodedName = name.split('/').map(encodeURIComponent).join('/');
-    const props = await api('GET', '/api/dataset-props/' + encodedName);
+    const props = await api('GET', v1`/datasets/${name}/properties`);
     if (state.selectedDataset !== name) return; // user navigated away mid-fetch
     _fetchedProps = props;
     renderProps();
@@ -213,11 +212,10 @@ async function applyProps() {
   }
   const op = startOp('Updating properties…');
   try {
-    const encodedName = name.split('/').map(encodeURIComponent).join('/');
-    const result = await op.api('PATCH', '/api/datasets/' + encodedName, body);
+    const result = await op.api('PATCH', v1`/datasets/${name}`, body);
     op.done(`Properties updated: ${name}`, result.tasks, null);
     _propsDirty = false;
-    const datasets = await api('GET', '/api/datasets');
+    const datasets = await api('GET', v1`/datasets`);
     storeSet('datasets', datasets || []);
     if (state.selectedDataset === name) await loadProps(name);
   } catch (e) {

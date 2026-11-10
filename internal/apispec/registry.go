@@ -40,7 +40,7 @@ const OperationIDHeader = "X-Operation-ID"
 // Route is one HTTP operation: what the mux serves and what the spec says.
 type Route struct {
 	Method string // GET, POST, …
-	Path   string // Go ServeMux pattern path, e.g. /api/datasets/{name...}
+	Path   string // Go ServeMux pattern path, e.g. /api/v1/datasets/{name}
 
 	Group       string // SDK group (x-fern-sdk-group-name), e.g. "datasets.acl"
 	Name        string // SDK method (x-fern-sdk-method-name), e.g. "get"
@@ -254,7 +254,7 @@ func (reg *Registry) Spec() ([]byte, error) {
 			"description": "HTTP API of dumpstore, a web UI for ZFS and file sharing. " +
 				"Generated from the server's route registry (internal/apispec). " +
 				"Dataset, snapshot and device names contain '/' and '@' — percent-encode them in path parameters. " +
-				"Every write accepts an optional " + OperationIDHeader + " header; its progress steps are published on the ansible.progress SSE topic and the result can be fetched from GET /api/operations/{id}.",
+				"Every write accepts an optional " + OperationIDHeader + " header; its progress steps are published on the ansible.progress SSE topic and the result can be fetched from GET /api/v1/operations/{id}.",
 			"license": Schema{"name": "BSD-2-Clause", "identifier": "BSD-2-Clause"},
 		},
 		"servers":  []any{Schema{"url": "/"}},

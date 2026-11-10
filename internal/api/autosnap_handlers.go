@@ -11,7 +11,7 @@ import (
 	"dumpstore/internal/platform"
 )
 
-// autoSnapshotStatusResponse is the body of GET /api/auto-snapshot/status.
+// autoSnapshotStatusResponse is the body of GET /api/v1/auto-snapshot/status.
 type autoSnapshotStatusResponse struct {
 	autosnap.Status
 	LastRuns map[autosnap.Bucket]time.Time `json:"last_runs,omitempty"`

@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, delegate, esc, startOp, toast } from './utils.js';
+import { api, delegate, esc, startOp, toast, v1 } from './utils.js';
 
 // ── Protected account denylists (must match handlers.go) ─────────────────────
 const PROTECTED_USERS  = new Set(['nobody', 'nfsnobody']);
@@ -124,11 +124,11 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
   newUserDialog.close();
   const op = startOp('Creating user…');
   try {
-    const result = await op.api('POST', '/api/users', { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
+    const result = await op.api('POST', v1`/users`, { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
     op.done(`User created: ${username}`, result.tasks, null);
     const [users, smbData] = await Promise.all([
-      api('GET', '/api/users'),
-      api('GET', '/api/smb-users').catch(() => null),
+      api('GET', v1`/users`),
+      api('GET', v1`/smb/users`).catch(() => null),
     ]);
     storeBatch(() => {
       storeSet('users', users || []);
@@ -168,9 +168,9 @@ deleteUserConfirmBtn.addEventListener('click', async () => {
   deleteUserDialog.close();
   const op = startOp('Deleting user…');
   try {
-    const result = await op.api('DELETE', '/api/users/' + encodeURIComponent(username));
+    const result = await op.api('DELETE', v1`/users/${username}`);
     op.done(`Deleted user: ${username}`, result.tasks, null);
-    const users = await api('GET', '/api/users');
+    const users = await api('GET', v1`/users`);
     storeSet('users', users || []);
   } catch (e) {
     op.done(`Failed to delete user: ${username}`, e.tasks, e.message);
@@ -192,9 +192,9 @@ document.getElementById('newGroupForm').addEventListener('submit', async e => {
   newGroupDialog.close();
   const op = startOp('Creating group…');
   try {
-    const result = await op.api('POST', '/api/groups', { groupname, gid });
+    const result = await op.api('POST', v1`/groups`, { groupname, gid });
     op.done(`Group created: ${groupname}`, result.tasks, null);
-    const groups = await api('GET', '/api/groups');
+    const groups = await api('GET', v1`/groups`);
     storeSet('groups', groups || []);
   } catch (e) {
     op.done('Group creation failed', e.tasks, e.message);
@@ -229,9 +229,9 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
   deleteGroupDialog.close();
   const op = startOp('Deleting group…');
   try {
-    const result = await op.api('DELETE', '/api/groups/' + encodeURIComponent(groupname));
+    const result = await op.api('DELETE', v1`/groups/${groupname}`);
     op.done(`Deleted group: ${groupname}`, result.tasks, null);
-    const groups = await api('GET', '/api/groups');
+    const groups = await api('GET', v1`/groups`);
     storeSet('groups', groups || []);
   } catch (e) {
     op.done(`Failed to delete group: ${groupname}`, e.tasks, e.message);
@@ -250,20 +250,27 @@ function renderEditUserSSHKeys() {
     list.innerHTML = '<span class="muted" style="font-size:12px">No authorized keys</span>';
     return;
   }
-  list.innerHTML = _editUserCurrentKeys.map((key, i) => {
-    const staged = _editUserRemovedKeys.has(key);
-    return `<div class="sshkey-entry${staged ? ' staged-remove' : ''}" data-idx="${i}">
-      <span class="sshkey-text" title="${esc(key)}">${esc(key)}</span>
-      <button type="button" class="btn-small btn-secondary sshkey-toggle-remove" data-action="toggle-remove" data-idx="${i}">${staged ? 'Undo' : '×'}</button>
+  // Keys are identified by fingerprint (_editUserRemovedKeys holds the staged
+  // ones). A line the server could not parse has no fingerprint: it is shown
+  // raw and cannot be removed from here.
+  list.innerHTML = _editUserCurrentKeys.map(k => {
+    const fp = k.fingerprint;
+    const staged = !!fp && _editUserRemovedKeys.has(fp);
+    const label = fp ? [k.type, fp, k.comment].filter(Boolean).join(' ') : k.key;
+    const btn = fp
+      ? `<button type="button" class="btn-small btn-secondary sshkey-toggle-remove" data-action="toggle-remove" data-fp="${esc(fp)}">${staged ? 'Undo' : '×'}</button>`
+      : '';
+    return `<div class="sshkey-entry${staged ? ' staged-remove' : ''}">
+      <span class="sshkey-text" title="${esc(k.key)}">${esc(label)}</span>
+      ${btn}
     </div>`;
   }).join('');
 }
 
 delegate(document.getElementById('edit-user-sshkeys-list'), {
-  'toggle-remove': ({ idx }) => {
-    const key = _editUserCurrentKeys[parseInt(idx)];
-    if (_editUserRemovedKeys.has(key)) _editUserRemovedKeys.delete(key);
-    else _editUserRemovedKeys.add(key);
+  'toggle-remove': ({ fp }) => {
+    if (_editUserRemovedKeys.has(fp)) _editUserRemovedKeys.delete(fp);
+    else _editUserRemovedKeys.add(fp);
     renderEditUserSSHKeys();
   },
 });
@@ -313,7 +320,7 @@ async function openEditUserDialog(username) {
   editUserDialog.showModal();
 
   try {
-    const data = await api('GET', '/api/users/' + encodeURIComponent(username) + '/sshkeys');
+    const data = await api('GET', v1`/users/${username}/ssh-keys`);
     _editUserCurrentKeys = data.keys || [];
   } catch (_) {
     _editUserCurrentKeys = [];
@@ -334,28 +341,28 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
   const home        = document.getElementById('edit-user-home').value.trim();
   const move_home   = document.getElementById('edit-user-move-home').checked;
   const newKey      = document.getElementById('edit-user-sshkey-new').value.trim();
-  const removedKeys = [..._editUserRemovedKeys];
+  const removedFps  = [..._editUserRemovedKeys];
   editUserDialog.close();
   const op = startOp('Updating user…');
 
   const allTasks = [];
   try {
-    const result = await op.api('PUT', '/api/users/' + encodeURIComponent(username),
+    const result = await op.api('PUT', v1`/users/${username}`,
       { shell, group, user_groups, password, home, move_home, smb_sync });
     allTasks.push(...(result.tasks || []));
 
-    for (const key of removedKeys) {
-      const r = await op.api('DELETE', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key });
+    for (const fp of removedFps) {
+      const r = await op.api('DELETE', v1`/users/${username}/ssh-keys/${fp}`);
       allTasks.push(...(r.tasks || []));
     }
 
     if (newKey) {
-      const r = await op.api('POST', '/api/users/' + encodeURIComponent(username) + '/sshkeys', { key: newKey });
+      const r = await op.api('POST', v1`/users/${username}/ssh-keys`, { key: newKey });
       allTasks.push(...(r.tasks || []));
     }
 
     op.done(`User updated: ${username}`, allTasks, null);
-    const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
+    const [users, groups] = await Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]);
     storeBatch(() => {
       storeSet('users', users || []);
       storeSet('groups', groups || []);
@@ -391,9 +398,9 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   editGroupDialog.close();
   const op = startOp('Updating group…');
   try {
-    const result = await op.api('PUT', '/api/groups/' + encodeURIComponent(groupname), { new_name, gid, members });
+    const result = await op.api('PUT', v1`/groups/${groupname}`, { new_name, gid, members });
     op.done(`Group updated: ${result.groupname}`, result.tasks, null);
-    const [users, groups] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/groups')]);
+    const [users, groups] = await Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]);
     storeBatch(() => {
       storeSet('users', users || []);
       storeSet('groups', groups || []);
@@ -523,7 +530,7 @@ document.getElementById('smbHomesApplyBtn').addEventListener('click', async () =
   smbHomesDialog.close();
   const op = startOp('Configuring home shares…');
   try {
-    const result = await op.api('POST', '/api/smb/homes', body);
+    const result = await op.api('PUT', v1`/smb/homes`, body);
     op.done('Home shares enabled', result.tasks, null);
     storeSet('smbHomes', result.config);
   } catch (err) {
@@ -535,7 +542,7 @@ document.getElementById('smbHomesDisableBtn').addEventListener('click', async ()
   smbHomesDialog.close();
   const op = startOp('Disabling home shares…');
   try {
-    const result = await op.api('DELETE', '/api/smb/homes');
+    const result = await op.api('DELETE', v1`/smb/homes`);
     op.done('Home shares disabled', result.tasks, null);
     storeSet('smbHomes', { enabled: false, path: '', browseable: 'no', read_only: 'no', create_mask: '0644', directory_mask: '0755' });
   } catch (err) {
@@ -580,9 +587,9 @@ async function deleteTimeMachineShare(name) {
   if (!confirm(`Delete Time Machine share "${name}"?`)) return;
   const op = startOp('Removing Time Machine share…');
   try {
-    const result = await op.api('DELETE', '/api/smb/timemachine/' + encodeURIComponent(name));
+    const result = await op.api('DELETE', v1`/smb/timemachine/${name}`);
     op.done(`Time Machine share deleted: ${name}`, result.tasks, null);
-    const shares = await api('GET', '/api/smb/timemachine').catch(() => []);
+    const shares = await api('GET', v1`/smb/timemachine`).catch(() => []);
     storeSet('timeMachineShares', shares || []);
   } catch (err) {
     op.done(`Failed to delete Time Machine share: ${name}`, err.tasks, err.message);
@@ -626,14 +633,12 @@ async function removeStaleSMBShare(name, path) {
   if (!confirm(`Remove stale SMB share "${name}" (${path})?`)) return;
   const op = startOp('Removing SMB share…');
   try {
-    // The {dataset} path segment is only used for the audit log here.
-    const ds = path.replace(/^\/+/, '') || 'stale';
-    const result = await op.api('DELETE', '/api/smb-share/' + ds + '?name=' + encodeURIComponent(name));
+    const result = await op.api('DELETE', v1`/smb/shares/${name}`);
     op.done(`SMB share removed: ${name}`, result.tasks, null);
   } catch (err) {
     op.done(`Failed to remove SMB share: ${name}`, err.tasks, err.message);
   }
-  const shares = await api('GET', '/api/smb-shares').catch(() => null);
+  const shares = await api('GET', v1`/smb/shares`).catch(() => null);
   if (shares) storeSet('smbShares', shares);
 }
 
@@ -681,7 +686,6 @@ document.getElementById('tmCreateBtn').addEventListener('click', async () => {
   if (!sharename) { toast('Share name is required', 'err'); return; }
   if (!path) { toast('Path is required', 'err'); return; }
   const body = {
-    sharename,
     path,
     max_size: document.getElementById('tm-max-size').value.trim(),
     valid_users: document.getElementById('tm-valid-users').value.trim(),
@@ -689,7 +693,7 @@ document.getElementById('tmCreateBtn').addEventListener('click', async () => {
   timeMachineDialog.close();
   const op = startOp('Creating Time Machine share…');
   try {
-    const result = await op.api('POST', '/api/smb/timemachine', body);
+    const result = await op.api('PUT', v1`/smb/timemachine/${sharename}`, body);
     op.done('Time Machine share created', result.tasks, null);
     storeSet('timeMachineShares', result.shares || []);
   } catch (err) {
@@ -767,9 +771,9 @@ document.getElementById('addSmbUserForm').addEventListener('submit', async e => 
   addSmbUserDialog.close();
   const op = startOp('Adding SMB user…');
   try {
-    const result = await op.api('POST', '/api/smb-users/' + encodeURIComponent(username), { password });
+    const result = await op.api('PUT', v1`/smb/users/${username}`, { password });
     op.done(`SMB access added: ${username}`, result.tasks, null);
-    const smbData = await api('GET', '/api/smb-users').catch(() => null);
+    const smbData = await api('GET', v1`/smb/users`).catch(() => null);
     storeBatch(() => {
       storeSet('sambaAvailable', smbData?.available ?? false);
       storeSet('sambaUsers', smbData?.users || []);
@@ -796,9 +800,9 @@ document.getElementById('removeSmbUserConfirmBtn').addEventListener('click', asy
   removeSmbUserDialog.close();
   const op = startOp('Removing SMB user…');
   try {
-    const result = await op.api('DELETE', '/api/smb-users/' + encodeURIComponent(username));
+    const result = await op.api('DELETE', v1`/smb/users/${username}`);
     op.done(`SMB access removed: ${username}`, result.tasks, null);
-    const smbData = await api('GET', '/api/smb-users').catch(() => null);
+    const smbData = await api('GET', v1`/smb/users`).catch(() => null);
     storeBatch(() => {
       storeSet('sambaAvailable', smbData?.available ?? false);
       storeSet('sambaUsers', smbData?.users || []);
@@ -817,7 +821,7 @@ document.getElementById('configureSambaConfirmBtn').addEventListener('click', as
   configureSambaDialog.close();
   const op = startOp('Initialising Samba…');
   try {
-    const result = await op.api('POST', '/api/smb/init');
+    const result = await op.api('POST', v1`/smb/init`);
     op.done('Samba initialised', result.tasks, null);
     await refreshSMBStatus();
   } catch (err) {
@@ -826,7 +830,7 @@ document.getElementById('configureSambaConfirmBtn').addEventListener('click', as
 });
 
 async function refreshSMBStatus() {
-  const status = await api('GET', '/api/smb/status').catch(() => null);
+  const status = await api('GET', v1`/smb/status`).catch(() => null);
   if (status === null) return;
   storeBatch(() => {
     storeSet('smbInitialized', status?.initialized ?? false);
@@ -883,7 +887,7 @@ export function renderSMBWsdd() {
 async function applySMBWsdd() {
   const op = startOp('Applying wsdd options…');
   try {
-    const result = await op.api('POST', '/api/smb/wsdd');
+    const result = await op.api('POST', v1`/smb/wsdd/apply`);
     op.done('wsdd options applied', result.tasks, null);
     await refreshSMBStatus();
   } catch (err) {

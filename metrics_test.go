@@ -103,7 +103,7 @@ func TestMetricsCompat(t *testing.T) {
 	h := api.NewHandler(ansible.NewRunner(t.TempDir()), "test", broker.New(), nil, nil, nil, nil, nil, "")
 	h.SetMetricsHandler(p.MetricsHandler)
 
-	api.RecordHTTP("GET", "/api/datasets/tank/data", 200, 3*time.Millisecond)
+	api.RecordHTTP("GET", "/api/v1/datasets/{name}", 200, 3*time.Millisecond)
 	if _, err := ansible.NewRunner(t.TempDir()).Run(context.Background(), "noop.yml", nil); err != nil {
 		t.Fatalf("ansible run: %v", err)
 	}

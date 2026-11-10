@@ -30,7 +30,7 @@ func TestChangePassword(t *testing.T) {
 	const newPass = "itest-new-password"
 	backupDumpstoreConf(t)
 	change := func(cur, next string) (int, []byte) {
-		return api(t, "POST", "/api/auth/change-password", map[string]string{
+		return api(t, "PUT", "/api/v1/auth/password", map[string]string{
 			"current_password": cur, "new_password": next,
 		})
 	}
@@ -45,10 +45,10 @@ func TestChangePassword(t *testing.T) {
 		}
 	})
 
-	apiStatus(t, http.StatusUnauthorized, "POST", "/api/auth/change-password", map[string]string{
+	apiStatus(t, http.StatusUnauthorized, "PUT", "/api/v1/auth/password", map[string]string{
 		"current_password": "definitely-wrong", "new_password": newPass,
 	})
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/auth/change-password", map[string]string{
+	apiStatus(t, http.StatusBadRequest, "PUT", "/api/v1/auth/password", map[string]string{
 		"current_password": adminPass, "new_password": "",
 	})
 
@@ -63,7 +63,7 @@ func TestChangePassword(t *testing.T) {
 	}
 
 	// The current session is not invalidated by a password change.
-	apiOK(t, "GET", "/api/whoami", nil)
+	apiOK(t, "GET", "/api/v1/auth/whoami", nil)
 	if freshLogin(t, adminUser, adminPass) {
 		t.Errorf("old password still logs in after change")
 	}

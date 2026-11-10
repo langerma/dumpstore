@@ -31,9 +31,10 @@ If no password is configured the service binds to `127.0.0.1` only and logs a wa
 dumpstore does **not** enforce HTTPS at the application layer. The session cookie and several API endpoints accept passwords in the request body:
 
 - `POST /auth/login` — admin password
-- `POST /api/users` — Unix user password
-- `POST /api/users/{name}` — Unix user password change
-- `POST /api/smb/users` — Samba password
+- `PUT /api/v1/auth/password` — admin password change
+- `POST /api/v1/users` — Unix user password
+- `PUT /api/v1/users/{name}` — Unix user password change
+- `PUT /api/v1/smb/users/{name}` — Samba password
 
 Without TLS these credentials travel in plaintext.
 

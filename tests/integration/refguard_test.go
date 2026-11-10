@@ -4,7 +4,6 @@ package integration
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +43,7 @@ func assertBlocked(t *testing.T, method, path string, body any, dataset, kind, n
 func TestDatasetRefGuard(t *testing.T) {
 	t.Run("usershare", func(t *testing.T) {
 		skipUnlessVMTool(t, "smbd")
-		assertTasks(t, apiOK(t, "POST", "/api/smb/init", nil))
+		assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
 
 		parent := testPool + "/itest-ref"
 		ds := parent + "/shared"
@@ -52,16 +51,16 @@ func TestDatasetRefGuard(t *testing.T) {
 		createDataset(t, parent)
 		mp := createDataset(t, ds)
 		t.Cleanup(func() { _, _ = vmExecErr("net usershare delete " + share + " 2>/dev/null; true") })
-		assertTasks(t, apiOK(t, "POST", "/api/smb-share/"+ds, map[string]string{"sharename": share}))
+		assertTasks(t, apiOK(t, "PUT", v1("/smb/shares/%s", share), map[string]string{"dataset": ds}))
 
-		assertBlocked(t, "DELETE", "/api/datasets/"+ds, nil, ds, "smb_usershare", share)
+		assertBlocked(t, "DELETE", v1("/datasets/%s", ds), nil, ds, "smb_usershare", share)
 		// A recursive delete of the parent covers the shared child.
-		assertBlocked(t, "DELETE", "/api/datasets/"+parent+"?recursive=true", nil, ds, "smb_usershare", share)
-		assertBlocked(t, "POST", "/api/datasets/rename", map[string]string{"name": ds, "new_name": parent + "/moved"}, ds, "smb_usershare", share)
-		assertBlocked(t, "PATCH", "/api/datasets/"+ds, map[string]string{"mountpoint": mp + "-moved"}, ds, "smb_usershare", share)
+		assertBlocked(t, "DELETE", v1("/datasets/%s", parent)+"?recursive=true", nil, ds, "smb_usershare", share)
+		assertBlocked(t, "POST", v1("/datasets/%s/rename", ds), map[string]string{"new_name": parent + "/moved"}, ds, "smb_usershare", share)
+		assertBlocked(t, "PATCH", v1("/datasets/%s", ds), map[string]string{"mountpoint": mp + "-moved"}, ds, "smb_usershare", share)
 
-		assertTasks(t, apiOK(t, "DELETE", "/api/smb-share/"+ds+"?name="+share, nil))
-		apiOK(t, "DELETE", "/api/datasets/"+ds, nil)
+		assertTasks(t, apiOK(t, "DELETE", v1("/smb/shares/%s", share), nil))
+		apiOK(t, "DELETE", v1("/datasets/%s", ds), nil)
 		if _, ok := datasetByName(t, ds); ok {
 			t.Fatalf("%s still exists after unreferenced delete", ds)
 		}
@@ -72,13 +71,13 @@ func TestDatasetRefGuard(t *testing.T) {
 	// re-activate — with its old ACL — on a new dataset at the same path.
 	t.Run("stale usershare", func(t *testing.T) {
 		skipUnlessVMTool(t, "smbd")
-		assertTasks(t, apiOK(t, "POST", "/api/smb/init", nil))
+		assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
 
 		ds := testPool + "/itest-ref-stale"
 		const share = "itest-stale"
 		mp := createDataset(t, ds)
 		t.Cleanup(func() { _, _ = vmExecErr("net usershare delete " + share + " 2>/dev/null; true") })
-		assertTasks(t, apiOK(t, "POST", "/api/smb-share/"+ds, map[string]string{"sharename": share}))
+		assertTasks(t, apiOK(t, "PUT", v1("/smb/shares/%s", share), map[string]string{"dataset": ds}))
 
 		destroyDatasetInVM(ds) // bypass the guard, as a pre-#183 delete did
 		stale := false
@@ -86,16 +85,15 @@ func TestDatasetRefGuard(t *testing.T) {
 			Name        string `json:"name"`
 			Path        string `json:"path"`
 			PathMissing bool   `json:"path_missing"`
-		}](t, apiOK(t, "GET", "/api/smb-shares", nil)) {
+		}](t, apiOK(t, "GET", "/api/v1/smb/shares", nil)) {
 			stale = stale || (s.Name == share && s.Path == mp && s.PathMissing)
 		}
 		if !stale {
 			t.Fatalf("stale share %s (%s) not listed with path_missing", share, mp)
 		}
 
-		// The UI's Remove button for stale shares sends the path as the
-		// (audit-only) dataset segment.
-		assertTasks(t, apiOK(t, "DELETE", "/api/smb-share/"+strings.TrimPrefix(mp, "/")+"?name="+share, nil))
+		// Removal is by share name alone — no dataset needed.
+		assertTasks(t, apiOK(t, "DELETE", v1("/smb/shares/%s", share), nil))
 		if hasUsershare(t, share) {
 			t.Fatalf("stale share %s still listed after remove", share)
 		}
@@ -118,15 +116,15 @@ func TestDatasetRefGuard(t *testing.T) {
 		createDataset(t, src)
 		createDataset(t, dst)
 
-		task := decode[replTask](t, apiStatus(t, http.StatusCreated, "POST", "/api/replication", map[string]any{
+		task := decode[replTask](t, apiStatus(t, http.StatusCreated, "POST", "/api/v1/replication/tasks", map[string]any{
 			"name": "itest-ref-repl", "source": src, "target": dst, "schedule": "0 3 * * *",
 		}))
-		assertBlocked(t, "DELETE", "/api/datasets/"+src, nil, src, "replication_source", task.Name)
-		assertBlocked(t, "DELETE", "/api/datasets/"+dst, nil, dst, "replication_target", task.Name)
+		assertBlocked(t, "DELETE", v1("/datasets/%s", src), nil, src, "replication_source", task.Name)
+		assertBlocked(t, "DELETE", v1("/datasets/%s", dst), nil, dst, "replication_target", task.Name)
 
-		apiStatus(t, http.StatusNoContent, "DELETE", "/api/replication/"+task.ID, nil)
-		apiOK(t, "DELETE", "/api/datasets/"+src, nil)
-		apiOK(t, "DELETE", "/api/datasets/"+dst, nil)
+		apiStatus(t, http.StatusNoContent, "DELETE", v1("/replication/tasks/%s", task.ID), nil)
+		apiOK(t, "DELETE", v1("/datasets/%s", src), nil)
+		apiOK(t, "DELETE", v1("/datasets/%s", dst), nil)
 	})
 
 	t.Run("iscsi", func(t *testing.T) {
@@ -134,25 +132,24 @@ func TestDatasetRefGuard(t *testing.T) {
 		const iqn = "iqn.2026-11.local.dumpstore:itest-ref"
 		destroyDatasetInVM(zvol)
 		if iscsiFixture(t, zvol, iqn) {
-			assertTasks(t, apiOK(t, "POST", "/api/iscsi/init", nil))
+			assertTasks(t, apiOK(t, "POST", "/api/v1/iscsi/init", nil))
 		}
 		t.Cleanup(func() { destroyDatasetInVM(zvol) })
 
-		apiOK(t, "POST", "/api/datasets", map[string]any{"name": zvol, "type": "volume", "volsize": "64M"})
+		apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": zvol, "type": "volume", "volsize": "64M"})
 		waitFor(t, "zvol device node", 30*time.Second, func() bool {
 			_, err := vmExecErr("test -e /dev/zvol/" + zvol)
 			return err == nil
 		})
-		assertTasks(t, apiOK(t, "POST", "/api/iscsi-targets", map[string]any{
+		assertTasks(t, apiOK(t, "POST", "/api/v1/iscsi/targets", map[string]any{
 			"zvol": zvol, "iqn": iqn, "auth_mode": "none",
 		}))
 
 		// Previously a generic 500 from `zfs destroy`; now a 409 naming the target.
-		assertBlocked(t, "DELETE", "/api/datasets/"+zvol, nil, zvol, "iscsi_target", iqn)
+		assertBlocked(t, "DELETE", v1("/datasets/%s", zvol), nil, zvol, "iscsi_target", iqn)
 
-		q := "?iqn=" + url.QueryEscape(iqn) + "&zvol=" + url.QueryEscape(zvol)
-		assertTasks(t, apiOK(t, "DELETE", "/api/iscsi-targets"+q, nil))
-		apiOK(t, "DELETE", "/api/datasets/"+zvol, nil)
+		assertTasks(t, apiOK(t, "DELETE", v1("/iscsi/targets/%s", iqn), nil))
+		apiOK(t, "DELETE", v1("/datasets/%s", zvol), nil)
 	})
 
 	// An unreadable consumer config aborts the delete instead of skipping
@@ -160,7 +157,7 @@ func TestDatasetRefGuard(t *testing.T) {
 	// directory — reading it then fails with EISDIR.
 	t.Run("fail closed", func(t *testing.T) {
 		skipUnlessVMTool(t, "smbd")
-		assertTasks(t, apiOK(t, "POST", "/api/smb/init", nil))
+		assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
 		conf := "/etc/samba/smb.conf"
 		if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) == "FreeBSD" {
 			conf = "/usr/local/etc/smb4.conf"
@@ -174,7 +171,7 @@ func TestDatasetRefGuard(t *testing.T) {
 			_, _ = vmExecErr("test -f " + conf + ".itest-bak && rmdir " + conf + " && mv " + conf + ".itest-bak " + conf)
 		})
 
-		b := apiStatus(t, http.StatusInternalServerError, "DELETE", "/api/datasets/"+ds, nil)
+		b := apiStatus(t, http.StatusInternalServerError, "DELETE", v1("/datasets/%s", ds), nil)
 		if !strings.Contains(string(b), "reference check failed") {
 			t.Fatalf("fail-closed delete: unexpected error body %s", truncate(b, 500))
 		}
@@ -189,7 +186,7 @@ func TestDatasetRefGuard(t *testing.T) {
 // it was. Linux: targetcli/LIO. FreeBSD: ctld — /etc/ctl.conf and its
 // ctl.conf.pre-dumpstore backup, ctld_enable, and whether ctld was running
 // are restored. On ctld the fixture starts from an uninitialised host (no
-// ctl.conf, no backup) and returns true; callers then run POST /api/iscsi/init.
+// ctl.conf, no backup) and returns true; callers then run POST /api/v1/iscsi/init.
 func iscsiFixture(t *testing.T, zvol, iqn string) (ctld bool) {
 	t.Helper()
 	if _, err := vmExecErr("command -v targetcli"); err == nil {

@@ -27,7 +27,7 @@
 # Optional extra vars:
 #   rollback_src – copy of the current ctl.conf, restored on failure; when
 #                  unset (no file yet) a failed apply removes ctl.conf again
-#   init         – "true" on POST /api/iscsi/init: back up an existing
+#   init         – "true" on POST /api/v1/iscsi/init: back up an existing
 #                  ctl.conf to <ctl_conf>.pre-dumpstore (never overwritten)
 
 - name: Apply dumpstore ctld configuration

@@ -45,15 +45,15 @@ up() {
 	zfs list "$POOL/media" >/dev/null 2>&1 && { echo "already seeded — run 'down' first" >&2; exit 1; }
 
 	# Finished jobs left behind by the integration suite would crowd the Jobs tab.
-	curl -fsS -b "$CK" "$URL/api/jobs" | python3 -c 'import json,sys
+	curl -fsS -b "$CK" "$URL/api/v1/jobs" | python3 -c 'import json,sys
 for j in json.load(sys.stdin):
     if "itest" in " ".join(j["args"]) and j["status"] not in ("running", "queued"): print(j["id"])' |
-		while read -r jid; do api DELETE "/api/jobs/$jid"; done
+		while read -r jid; do api DELETE "/api/v1/jobs/$jid"; done
 
 	echo "==> users and groups"
-	api POST /api/groups "{\"groupname\":\"$DEMO_GROUP\"}"
+	api POST /api/v1/groups "{\"groupname\":\"$DEMO_GROUP\"}"
 	for u in $DEMO_USERS; do
-		api POST /api/users "{\"username\":\"$u\",\"shell\":\"/bin/bash\",\"create_group\":true,\"groups\":\"$DEMO_GROUP\",\"password\":\"demo-$u-pw\",\"smb_user\":true}"
+		api POST /api/v1/users "{\"username\":\"$u\",\"shell\":\"/bin/bash\",\"create_group\":true,\"groups\":\"$DEMO_GROUP\",\"password\":\"demo-$u-pw\",\"smb_user\":true}"
 	done
 
 	echo "==> datasets and data"
@@ -99,41 +99,41 @@ for j in json.load(sys.stdin):
 
 	echo "==> permissions and NFS"
 	chgrp -R "$DEMO_GROUP" "/$POOL/documents"
-	api POST "/api/acl/$POOL/documents" '{"ace":"user:alice:rwx","recursive":true}'
-	api POST "/api/acl/$POOL/documents" "{\"ace\":\"group:$DEMO_GROUP:r-x\",\"recursive\":true}"
-	api PATCH "/api/datasets/$POOL/documents" '{"sharenfs":"rw=@192.168.1.0/24,no_root_squash"}'
-	api PUT "/api/auto-snapshot/$POOL/media" '{"com.sun:auto-snapshot":"true","com.sun:auto-snapshot:daily":"7","com.sun:auto-snapshot:weekly":"4"}'
+	api POST "/api/v1/datasets/$POOL%2Fdocuments/acl/entries" '{"ace":"user:alice:rwx","recursive":true}'
+	api POST "/api/v1/datasets/$POOL%2Fdocuments/acl/entries" "{\"ace\":\"group:$DEMO_GROUP:r-x\",\"recursive\":true}"
+	api PATCH "/api/v1/datasets/$POOL%2Fdocuments" '{"sharenfs":"rw=@192.168.1.0/24,no_root_squash"}'
+	api PUT "/api/v1/datasets/$POOL%2Fmedia/auto-snapshot" '{"com.sun:auto-snapshot":"true","com.sun:auto-snapshot:daily":"7","com.sun:auto-snapshot:weekly":"4"}'
 
 	echo "==> Samba"
-	api POST /api/smb/init
-	api POST "/api/smb-share/$POOL/media" '{"sharename":"media"}'
-	api POST /api/smb/homes "{\"path\":\"/$POOL/homes/%S\",\"browseable\":\"no\",\"read_only\":\"no\",\"create_mask\":\"0644\",\"directory_mask\":\"0755\"}"
-	api POST /api/smb/timemachine "{\"sharename\":\"timemachine\",\"path\":\"/$POOL/backups/timemachine\",\"max_size\":\"500G\",\"valid_users\":\"alice bob\"}"
+	api POST /api/v1/smb/init
+	api PUT /api/v1/smb/shares/media "{\"dataset\":\"$POOL/media\"}"
+	api PUT /api/v1/smb/homes "{\"path\":\"/$POOL/homes/%S\",\"browseable\":\"no\",\"read_only\":\"no\",\"create_mask\":\"0644\",\"directory_mask\":\"0755\"}"
+	api PUT /api/v1/smb/timemachine/timemachine "{\"path\":\"/$POOL/backups/timemachine\",\"max_size\":\"500G\",\"valid_users\":\"alice bob\"}"
 	if command -v apt-get >/dev/null && ! dpkg -s wsdd-server >/dev/null 2>&1; then
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -q wsdd-server >/dev/null
 		touch "$WSDD_MARKER"
 	fi
-	api POST /api/smb/wsdd
+	api POST /api/v1/smb/wsdd/apply
 
 	echo "==> iSCSI, replication, scrub"
-	api POST /api/iscsi-targets "{\"zvol\":\"$POOL/vms/win11\",\"iqn\":\"iqn.2026-10.lan.nas:win11\",\"portal_ip\":\"0.0.0.0\",\"portal_port\":\"3260\",\"auth_mode\":\"none\",\"initiators\":[]}"
-	api POST /api/replication "{\"name\":\"documents-nightly\",\"source\":\"$POOL/documents\",\"target\":\"$POOL/backups/documents\",\"schedule\":\"0 3 * * *\",\"retention_count\":7}"
-	id=$(curl -fsS -b "$CK" "$URL/api/replication" | python3 -c 'import json,sys; print(next(t["id"] for t in json.load(sys.stdin) if t["name"]=="documents-nightly"))')
-	api POST "/api/replication/$id/run"
-	api PUT "/api/scrub-schedule/$POOL"
+	api POST /api/v1/iscsi/targets "{\"zvol\":\"$POOL/vms/win11\",\"iqn\":\"iqn.2026-10.lan.nas:win11\",\"portal_ip\":\"0.0.0.0\",\"portal_port\":\"3260\",\"auth_mode\":\"none\",\"initiators\":[]}"
+	api POST /api/v1/replication/tasks "{\"name\":\"documents-nightly\",\"source\":\"$POOL/documents\",\"target\":\"$POOL/backups/documents\",\"schedule\":\"0 3 * * *\",\"retention_count\":7}"
+	id=$(curl -fsS -b "$CK" "$URL/api/v1/replication/tasks" | python3 -c 'import json,sys; print(next(t["id"] for t in json.load(sys.stdin) if t["name"]=="documents-nightly"))')
+	api POST "/api/v1/replication/tasks/$id/run"
+	api PUT "/api/v1/pools/$POOL/scrub-schedule"
 	zpool scrub -w "$POOL"
 	echo "==> seeded"
 }
 
 down() {
 	login
-	id=$(curl -fsS -b "$CK" "$URL/api/replication" | python3 -c 'import json,sys; print(next((t["id"] for t in json.load(sys.stdin) if t["name"]=="documents-nightly"), ""))')
-	[ -n "$id" ] && api DELETE "/api/replication/$id"
-	api DELETE "/api/iscsi-targets?iqn=iqn.2026-10.lan.nas:win11&zvol=$POOL/vms/win11" || true
-	api DELETE /api/smb/timemachine/timemachine || true
-	api DELETE /api/smb/homes || true
-	api DELETE "/api/smb-share/$POOL/media?name=media" || true
-	api DELETE "/api/scrub-schedule/$POOL" || true
+	id=$(curl -fsS -b "$CK" "$URL/api/v1/replication/tasks" | python3 -c 'import json,sys; print(next((t["id"] for t in json.load(sys.stdin) if t["name"]=="documents-nightly"), ""))')
+	[ -n "$id" ] && api DELETE "/api/v1/replication/tasks/$id"
+	api DELETE "/api/v1/iscsi/targets/iqn.2026-10.lan.nas:win11" || true
+	api DELETE /api/v1/smb/timemachine/timemachine || true
+	api DELETE /api/v1/smb/homes || true
+	api DELETE /api/v1/smb/shares/media || true
+	api DELETE "/api/v1/pools/$POOL/scrub-schedule" || true
 	if [ -e "$WSDD_MARKER" ]; then # only remove wsdd if "up" installed it
 		DEBIAN_FRONTEND=noninteractive apt-get purge -y -q wsdd-server wsdd >/dev/null 2>&1 || true
 		rm -f /etc/default/wsdd /etc/default/wsdd.*~ "$WSDD_MARKER"

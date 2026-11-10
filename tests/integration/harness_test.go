@@ -128,6 +128,16 @@ func postLogin(t *testing.T, user, pass string) *http.Response {
 	return resp
 }
 
+// v1 builds an /api/v1 path: every arg is url.PathEscape'd, so dataset,
+// snapshot and device names containing "/" or "@" stay one path segment.
+func v1(format string, args ...string) string {
+	esc := make([]any, len(args))
+	for i, a := range args {
+		esc[i] = url.PathEscape(a)
+	}
+	return "/api/v1" + fmt.Sprintf(format, esc...)
+}
+
 // api performs an authenticated JSON request and returns status code and body.
 func api(t *testing.T, method, path string, body any) (int, []byte) {
 	t.Helper()
@@ -275,7 +285,7 @@ type job struct {
 
 func listDatasets(t *testing.T) []dataset {
 	t.Helper()
-	return decode[[]dataset](t, apiOK(t, "GET", "/api/datasets", nil))
+	return decode[[]dataset](t, apiOK(t, "GET", "/api/v1/datasets", nil))
 }
 
 func datasetByName(t *testing.T, name string) (dataset, bool) {
@@ -290,12 +300,12 @@ func datasetByName(t *testing.T, name string) (dataset, bool) {
 
 func listSnapshots(t *testing.T) []snapshot {
 	t.Helper()
-	return decode[[]snapshot](t, apiOK(t, "GET", "/api/snapshots", nil))
+	return decode[[]snapshot](t, apiOK(t, "GET", "/api/v1/snapshots", nil))
 }
 
 func poolByName(t *testing.T, name string) (pool, bool) {
 	t.Helper()
-	for _, p := range decode[[]pool](t, apiOK(t, "GET", "/api/pools", nil)) {
+	for _, p := range decode[[]pool](t, apiOK(t, "GET", "/api/v1/pools", nil)) {
 		if p.Name == name {
 			return p, true
 		}
@@ -305,7 +315,7 @@ func poolByName(t *testing.T, name string) (pool, bool) {
 
 func poolStatus(t *testing.T, name string) (poolDetail, bool) {
 	t.Helper()
-	for _, d := range decode[[]poolDetail](t, apiOK(t, "GET", "/api/poolstatus", nil)) {
+	for _, d := range decode[[]poolDetail](t, apiOK(t, "GET", "/api/v1/pools/status", nil)) {
 		if d.Name == name {
 			return d, true
 		}
@@ -362,7 +372,7 @@ func createDataset(t *testing.T, name string) string {
 	t.Helper()
 	destroyDatasetInVM(name)
 	t.Cleanup(func() { destroyDatasetInVM(name) })
-	apiOK(t, "POST", "/api/datasets", map[string]any{"name": name, "type": "filesystem"})
+	apiOK(t, "POST", "/api/v1/datasets", map[string]any{"name": name, "type": "filesystem"})
 	ds, ok := datasetByName(t, name)
 	if !ok || ds.Mountpoint == "" {
 		t.Fatalf("dataset %s missing or unmounted after create: %+v", name, ds)
@@ -376,7 +386,7 @@ func createUser(t *testing.T, name string) {
 	t.Helper()
 	removeUserInVM(name)
 	t.Cleanup(func() { removeUserInVM(name) })
-	assertTasks(t, apiStatus(t, http.StatusCreated, "POST", "/api/users", map[string]any{
+	assertTasks(t, apiStatus(t, http.StatusCreated, "POST", "/api/v1/users", map[string]any{
 		"username": name, "shell": "/bin/sh", "password": "itest-pass", "create_group": true,
 	}))
 }
@@ -399,7 +409,7 @@ func waitJob(t *testing.T, id string, timeout time.Duration) job {
 	t.Helper()
 	var j job
 	waitFor(t, "job "+id+" to finish", timeout, func() bool {
-		j = decode[job](t, apiOK(t, "GET", "/api/jobs/"+id, nil))
+		j = decode[job](t, apiOK(t, "GET", v1("/jobs/%s", id), nil))
 		return j.Status != "pending" && j.Status != "running"
 	})
 	return j

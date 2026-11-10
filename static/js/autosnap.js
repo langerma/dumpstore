@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, esc, startOp, toast } from './utils.js';
+import { api, esc, startOp, toast, v1 } from './utils.js';
 
 // renderAutoSnapStatus draws the banner above the Datasets table that reports
 // who currently owns auto-snapshot execution. Three states:
@@ -46,7 +46,7 @@ export function renderAutoSnapStatus() {
 async function doTakeover() {
   const op = startOp('Auto-snapshot takeover');
   try {
-    const result = await op.api('POST', '/api/auto-snapshot/takeover');
+    const result = await op.api('POST', v1`/auto-snapshot/takeover`);
     op.done('Auto-snapshot takeover', result?.tasks);
     toast('dumpstore now manages auto-snapshots', 'ok');
     await refreshAutoSnapStatus();
@@ -59,7 +59,7 @@ async function doRelease() {
   if (!confirm('Stop running auto-snapshots from dumpstore and re-enable the OS daemon?')) return;
   const op = startOp('Auto-snapshot release');
   try {
-    const result = await op.api('POST', '/api/auto-snapshot/release');
+    const result = await op.api('POST', v1`/auto-snapshot/release`);
     op.done('Auto-snapshot release', result?.tasks);
     toast('Released back to OS daemon', 'ok');
     await refreshAutoSnapStatus();
@@ -70,7 +70,7 @@ async function doRelease() {
 
 export async function refreshAutoSnapStatus() {
   try {
-    const s = await api('GET', '/api/auto-snapshot/status');
+    const s = await api('GET', v1`/auto-snapshot/status`);
     storeSet('autosnapStatus', s);
   } catch (err) {
     console.warn('refreshAutoSnapStatus failed', err);

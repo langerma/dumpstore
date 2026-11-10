@@ -130,3 +130,20 @@ func TestGetOperationEndpoint(t *testing.T) {
 		t.Errorf("unknown: code=%d body=%q", rec.Code, rec.Body.String())
 	}
 }
+
+// TestOperationsKeepsRoutePattern: the middleware passes a copy of the
+// request to the mux; the matched pattern must still reach outer middleware
+// (span names and the http_requests_total path label depend on it).
+func TestOperationsKeepsRoutePattern(t *testing.T) {
+	_, srv := newOpsTestHandler()
+	for _, c := range []struct{ method, path, want string }{
+		{"POST", "/api/thing", "POST /api/thing"},
+		{"GET", "/api/thing", "GET /api/thing"},
+	} {
+		req := httptest.NewRequest(c.method, c.path, nil)
+		srv.ServeHTTP(httptest.NewRecorder(), req)
+		if req.Pattern != c.want {
+			t.Errorf("%s %s: outer r.Pattern = %q, want %q", c.method, c.path, req.Pattern, c.want)
+		}
+	}
+}

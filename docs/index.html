@@ -661,7 +661,7 @@
           <span class="pool-name">Per-operation progress</span>
           <span class="health-badge badge-blue">X-Operation-ID</span>
         </div>
-        <p>Every write gets an operation ID. Live op-log steps are tagged with it, so each tab and client sees only its own operation's progress, even when several run at once. If the connection drops mid-write, the UI fetches the missing steps and the final result from <code>GET /api/operations/{id}</code>, and a write the browser retransmits is refused instead of running twice.</p>
+        <p>Every write gets an operation ID. Live op-log steps are tagged with it, so each tab and client sees only its own operation's progress, even when several run at once. If the connection drops mid-write, the UI fetches the missing steps and the final result from <code>GET /api/v1/operations/{id}</code>, and a write the browser retransmits is refused instead of running twice.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -780,7 +780,7 @@ sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318"</pre>
           <span class="pool-name">OpenAPI + /api/v1</span>
           <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/181" style="color:inherit">#181</a></span>
         </div>
-        <p>Spec generated from the route registry and served at <code>/api/v1/openapi.json</code>, with typed request/response schemas and documented error statuses for every route (done). Still to come: the <code>/api/v1</code> path cleanup and a Forge SDK check.</p>
+        <p>Spec generated from the route registry and served at <code>/api/v1/openapi.json</code>, with typed request/response schemas, documented error statuses and the cleaned-up <code>/api/v1</code> paths (done). Still to come: a Forge SDK check.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

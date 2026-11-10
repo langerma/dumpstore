@@ -114,7 +114,7 @@ func (h *Handler) tlsGenCert(ctx context.Context, in struct {
 	return TaskResult{Tasks: steps}, nil
 }
 
-// GenCertRequest is the POST /api/tls/gencert body.
+// GenCertRequest is the POST /api/v1/tls/self-signed body.
 type GenCertRequest struct {
 	Hostname string `json:"hostname"`
 	CertDir  string `json:"cert_dir,omitempty" doc:"Default: <config dir>/tls"`
@@ -157,7 +157,7 @@ func (h *Handler) tlsSetConfig(ctx context.Context, in struct {
 	return TaskResult{Tasks: out.Steps()}, nil
 }
 
-// TLSConfigRequest is the PATCH /api/tls/config body.
+// TLSConfigRequest is the PATCH /api/v1/tls body.
 type TLSConfigRequest struct {
 	CertPath string `json:"cert_path"`
 	KeyPath  string `json:"key_path"`
@@ -227,7 +227,7 @@ func (h *Handler) tlsAcmeIssue(ctx context.Context, in struct {
 	return TaskResult{Tasks: steps}, nil
 }
 
-// ACMEIssueRequest is the POST /api/tls/acme/issue body.
+// ACMEIssueRequest is the POST /api/v1/tls/acme/issue body.
 type ACMEIssueRequest struct {
 	Email   string `json:"email"`
 	Domain  string `json:"domain"`

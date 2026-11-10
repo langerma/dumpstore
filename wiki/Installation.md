@@ -51,7 +51,7 @@ apt install targetcli-fb
 dnf install targetcli
 
 # FreeBSD — iSCSI targets: ctld is built-in. Nothing to install; the iSCSI
-# dialog's "Initialize ctld" (POST /api/iscsi/init) takes over /etc/ctl.conf
+# dialog's "Initialize ctld" (POST /api/v1/iscsi/init) takes over /etc/ctl.conf
 # (backup: /etc/ctl.conf.pre-dumpstore), enables ctld, and starts it.
 
 # FreeBSD — Windows network discovery
@@ -153,6 +153,25 @@ For setups behind nginx, Caddy, Traefik, or Authelia:
 2. Configure your proxy to set `X-Remote-User: <username>` after SSO authentication
 3. dumpstore will accept that header as the authenticated identity — no password login required from those IPs
 
+### Reverse proxy: keep `%2F` encoded
+
+API paths carry dataset, snapshot and device names as **one percent-encoded path segment**: `tank/data` travels as `tank%2Fdata`, as in `GET /api/v1/datasets/tank%2Fdata/acl`. The proxy must forward the path **without decoding `%2F`**. If it decodes it, those requests reach dumpstore as `/datasets/tank/data/acl` and return `404`.
+
+Checked against dumpstore on Ubuntu 24.04 (`GET /api/v1/datasets/tank%2Fdata/properties` through the proxy):
+
+| Proxy | Works | Does not work |
+|-------|-------|---------------|
+| nginx 1.24 | `proxy_pass http://127.0.0.1:8080;` (no URI part) | `proxy_pass http://127.0.0.1:8080/;`: a URI part, even a lone `/`, makes nginx normalise the path and decode `%2F` |
+| Caddy 2.6 | `reverse_proxy 127.0.0.1:8080`, also inside `handle_path /prefix/*` | — |
+| Traefik 3.7 | default entryPoint settings | Traefik v3.6.4 to v3.6.6 rejected encoded slashes with `400` by default, per Traefik's v3 migration guide (not tested). On those versions set `entryPoints.<name>.http.encodedCharacters.allowEncodedSlash=true`; it is the default since v3.6.7 |
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;   # no trailing slash, no path
+    proxy_set_header X-Remote-User $remote_user;   # only with trusted_proxies set
+}
+```
+
 ### Change password or username in the UI
 
 Go to **Users & Groups → Authentication** and use the Change Password or Change Username dialogs. Both operations go through Ansible and show the operation log.
@@ -187,7 +206,7 @@ On FreeBSD the shipped rc.d script has no variable for extra flags, so `--tls` c
 Things to know:
 
 - **The certificate is loaded once at startup.** After replacing or renewing it, restart dumpstore.
-- **ACME renewal is manual, and in practice has to happen outside dumpstore.** There is no renewal timer. The *Renew (ACME)* action (`POST /api/tls/acme/renew`, renews when fewer than 30 days remain) only works until dumpstore restarts — the ACME settings are not saved to `dumpstore.conf` — and HTTPS needs a restart. It also uses TLS-ALPN-01 on port 443, which fails while dumpstore itself serves HTTPS there. Renew the 90-day certificate with `lego renew` directly (e.g. from cron, with its HTTP-01 or DNS-01 challenge, `--path <config dir>/tls/acme`) and restart dumpstore afterwards. If ACME matters to you, a certificate managed by your reverse proxy or certbot plus *Load existing cert* is the more robust setup.
+- **ACME renewal is manual, and in practice has to happen outside dumpstore.** There is no renewal timer. The *Renew (ACME)* action (`POST /api/v1/tls/acme/renew`, renews when fewer than 30 days remain) only works until dumpstore restarts — the ACME settings are not saved to `dumpstore.conf` — and HTTPS needs a restart. It also uses TLS-ALPN-01 on port 443, which fails while dumpstore itself serves HTTPS there. Renew the 90-day certificate with `lego renew` directly (e.g. from cron, with its HTTP-01 or DNS-01 challenge, `--path <config dir>/tls/acme`) and restart dumpstore afterwards. If ACME matters to you, a certificate managed by your reverse proxy or certbot plus *Load existing cert* is the more robust setup.
 - Behind a reverse proxy, terminate TLS at the proxy instead and leave dumpstore on HTTP (see [Reverse proxy delegation](#reverse-proxy-delegation)).
 
 ---
@@ -293,6 +312,6 @@ dev                    ← built outside git
 
 The version appears in:
 - `./dumpstore -version`
-- `GET /api/sysinfo` → `app_version` field
+- `GET /api/v1/system/info` → `app_version` field
 - `GET /metrics` → `dumpstore_build_info{version="..."}` label
 - UI version badge

@@ -34,27 +34,27 @@ func TestTLSGencert(t *testing.T) {
 	_, _ = vmExecErr("rm -rf " + certDir)
 	t.Cleanup(func() { _, _ = vmExecErr("rm -rf " + certDir) })
 
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/tls/gencert", map[string]string{"hostname": "bad host!"})
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/tls/gencert", map[string]string{"hostname": host, "cert_dir": "relative/dir"})
+	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/tls/self-signed", map[string]string{"hostname": "bad host!"})
+	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/tls/self-signed", map[string]string{"hostname": host, "cert_dir": "relative/dir"})
 
-	assertTasks(t, apiOK(t, "POST", "/api/tls/gencert", map[string]string{"hostname": host, "cert_dir": certDir}))
+	assertTasks(t, apiOK(t, "POST", "/api/v1/tls/self-signed", map[string]string{"hostname": host, "cert_dir": certDir}))
 	st := decode[struct {
 		Enabled    bool   `json:"enabled"`
 		CN         string `json:"cn"`
 		SelfSigned bool   `json:"self_signed"`
 		CertPath   string `json:"cert_path"`
-	}](t, apiOK(t, "GET", "/api/tls/status", nil))
+	}](t, apiOK(t, "GET", "/api/v1/tls", nil))
 	if !st.Enabled || st.CN != host || !st.SelfSigned || st.CertPath != certDir+"/cert.pem" {
 		t.Fatalf("tls/status after gencert: %+v", st)
 	}
 	vmExec(t, "test -s "+certDir+"/cert.pem && test -s "+certDir+"/key.pem")
 
-	assertTasks(t, apiOK(t, "PATCH", "/api/tls/config", map[string]string{
+	assertTasks(t, apiOK(t, "PATCH", "/api/v1/tls", map[string]string{
 		"cert_path": certDir + "/cert.pem", "key_path": certDir + "/key.pem",
 	}))
 	// A pair that does not load is refused before anything is written.
-	apiStatus(t, http.StatusBadRequest, "PATCH", "/api/tls/config", map[string]string{
+	apiStatus(t, http.StatusBadRequest, "PATCH", "/api/v1/tls", map[string]string{
 		"cert_path": certDir + "/missing.pem", "key_path": certDir + "/key.pem",
 	})
-	apiStatus(t, http.StatusBadRequest, "PATCH", "/api/tls/config", map[string]string{"cert_path": certDir + "/cert.pem"})
+	apiStatus(t, http.StatusBadRequest, "PATCH", "/api/v1/tls", map[string]string{"cert_path": certDir + "/cert.pem"})
 }

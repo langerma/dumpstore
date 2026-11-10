@@ -11,6 +11,20 @@ export function esc(s) {
 // opId, when given, is sent as X-Operation-ID so the write's progress steps
 // can be attributed to it (#184). A fetch-level failure (connection lost)
 // is rethrown with err.network = true so callers can recover the result.
+// v1`/datasets/${name}/acl` → "/api/v1/datasets/tank%2Fdata/acl".
+// Prefixes the API version and percent-encodes EVERY interpolated value, so a
+// dataset, snapshot or device name containing '/' or '@' always stays a
+// single path segment (#181). Build query strings in the template's literal
+// part (`?kind=${kind}`), never by interpolating a pre-built "?a=b" string.
+export function v1(strings, ...values) {
+  let out = '/api/v1';
+  strings.forEach((s, i) => {
+    out += s;
+    if (i < values.length) out += encodeURIComponent(values[i]);
+  });
+  return out;
+}
+
 export async function api(method, path, body, { opId } = {}) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (opId) opts.headers['X-Operation-ID'] = opId;
@@ -121,7 +135,7 @@ function showOpLogRunning(title) {
 // session.api(), which tags the request with a fresh operation ID; live
 // ansible.progress steps are shown only for the active session's IDs, in seq
 // order. Gaps (dropped SSE events, reconnects) are filled from
-// GET /api/operations/{id}?after=<seq>, and a lost HTTP response is recovered
+// GET /api/v1/operations/{id}?after=<seq>, and a lost HTTP response is recovered
 // by polling the same endpoint for the final result.
 
 let activeSession = null;
@@ -245,7 +259,7 @@ export function startOp(title) {
 // Returns the operation record (steps after `after`), or null if unknown/expired.
 async function fetchOp(id, after) {
   try {
-    return await api('GET', `/api/operations/${encodeURIComponent(id)}?after=${after}`);
+    return await api('GET', v1`/operations/${id}?after=${after}`);
   } catch (e) {
     if (e.status === 404) return null;
     throw e;

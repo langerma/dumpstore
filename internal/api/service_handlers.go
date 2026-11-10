@@ -30,13 +30,13 @@ func servicePlaybook() string {
 	return "service_control_linux.yml"
 }
 
-// getServices handles GET /api/services
+// getServices handles GET /api/v1/services
 // Returns the status of all managed sharing services (Samba, NFS, iSCSI).
 func (h *Handler) getServices(context.Context, struct{}) ([]system.ServiceStatus, error) {
 	return system.ListServices(), nil
 }
 
-// mutateService handles POST /api/services/{service}/{action}
+// mutateService handles POST /api/v1/services/{service}/{action}
 // Valid actions: start, stop, restart, enable, disable.
 func (h *Handler) mutateService(ctx context.Context, in serviceActionParam) (ServiceResult, error) {
 	svc, action := in.Service, in.Action

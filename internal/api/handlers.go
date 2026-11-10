@@ -283,7 +283,7 @@ func (h *Handler) runLocal(ctx context.Context, steps ...ops.Step) (*ops.Result,
 // internal/otel (cycle via internal/logging).
 func (h *Handler) SetOtelInfo(v any) { h.otelInfo = v }
 
-// SysInfo is the GET /api/sysinfo response.
+// SysInfo is the GET /api/v1/system/info response.
 type SysInfo struct {
 	AppVersion string `json:"app_version"`
 	Otel       any    `json:"otel,omitempty"`
@@ -307,12 +307,12 @@ func (h *Handler) getVersion(ctx context.Context, _ struct{}) (VersionInfo, erro
 	return VersionInfo{Version: v}, nil
 }
 
-// VersionInfo is the GET /api/version response.
+// VersionInfo is the GET /api/v1/system/version response.
 type VersionInfo struct {
 	Version string `json:"version" doc:"OpenZFS version; empty when it cannot be determined"`
 }
 
-// getEvents handles GET /api/events?topics=pool.query,dataset.query,...
+// getEvents handles GET /api/v1/events?topics=pool.query,dataset.query,...
 // It streams Server-Sent Events to the client until the connection is closed.
 func (h *Handler) getEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
@@ -452,7 +452,7 @@ func writeAPIError(ctx context.Context, w http.ResponseWriter, code int, e apiEr
 	_ = json.NewEncoder(w).Encode(e)
 }
 
-// getSchema handles GET /api/schema
+// getSchema handles GET /api/v1/system/schema
 // Returns property definitions and system metadata filtered for the current OS.
 func (h *Handler) getSchema(context.Context, struct{}) (SchemaInfo, error) {
 	return SchemaInfo{
@@ -463,7 +463,7 @@ func (h *Handler) getSchema(context.Context, struct{}) (SchemaInfo, error) {
 	}, nil
 }
 
-// SchemaInfo is the GET /api/schema response: what the UI needs to render
+// SchemaInfo is the GET /api/v1/system/schema response: what the UI needs to render
 // dataset and user forms for this host.
 type SchemaInfo struct {
 	OS                string            `json:"os"`

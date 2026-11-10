@@ -24,31 +24,31 @@ func TestAutoSnapshotProperties(t *testing.T) {
 	ds := testPool + "/itest-autosnap"
 	createDataset(t, ds)
 
-	assertTasks(t, apiOK(t, "PUT", "/api/auto-snapshot/"+ds, map[string]string{
+	assertTasks(t, apiOK(t, "PUT", v1("/datasets/%s/auto-snapshot", ds), map[string]string{
 		propAutoSnap: "true", propAutoSnapDaily: "7",
 	}))
-	props := decode[map[string]zfsProp](t, apiOK(t, "GET", "/api/auto-snapshot/"+ds, nil))
+	props := decode[map[string]zfsProp](t, apiOK(t, "GET", v1("/datasets/%s/auto-snapshot", ds), nil))
 	if props[propAutoSnap].Value != "true" || props[propAutoSnapDaily].Value != "7" ||
 		props[propAutoSnap].Source != "local" {
 		t.Fatalf("props after set: %+v", props)
 	}
-	all := decode[map[string]map[string]zfsProp](t, apiOK(t, "GET", "/api/auto-snapshot-schedules", nil))
+	all := decode[map[string]map[string]zfsProp](t, apiOK(t, "GET", "/api/v1/auto-snapshot/schedules", nil))
 	if all[ds][propAutoSnapDaily].Value != "7" {
 		t.Fatalf("schedules list for %s: %+v", ds, all[ds])
 	}
 
 	// Empty string means inherit.
-	assertTasks(t, apiOK(t, "PUT", "/api/auto-snapshot/"+ds, map[string]string{
+	assertTasks(t, apiOK(t, "PUT", v1("/datasets/%s/auto-snapshot", ds), map[string]string{
 		propAutoSnap: "", propAutoSnapDaily: "",
 	}))
-	props = decode[map[string]zfsProp](t, apiOK(t, "GET", "/api/auto-snapshot/"+ds, nil))
+	props = decode[map[string]zfsProp](t, apiOK(t, "GET", v1("/datasets/%s/auto-snapshot", ds), nil))
 	if props[propAutoSnap].Source == "local" || props[propAutoSnapDaily].Source == "local" {
 		t.Fatalf("props still local after inherit: %+v", props)
 	}
 
-	apiStatus(t, http.StatusBadRequest, "PUT", "/api/auto-snapshot/"+ds, map[string]string{propAutoSnap: "yes"})
-	apiStatus(t, http.StatusBadRequest, "PUT", "/api/auto-snapshot/"+ds, map[string]string{propAutoSnapDaily: "0"})
-	apiStatus(t, http.StatusNotFound, "PUT", "/api/auto-snapshot/"+testPool+"/itest-nonexistent", map[string]string{propAutoSnap: "true"})
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/auto-snapshot", ds), map[string]string{propAutoSnap: "yes"})
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/auto-snapshot", ds), map[string]string{propAutoSnapDaily: "0"})
+	apiStatus(t, http.StatusNotFound, "PUT", v1("/datasets/%s/auto-snapshot", testPool+"/itest-nonexistent"), map[string]string{propAutoSnap: "true"})
 }
 
 // TestScrubSchedule adds and removes the test pool from the scrub schedule.
@@ -69,7 +69,7 @@ func TestScrubSchedule(t *testing.T) {
 			Schedules []struct {
 				Pool string `json:"pool"`
 			} `json:"schedules"`
-		}](t, apiOK(t, "GET", "/api/scrub-schedules", nil))
+		}](t, apiOK(t, "GET", "/api/v1/pools/scrub-schedules", nil))
 		for _, s := range r.Schedules {
 			if s.Pool == testPool {
 				return true
@@ -77,15 +77,15 @@ func TestScrubSchedule(t *testing.T) {
 		}
 		return false
 	}
-	assertTasks(t, apiOK(t, "PUT", "/api/scrub-schedule/"+testPool, map[string]any{}))
+	assertTasks(t, apiOK(t, "PUT", v1("/pools/%s/scrub-schedule", testPool), map[string]any{}))
 	if !scheduled() {
 		t.Fatalf("pool %s not in scrub schedules after PUT", testPool)
 	}
-	assertTasks(t, apiOK(t, "DELETE", "/api/scrub-schedule/"+testPool, nil))
+	assertTasks(t, apiOK(t, "DELETE", v1("/pools/%s/scrub-schedule", testPool), nil))
 	if scheduled() {
 		t.Fatalf("pool %s still in scrub schedules after DELETE", testPool)
 	}
-	apiStatus(t, http.StatusBadRequest, "PUT", "/api/scrub-schedule/bad@pool", map[string]any{})
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/pools/%s/scrub-schedule", "bad@pool"), map[string]any{})
 }
 
 type autosnapStatus struct {
@@ -103,7 +103,7 @@ const autosnapCronFiles = "/etc/cron.d/zfs-auto-snapshot /etc/cron.hourly/zfs-au
 func TestAutosnapTakeoverRelease(t *testing.T) {
 	skipUnlessVMTool(t, "zfs-auto-snapshot")
 	status := func() autosnapStatus {
-		return decode[autosnapStatus](t, apiOK(t, "GET", "/api/auto-snapshot/status", nil))
+		return decode[autosnapStatus](t, apiOK(t, "GET", "/api/v1/auto-snapshot/status", nil))
 	}
 	fingerprint := func() string {
 		return vmExec(t, "for f in "+autosnapCronFiles+"; do [ -e $f ] && md5sum $f; done; true")
@@ -113,7 +113,7 @@ func TestAutosnapTakeoverRelease(t *testing.T) {
 		t.Skipf("expected the OS daemon to own auto-snapshots initially, got %+v", initial)
 	}
 	t.Cleanup(func() {
-		if st, _ := api(t, "POST", "/api/auto-snapshot/release", nil); st != http.StatusOK {
+		if st, _ := api(t, "POST", "/api/v1/auto-snapshot/release", nil); st != http.StatusOK {
 			t.Errorf("cleanup release returned %d", st)
 		}
 		// Backstop: put any still-disabled entry point back.
@@ -122,7 +122,7 @@ func TestAutosnapTakeoverRelease(t *testing.T) {
 
 	// Twice: takeover must be idempotent.
 	for range 2 {
-		assertTasks(t, apiOK(t, "POST", "/api/auto-snapshot/takeover", nil))
+		assertTasks(t, apiOK(t, "POST", "/api/v1/auto-snapshot/takeover", nil))
 	}
 	if st := status(); st.OSDaemonActive || !st.DumpstoreManaged {
 		t.Fatalf("status after takeover: %+v, want daemon inactive and dumpstore managed", st)
@@ -131,7 +131,7 @@ func TestAutosnapTakeoverRelease(t *testing.T) {
 		t.Fatalf("OS cron entry points still active after takeover:\n%s", left)
 	}
 
-	assertTasks(t, apiOK(t, "POST", "/api/auto-snapshot/release", nil))
+	assertTasks(t, apiOK(t, "POST", "/api/v1/auto-snapshot/release", nil))
 	if st := status(); !st.OSDaemonActive || st.DumpstoreManaged {
 		t.Fatalf("status after release: %+v, want daemon active and dumpstore not managed", st)
 	}

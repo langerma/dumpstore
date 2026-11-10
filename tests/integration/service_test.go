@@ -20,25 +20,25 @@ type service struct {
 func TestServices(t *testing.T) {
 	skipUnlessVMTool(t, "smbd")
 	samba := func() service {
-		for _, s := range decode[[]service](t, apiOK(t, "GET", "/api/services", nil)) {
+		for _, s := range decode[[]service](t, apiOK(t, "GET", "/api/v1/services", nil)) {
 			if s.Name == "samba" {
 				return s
 			}
 		}
-		t.Fatalf("samba not in /api/services")
+		t.Fatalf("samba not in /api/v1/services")
 		return service{}
 	}
 
-	assertTasks(t, apiOK(t, "POST", "/api/services/samba/restart", nil))
+	assertTasks(t, apiOK(t, "POST", "/api/v1/services/samba/restart", nil))
 	if s := samba(); !s.Active || s.State != "active" {
 		t.Fatalf("samba after restart: %+v, want active", s)
 	}
-	assertTasks(t, apiOK(t, "POST", "/api/services/samba/enable", nil))
+	assertTasks(t, apiOK(t, "POST", "/api/v1/services/samba/enable", nil))
 	if s := samba(); !s.Enabled {
 		t.Fatalf("samba after enable: %+v, want enabled", s)
 	}
 
-	apiStatus(t, http.StatusNotFound, "POST", "/api/services/itest-nope/restart", nil)
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/services/samba/explode", nil)
-	apiStatus(t, http.StatusBadRequest, "POST", "/api/services/Bad_Name/restart", nil)
+	apiStatus(t, http.StatusNotFound, "POST", "/api/v1/services/itest-nope/restart", nil)
+	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/services/samba/explode", nil)
+	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/services/Bad_Name/restart", nil)
 }

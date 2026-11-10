@@ -11,12 +11,12 @@ import (
 
 const sessionCookieName = "dumpstore_session"
 
-// WhoamiResponse is the GET /api/whoami response.
+// WhoamiResponse is the GET /api/v1/auth/whoami response.
 type WhoamiResponse struct {
 	User string `json:"user"`
 }
 
-// AuthConfigResponse is the GET /api/auth/config response.
+// AuthConfigResponse is the GET /api/v1/auth/config response.
 type AuthConfigResponse struct {
 	Username   string `json:"username"`
 	SessionTTL string `json:"session_ttl" doc:"Go duration string, e.g. 24h0m0s"`
@@ -56,12 +56,12 @@ func RegisterRoutes(reg *apispec.Registry, cfg *Config, store *SessionStore, rl 
 		Handler: handleLogout(store),
 	})
 	reg.Handle(apispec.Route{
-		Method: "GET", Path: "/api/whoami", Group: "auth", Name: "whoami",
+		Method: "GET", Path: "/api/v1/auth/whoami", Group: "auth", Name: "whoami",
 		Summary: "The authenticated user", Response: reflect.TypeFor[WhoamiResponse](),
 		Handler: handleWhoami(cfg, store),
 	})
 	reg.Handle(apispec.Route{
-		Method: "GET", Path: "/api/auth/config", Group: "auth", Name: "config",
+		Method: "GET", Path: "/api/v1/auth/config", Group: "auth", Name: "config",
 		Summary: "Admin username and session lifetime", Response: reflect.TypeFor[AuthConfigResponse](),
 		Handler: handleAuthConfig(cfg),
 	})
