@@ -745,7 +745,7 @@ sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318"</pre>
           <span class="pool-name">Authentication</span>
           <span class="health-badge badge-green">security</span>
         </div>
-        <p>Session-based login with a argon2id-hashed password stored in <code>/etc/dumpstore/dumpstore.conf</code> (Linux) / <code>/usr/local/etc/dumpstore/dumpstore.conf</code> (FreeBSD). Set up during install via <code>--set-password</code>. Per-IP rate limiting (10 attempts/60 s). Reverse proxy delegation via <code>X-Remote-User</code> from trusted CIDRs. No password configured? The service binds to loopback only until one is set. Change password or username any time from the Users &amp; Groups tab.</p>
+        <p>Session-based login with a argon2id-hashed password stored in <code>/etc/dumpstore/dumpstore.conf</code> (Linux) / <code>/usr/local/etc/dumpstore/dumpstore.conf</code> (FreeBSD). Set up during install via <code>--set-password</code>. Per-IP rate limiting (10 failed attempts/60 s). Reverse proxy delegation via <code>X-Remote-User</code> from trusted CIDRs. No password configured? The service binds to loopback only until one is set. Change password or username any time from the Users &amp; Groups tab.</p>
       </div>
     </div>
 

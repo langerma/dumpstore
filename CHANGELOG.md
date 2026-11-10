@@ -174,6 +174,24 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Small defects from the docs audit** (#197).
+  - **SSH key add failed for users without a same-named group.** `~/.ssh` and `authorized_keys` now get the user's primary GID.
+  - **`mountpoint=legacy` was treated as a relative path.** ACL, chown and SMB checks treat it like `none`: GET and PUT `/datasets/{name}/owner` and ACL writes return `400`; `smb_usershare_set.yml` refuses it too.
+  - **Single snapshot `DELETE` failed on held replication snapshots** ("dataset is busy"). It releases dumpstore's replication hold first, as batch delete does.
+  - **FreeBSD auto-snapshot takeover/release used `lineinfile` on `periodic.conf`, and release didn't restore `periodic.conf.local`.**
+    - Takeover reads `{hourly,daily,weekly,monthly}_zfs_snapshot_enable` (the switches of the `zfs-periodic` package's periodic scripts) from `/etc/periodic.conf`, `/etc/periodic.conf.local` and `/usr/local/etc/periodic.conf`. It records every `YES` it finds in `/var/db/dumpstore/autosnap-disabled-periodic.json` and sets it to `NO` with `sysrc -f`.
+    - Release restores exactly the recorded values. sysrc rewrites them quoted: `x=YES` comes back as `x="YES"`. Without a record (a takeover by an older dumpstore), release sets `daily_zfs_snapshot_enable="YES"` in `/etc/periodic.conf`, as before.
+    - Detection reads all three files and all four switches, a later file overriding an earlier one.
+  - **A second *Generate self-signed* with another hostname kept the old certificate.** Every request now writes a new one.
+  - **A partly failed batch or recursive snapshot delete skipped the SSE update**, although some snapshots were gone. `snapshot.query` is published on failure too.
+  - **SSH key add/remove accepted `nobody` and `nfsnobody`.** They now return `403`, like the other user writes.
+  - **`POST /api/v1/users` with `smb_user: true` and no password returned `201`** and silently skipped Samba. It returns `400 smb_user requires a password`.
+  - **The user/group playbooks asserted a fixed UID/GID `>= 1000`,** while the handlers use `UID_MIN` from `/etc/login.defs`. The handlers now pass that limit as `uid_min`.
+  - **Login rate limiter:**
+    - It counted successful logins and never pruned its per-IP buckets. Now only failed logins count (a success resets the IP), and expired buckets are pruned at most once per window.
+    - When blocked, clients sending `Accept: application/json` get `429` with `Retry-After`; browsers are still redirected to `/login?error=…`.
+  - **`smartctl` ran without a timeout.** It now has the 30 s timeout of the ZFS reads.
+  - Stale comments in `auditLog` and the `smb_init.yml` header were corrected.
 - **HTTP→HTTPS redirect dropped a non-default TLS port.** With `--tls --tls-port 8443`, `http://host:<http-port>/x` redirected to `https://host/x`, i.e. port 443, where nothing listens. The redirect now targets `https://host:8443/x`; with the default port 443 it stays `https://host/x`. IPv6 hosts keep their brackets.
 - **FreeBSD: dumpstore flags could not be set from `rc.conf`** (#191). The rc.d script built a fixed argument list, so `--tls`, `--tls-port`, `--http-port`, `-debug` and `-log-stdout=false` could not be enabled; `dumpstore_flags` doesn't help because rc.subr hands it to `daemon(8)`. New `dumpstore_args` variable, appended to dumpstore's own arguments: `sysrc dumpstore_args="--tls"`.
 

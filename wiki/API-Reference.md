@@ -52,15 +52,16 @@ Form-encoded (`application/x-www-form-urlencoded`), not JSON.
 | `username` | yes | Must equal the configured username |
 | `password` | yes | Verified against the argon2id hash in `dumpstore.conf` |
 
-Always answers with a `302` redirect:
+Answers with a `302` redirect, except when an API client is rate limited:
 
-| Outcome | Redirect | Cookie |
+| Outcome | Response | Cookie |
 |---------|----------|--------|
-| Success | `/` | `dumpstore_session=<64 hex chars>`; `Path=/`, `HttpOnly`, `SameSite=Strict`, `Max-Age=<session_ttl>`, `Secure` when served over HTTPS |
-| Wrong credentials, or no password configured | `/login?error=Invalid+username+or+password.` | — |
-| Rate limited | `/login?error=Too+many+attempts.+Try+again+later.` | — |
+| Success | `302` → `/` | `dumpstore_session=<64 hex chars>`; `Path=/`, `HttpOnly`, `SameSite=Strict`, `Max-Age=<session_ttl>`, `Secure` when served over HTTPS |
+| Wrong credentials, or no password configured | `302` → `/login?error=Invalid+username+or+password.` | — |
+| Rate limited, browser | `302` → `/login?error=Too+many+attempts.+Try+again+later.` | — |
+| Rate limited, `Accept: application/json` | `429` with `Retry-After: <seconds>` and `{"error": "too many failed login attempts; try again later"}` | — |
 
-Rate limit: 10 attempts per source IP per 60 s window, counting successful attempts too. Behind a reverse proxy all clients share the proxy's IP.
+Rate limit: 10 failed attempts per source IP per 60 s window (counted from the first failure). A successful login resets the IP's count; while blocked, even the correct password is refused. Behind a reverse proxy all clients share the proxy's IP.
 
 ### POST /auth/logout
 
@@ -250,7 +251,7 @@ No pool, dataset or SMART metrics are exported. Only `/api/*` and `/metrics` req
 
 ### GET /api/v1/system/smart
 
-S.M.A.R.T. summary for every device found by `smartctl --scan`, read with `smartctl -j -a <dev>`.
+S.M.A.R.T. summary for every device found by `smartctl --scan`, read with `smartctl -j -a <dev>`. Each `smartctl` run is killed after 30 s.
 
 ```json
 {
@@ -1037,17 +1038,17 @@ Reports which component runs auto-snapshots: the OS daemon or dumpstore's built-
 
 - `os_daemon` is `zfs-auto-snapshot` on Linux and `zfstools` on FreeBSD. On any other OS it is `""`. On Linux and FreeBSD it is reported whether or not the daemon is installed.
 - `os_daemon_active` on Linux is true if any `zfs-auto-snapshot-<bucket>.timer` is enabled, or if any of `/etc/cron.d/zfs-auto-snapshot` or `/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` exists.
-- `os_daemon_active` on FreeBSD is true if `daily_zfs_snapshot_enable="YES"` appears in `/etc/periodic.conf` or `/etc/periodic.conf.local`.
+- `os_daemon_active` on FreeBSD is true if any of `{hourly,daily,weekly,monthly}_zfs_snapshot_enable` is `YES` after reading `/etc/periodic.conf`, `/etc/periodic.conf.local` and `/usr/local/etc/periodic.conf` in that order (a later file overrides an earlier one, as periodic(8) does). These are the switches of the `zfs-periodic` package's periodic scripts; zfstools has no periodic scripts, so crontab lines for it are not detected.
 - `dumpstore_managed` is true when the five bucket tasks are registered with the internal scheduler. At startup they are registered automatically if the OS daemon is not active.
 - `last_runs` maps a bucket name (`frequent`, `hourly`, `daily`, `weekly`, `monthly`) to the time that bucket last fired. It is omitted when no bucket has fired.
 
 ### POST /api/v1/auto-snapshot/takeover
 
-Disables the OS daemon, then registers dumpstore's bucket tasks. Runs `auto_snapshot_takeover.yml` with `timer_state_file=<state dir>/autosnap-disabled-timers`. The playbook:
+Disables the OS daemon, then registers dumpstore's bucket tasks. Runs `auto_snapshot_takeover.yml` with `timer_state_file=<state dir>/autosnap-disabled-timers` and `periodic_state_file=<state dir>/autosnap-disabled-periodic.json`. The playbook:
 
 - **Linux, systemd timers:** stops and disables the enabled `zfs-auto-snapshot-*.timer` units and records their names in `timer_state_file`.
 - **Linux, cron packaging:** renames each zfs-auto-snapshot cron file to `<file>.dumpstore-disabled`.
-- **FreeBSD:** sets `daily_zfs_snapshot_enable="NO"` in `/etc/periodic.conf`, and in `/etc/periodic.conf.local` if that file exists.
+- **FreeBSD:** for each of the three periodic.conf files and four switches above, every definition that is `YES` is recorded (file, variable, value) in `periodic_state_file` and set to `NO` with `sysrc -f <file> <var>=NO`. A repeated takeover merges new finds into the record.
 
 The request is idempotent. Bucket schedules (cron syntax):
 
@@ -1073,7 +1074,7 @@ The inverse of takeover. It first unregisters dumpstore's bucket tasks, then run
 
 - **Linux, cron packaging:** renames each `<file>.dumpstore-disabled` back to `<file>`, unless the package has recreated the file in the meantime.
 - **Linux, systemd timers:** re-enables and starts the timers listed in `timer_state_file`. If there is no record, it enables every installed `zfs-auto-snapshot-*.timer`. It then deletes the record.
-- **FreeBSD:** sets `daily_zfs_snapshot_enable="YES"` in `/etc/periodic.conf`.
+- **FreeBSD:** restores each recorded value with `sysrc -f` (written quoted: `x=YES` comes back as `x="YES"`), then deletes the record. With no record (takeover by a dumpstore before #197), it sets `daily_zfs_snapshot_enable="YES"` in `/etc/periodic.conf`.
 
 The package is never reinstalled. Publishes `autosnap.status`.
 
@@ -1241,7 +1242,7 @@ Returns Ansible task steps. `409` if the service is not installed on this host.
 
 Local Unix users and groups. Reads parse `/etc/passwd` and `/etc/group` directly. Writes go through playbooks, are serialised server-side, and push fresh `user.query` / `group.query` SSE events when they succeed.
 
-**System-account protection:** modify, delete and SSH-key writes return `403` when the account's UID/GID is below `UID_MIN` from `/etc/login.defs` (default `1000`). Modify and delete also return `403` for `nobody` and `nfsnobody` (users) and for `nogroup`, `nobody` and `nfsnobody` (groups), whatever their ID. The playbooks repeat the check with a fixed `>= 1000`.
+**System-account protection:** modify, delete and SSH-key writes return `403` when the account's UID/GID is below `UID_MIN` from `/etc/login.defs` (default `1000`). Modify, delete and SSH-key writes also return `403` for `nobody` and `nfsnobody` (users), and group modify and delete for `nogroup`, `nobody` and `nfsnobody` (groups), whatever their ID. The playbooks repeat the check against the same `UID_MIN`, passed as `uid_min`.
 
 Names (user, group, members, supplementary groups) must match `^[a-zA-Z_][a-zA-Z0-9._-]{0,31}$`. Lists are comma-separated. Paths (`shell`, `home`) must match `^/[a-zA-Z0-9/_.-]+$`. Passwords are **plaintext** — the OS hashes them (`chpasswd` on Linux, `pw usermod -h 0` on FreeBSD) — and must not contain newline characters.
 
@@ -1279,12 +1280,12 @@ Create a local user (`user_create.yml`). The home directory is always created.
 |-------|----------|-------------|
 | `username` | yes | Login name |
 | `shell` | no | Login shell, defaults to `/bin/bash` |
-| `uid` | no | Explicit UID **as a string**; must be `>= 1000` (playbook assert). Empty = auto |
+| `uid` | no | Explicit UID **as a string**; must be `>= UID_MIN` (playbook assert). Empty = auto |
 | `group` | no | Primary group name; created if it doesn't exist |
 | `groups` | no | Comma-separated supplementary groups |
 | `password` | no | Plaintext password; empty leaves the account without one |
 | `create_group` | no | `true` creates a group named after the user and makes it the primary group (unless `group` is set) |
-| `smb_user` | no | `true` also registers the user in Samba (`smbpasswd -a`) with the same password. Skipped when `password` is empty |
+| `smb_user` | no | `true` also registers the user in Samba (`smbpasswd -a`) with the same password. Requires `password`: `400 smb_user requires a password` otherwise |
 
 Returns `201`:
 
@@ -1340,13 +1341,13 @@ Reads `<home>/.ssh/authorized_keys` and returns one entry per non-blank, non-`#`
 
 ### POST /api/v1/users/{name}/ssh-keys
 
-Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `authorized_keys` (`0600`) if they are missing, owned by `<user>:<user>`. The key is appended only if that exact line isn't already present.
+Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `authorized_keys` (`0600`) if they are missing, owned by the user and their primary group. The key is appended only if that exact line isn't already present.
 
 ```json
 { "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop" }
 ```
 
-`key` is trimmed and must be a single line starting with `ssh-`, `ecdsa-sha2-` or `sk-` (`400` otherwise). `404` if the user doesn't exist, `403` if UID < `UID_MIN`.
+`key` is trimmed and must be a single line starting with `ssh-`, `ecdsa-sha2-` or `sk-` (`400` otherwise). `404` if the user doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`.
 
 ```json
 { "tasks": [ … ] }
@@ -1356,7 +1357,7 @@ Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `a
 
 Remove the authorized key with that fingerprint (`user_ssh_key_remove.yml`). The fingerprint is the one returned by the list; percent-encode it (it can contain `/` and `+`), e.g. `DELETE /api/v1/users/alice/ssh-keys/SHA256%3Aa1ZSPmADOkmNRQozRPfkpT%2B3L%2FFxfP%2B%2FOF%2B7UHWjENQ`. No body.
 
-`400` if the fingerprint doesn't start with `SHA256:`, `404` if the user or the key doesn't exist, `403` if UID < `UID_MIN`.
+`400` if the fingerprint doesn't start with `SHA256:`, `404` if the user or the key doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`.
 
 ```json
 { "tasks": [ … ] }
@@ -1384,7 +1385,7 @@ Create a local group (`group_create.yml`).
 | Field | Required | Description |
 |-------|----------|-------------|
 | `groupname` | yes | Group name |
-| `gid` | no | Explicit GID **as a string**; must be `>= 1000` (playbook assert). Empty = auto |
+| `gid` | no | Explicit GID **as a string**; must be `>= UID_MIN` (playbook assert). Empty = auto |
 
 Returns `201`:
 
@@ -1403,7 +1404,7 @@ Rename a group, change its GID, and set its member list (`group_modify.yml`). `4
 | Field | Required | Description |
 |-------|----------|-------------|
 | `new_name` | no | Rename to this name (`groupmod -n` / `pw groupmod -l`); empty = keep |
-| `gid` | no | New GID as a string, `>= 1000`; empty = keep |
+| `gid` | no | New GID as a string, `>= UID_MIN`; empty = keep |
 | `members` | no | Comma-separated members. **Always applied** (`gpasswd -M` / `pw groupmod -M`): replaces the current list, and empty or omitted **removes all members**. Every name must be an existing user — otherwise `400 "unknown member(s): …"` |
 
 `groupname` in the response is the new name if the group was renamed:
@@ -1424,7 +1425,7 @@ Delete a local group (`group_delete.yml`). `404` if the group doesn't exist, `40
 
 ## Dataset ownership
 
-Owner and group of a dataset's **mountpoint directory**. Volumes, and datasets with `mountpoint=none`, return `400 "dataset … has no mountpoint"`.
+Owner and group of a dataset's **mountpoint directory**. Volumes, and datasets with `mountpoint=none` or `mountpoint=legacy`, return `400 "dataset … has no mountpoint"`.
 
 ### GET /api/v1/datasets/{name}/owner
 
@@ -1784,7 +1785,7 @@ Generate a self-signed certificate and point the config at it.
 | `hostname` | yes | Becomes CN and DNS SAN |
 | `cert_dir` | no | Default `<config dir>/tls` (e.g. `/etc/dumpstore/tls`, `/usr/local/etc/dumpstore/tls`). Must be an absolute path of `A-Z a-z 0-9 . _ / -` only |
 
-Runs `tls_gencert.yml`: creates `cert_dir` (`0700`), then `openssl req -x509` with an ECDSA P-256 key, valid 3650 days, SAN `IP:127.0.0.1,DNS:<hostname>`, written to `cert.pem` / `key.pem` (key `0600`). **If `cert.pem` already exists it is not regenerated**, even if `hostname` is different. Then `tls_set_config.yml` stores both paths and `tls_enabled: true`. Returns the Ansible task steps of both playbooks.
+Runs `tls_gencert.yml`: creates `cert_dir` (`0700`), then `openssl req -x509` with an ECDSA P-256 key, valid 3650 days, SAN `IP:127.0.0.1,DNS:<hostname>`, written to `cert.pem` / `key.pem` (key `0600`). Every request writes a new certificate and key, replacing any existing ones. Then `tls_set_config.yml` stores both paths and `tls_enabled: true`. Returns the Ansible task steps of both playbooks.
 
 `400` missing/invalid `hostname` or invalid `cert_dir` · `500` playbook failure.
 
