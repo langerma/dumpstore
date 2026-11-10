@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -66,7 +65,6 @@ type Runner struct {
 	PlaybookDir   string
 	InventoryPath string
 	Timeout       time.Duration // per-playbook timeout; defaults to 5 minutes
-	metrics       ansibleMetrics
 }
 
 // NewRunner creates a Runner whose paths are relative to baseDir.
@@ -84,13 +82,7 @@ func NewRunner(baseDir string) *Runner {
 		PlaybookDir:   filepath.Join(baseDir, "playbooks"),
 		InventoryPath: filepath.Join(baseDir, "playbooks", "inventory", "localhost"),
 		Timeout:       5 * time.Minute,
-		metrics:       *newAnsibleMetrics(),
 	}
-}
-
-// EmitMetrics writes Ansible metrics in Prometheus text format to w.
-func (r *Runner) EmitMetrics(w io.Writer) {
-	r.metrics.emitTo(w)
 }
 
 // Run executes a playbook and returns the parsed output. ctx is used for
@@ -182,7 +174,7 @@ func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[str
 
 	if ctx.Err() == context.DeadlineExceeded {
 		slog.Error("ansible-playbook timed out", "playbook", playbook, "timeout", r.Timeout)
-		r.metrics.record(playbookLabel, elapsed, true)
+		recordRun(playbookLabel, elapsed, true)
 		return nil, fmt.Errorf("ansible-playbook %s: timed out after %s", playbook, r.Timeout)
 	}
 
@@ -192,7 +184,7 @@ func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[str
 	for _, s := range steps {
 		if s.Status == "failed" || s.Status == "unreachable" {
 			slog.Error("ansible-playbook task failed", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "task", s.Name)
-			r.metrics.record(playbookLabel, elapsed, true)
+			recordRun(playbookLabel, elapsed, true)
 			return out, fmt.Errorf("task %q failed: %s", s.Name, s.Msg)
 		}
 	}
@@ -200,7 +192,7 @@ func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[str
 	// Fallback: non-zero exit but no task-level failure detected.
 	if runErr != nil {
 		slog.Error("ansible-playbook exited non-zero", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr, "stderr", stderr.String())
-		r.metrics.record(playbookLabel, elapsed, true)
+		recordRun(playbookLabel, elapsed, true)
 		if lastTaskName != "" {
 			return out, fmt.Errorf("ansible-playbook %s: %w (last task: %q)\nstderr: %s", playbook, runErr, lastTaskName, stderr.String())
 		}
@@ -208,7 +200,7 @@ func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[str
 	}
 
 	slog.Info("ansible-playbook done", "playbook", playbook, "duration_ms", elapsed.Milliseconds())
-	r.metrics.record(playbookLabel, elapsed, false)
+	recordRun(playbookLabel, elapsed, false)
 	return out, nil
 }
 

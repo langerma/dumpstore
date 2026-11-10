@@ -60,12 +60,11 @@ func (r *Result) Steps() []ansible.TaskStep { return r.steps }
 // Runner executes Steps sequentially with a per-step timeout.
 type Runner struct {
 	Timeout time.Duration
-	metrics *opsMetrics
 }
 
 // NewRunner returns a Runner with the default 5-minute per-step timeout.
 func NewRunner() *Runner {
-	return &Runner{Timeout: 5 * time.Minute, metrics: newOpsMetrics()}
+	return &Runner{Timeout: 5 * time.Minute}
 }
 
 // Run executes the steps in order. Each completed step is passed to onStep
@@ -117,7 +116,7 @@ func (r *Runner) runStep(ctx context.Context, st Step) (ansible.TaskStep, error)
 
 	start := time.Now()
 	out, err := exec.CommandContext(ctx, st.Argv[0], st.Argv[1:]...).CombinedOutput()
-	r.metrics.record(opLabel(st.Argv), time.Since(start), err != nil)
+	recordRun(opLabel(st.Argv), time.Since(start), err != nil)
 
 	msg := strings.TrimSpace(string(out))
 	ts := ansible.TaskStep{Name: st.Name, Status: "changed", Msg: msg}

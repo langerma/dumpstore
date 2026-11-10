@@ -208,11 +208,13 @@ type Handler struct {
 	authCfg    *auth.Config
 	authStore  *auth.SessionStore
 	configPath string
-	otelInfo   any // effective OTEL status for sysinfo; injected via SetOtelInfo
+	otelInfo   any          // effective OTEL status for sysinfo; injected via SetOtelInfo
+	metrics    http.Handler // Prometheus exposition for /metrics; injected via SetMetricsHandler
 }
 
 // NewHandler creates a Handler with the given dependencies.
 func NewHandler(runner *ansible.Runner, version string, b *broker.Broker, jm *jobs.Manager, repl *replication.Runner, autosnap *autosnap.Runner, authCfg *auth.Config, authStore *auth.SessionStore, configPath string) *Handler {
+	registerRuntimeMetrics(version)
 	return &Handler{
 		runner:     runner,
 		ops:        ops.NewRunner(),
