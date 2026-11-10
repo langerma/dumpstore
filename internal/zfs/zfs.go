@@ -649,6 +649,17 @@ func splitLines(s string) []string {
 	return out
 }
 
+// HasMountpoint reports whether mp, a dataset's mountpoint property, is a
+// directory dumpstore can operate on. "none", "-" (volumes, snapshots) and
+// "legacy" (mounted via fstab, not by ZFS) are not paths.
+func HasMountpoint(mp string) bool {
+	switch mp {
+	case "", "-", "none", "legacy":
+		return false
+	}
+	return true
+}
+
 func parseUint(s string) uint64 {
 	s = strings.TrimSpace(s)
 	if s == "-" || s == "" || s == "none" {

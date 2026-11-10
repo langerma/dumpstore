@@ -49,7 +49,7 @@ func GetDatasetACL(dataset string) (*DatasetACL, error) {
 		}
 	}
 
-	if acl.Mountpoint == "none" || acl.Mountpoint == "-" || acl.Mountpoint == "" || acl.ACLType == "off" {
+	if !HasMountpoint(acl.Mountpoint) || acl.ACLType == "off" {
 		return acl, nil
 	}
 

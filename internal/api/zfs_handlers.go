@@ -864,7 +864,7 @@ func (h *Handler) getDatasetOwnership(_ context.Context, in datasetParam) (Datas
 		return DatasetOwnership{}, err
 	}
 	mp := props["mountpoint"].Value
-	if mp == "none" || mp == "-" || mp == "" {
+	if !zfs.HasMountpoint(mp) {
 		return DatasetOwnership{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 	owner, group, err := zfs.GetMountpointOwnership(mp)
@@ -913,7 +913,7 @@ func (h *Handler) setDatasetOwnership(ctx context.Context, in struct {
 		return DatasetTaskResult{}, err
 	}
 	mp := props["mountpoint"].Value
-	if mp == "none" || mp == "-" || mp == "" {
+	if !zfs.HasMountpoint(mp) {
 		return DatasetTaskResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name))
 	}
 

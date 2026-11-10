@@ -152,4 +152,9 @@ func TestChown(t *testing.T) {
 	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": user})
 	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": "bad name", "group": user})
 	apiStatus(t, http.StatusNotFound, "PUT", v1("/datasets/%s/owner", testPool+"/itest-nonexistent"), map[string]any{"owner": user, "group": user})
+
+	// mountpoint=legacy is not a path (#197): no stat, no chown of ./legacy.
+	vmExec(t, "zfs set mountpoint=legacy "+ds)
+	apiStatus(t, http.StatusBadRequest, "GET", v1("/datasets/%s/owner", ds), nil)
+	apiStatus(t, http.StatusBadRequest, "PUT", v1("/datasets/%s/owner", ds), map[string]any{"owner": user, "group": user})
 }

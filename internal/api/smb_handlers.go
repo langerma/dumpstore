@@ -742,7 +742,7 @@ func datasetMountpoint(dataset string) (string, error) {
 	}
 	for _, ds := range datasets {
 		if ds.Name == dataset {
-			if ds.Mountpoint == "-" || ds.Mountpoint == "none" || ds.Mountpoint == "legacy" {
+			if !zfs.HasMountpoint(ds.Mountpoint) {
 				return "", nil
 			}
 			return ds.Mountpoint, nil
