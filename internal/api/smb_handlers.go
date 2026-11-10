@@ -46,11 +46,18 @@ func (h *Handler) applyConfig(ctx context.Context, cfg *smb.SMBConfig) (*ansible
 	dirsJSON, _ := json.Marshal(dirs)
 	servicesJSON, _ := json.Marshal(smb.ServiceNames(goos))
 
+	// smb_apply.yml reads service status with the OS's own command (#196).
+	serviceManager := "systemd"
+	if goos == "freebsd" {
+		serviceManager = "rc"
+	}
+
 	vars := map[string]string{
-		"src":            tmp.Name(),
-		"smb_conf":       smb.ConfPath(goos),
-		"dirs":           string(dirsJSON),
-		"samba_services": string(servicesJSON),
+		"src":             tmp.Name(),
+		"smb_conf":        smb.ConfPath(goos),
+		"dirs":            string(dirsJSON),
+		"samba_services":  string(servicesJSON),
+		"service_manager": serviceManager,
 	}
 
 	// wsdd announces the host under Samba's workgroup; render its options
