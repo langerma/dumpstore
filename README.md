@@ -108,9 +108,10 @@ dumpstore runs as root, because ZFS requires it. If no password is configured, i
 
 The [wiki](https://github.com/langerma/dumpstore/wiki) holds the details:
 
-- [Installation](https://github.com/langerma/dumpstore/wiki/Installation) — requirements per distro, install options, authentication and the config file, reverse proxies, service configuration, observability setup, versioning
+- [Installation](https://github.com/langerma/dumpstore/wiki/Installation) — requirements per distro, install options, authentication and the config file, reverse proxies, TLS/HTTPS, command-line flags, service configuration, versioning
+- [Observability](https://github.com/langerma/dumpstore/wiki/Observability) — Prometheus metrics reference, OpenTelemetry setup (traces, logs, metrics), log and audit format
 - [Architecture](https://github.com/langerma/dumpstore/wiki/Architecture) — the read/write execution lanes, service ownership model, frontend, observability internals, project layout, testing
-- [API Reference](https://github.com/langerma/dumpstore/wiki/API-Reference) — every endpoint, request/response examples, and the SSE event stream
+- [API Reference](https://github.com/langerma/dumpstore/wiki/API-Reference) — all 112 routes with request/response examples, status codes, and the SSE event stream
 - [Screenshots](https://github.com/langerma/dumpstore/wiki/Screenshots) — every tab and dialog, captured from the dev VM
 
 ## Development

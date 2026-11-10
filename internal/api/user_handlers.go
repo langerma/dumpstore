@@ -30,7 +30,7 @@ func (h *Handler) getGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 // createUser handles POST /api/users
-// Body: {"username":"alice","shell":"/bin/bash","uid":1001,"group":"storage","user_groups":"wheel,backup","password":"$6$...","create_group":true,"smb_user":false}
+// Body: {"username":"alice","shell":"/bin/bash","uid":"1001","group":"storage","groups":"wheel,backup","password":"<plaintext>","create_group":true,"smb_user":false}
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string `json:"username"`
@@ -166,7 +166,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // modifyUser handles PUT /api/users/{name}
-// Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"$6$...","home":"/home/foo","move_home":true}
+// Body: {"shell":"/bin/bash","group":"storage","user_groups":"wheel,backup","password":"<plaintext>","home":"/home/foo","move_home":true}
 func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {

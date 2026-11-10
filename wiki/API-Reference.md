@@ -45,17 +45,17 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | PUT    | `/api/groups/{name}`        | Edit group (name, GID, members) |
 | DELETE | `/api/groups/{name}`        | Delete a local group |
 | GET    | `/api/chown/{dataset}`      | Get mountpoint owner and group |
-| POST   | `/api/chown/{dataset}`      | Set mountpoint owner and/or group |
-| GET    | `/api/acl-status`           | ACL presence map (dataset → bool) |
+| POST   | `/api/chown/{dataset}`      | Set mountpoint owner and group (both required) |
+| GET    | `/api/acl-status`           | Per-dataset ACL flag (dataset → bool; `true` when `acltype` is not `off`) |
 | GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset |
 | POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry |
 | DELETE | `/api/acl/{dataset}`        | Remove an ACL entry |
 | GET    | `/api/smb-shares`           | List Samba usershares, including stale ones whose path is gone (`path_missing`) |
 | POST   | `/api/smb-share/{dataset}`  | Create or update a Samba usershare |
 | DELETE | `/api/smb-share/{dataset}`  | Remove a Samba usershare |
-| GET    | `/api/smb-users`            | List users registered in smbpasswd |
-| POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd |
-| DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd |
+| GET    | `/api/smb-users`            | List users in the Samba user database (`pdbedit`) |
+| POST   | `/api/smb-users/{name}`     | Add a user to the Samba user database |
+| DELETE | `/api/smb-users/{name}`     | Remove a user from the Samba user database |
 | GET    | `/api/smb/status`           | Samba init state, conf path, OS, wsdd status |
 | POST   | `/api/smb/init`             | Initialise Samba (back up existing config, render smb.conf) |
 | POST   | `/api/smb/wsdd`             | Render wsdd options from smb.conf (take over wsdd) |
@@ -121,7 +121,366 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 
 ---
 
+## Authentication
+
+All routes except `/login`, `/auth/*`, `/images/*` and the paths in `unprotected_paths` (default `["/metrics"]`, prefix match) require one of:
+
+- a valid `dumpstore_session` cookie (from `POST /auth/login`), or
+- an `X-Remote-User` header on a request whose source IP is inside a `trusted_proxies` CIDR.
+
+Unauthenticated requests to `/api/*` (or with `Accept: application/json`) get `401 {"error":"unauthorized"}`; anything else is redirected (`302`) to `/login`.
+
+If no password is configured, dumpstore binds to `127.0.0.1:8080` only, and no login can succeed until one is set with `dumpstore --set-password`.
+
+Sessions are kept in memory: all sessions are lost on restart. Expiry is fixed at login time + `session_ttl` (default `24h`), not extended by activity.
+
+### GET /login
+
+Serves the HTML login form. Redirects (`302`) to `/` if the request already carries a valid session cookie. The `error` query parameter is shown above the form (HTML-escaped); the username field is pre-filled with the configured username.
+
+### POST /auth/login
+
+Form-encoded (`application/x-www-form-urlencoded`), not JSON.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `username` | yes | Must equal the configured username |
+| `password` | yes | Verified against the argon2id hash in `dumpstore.conf` |
+
+Always answers with a `302` redirect:
+
+| Outcome | Redirect | Cookie |
+|---------|----------|--------|
+| Success | `/` | `dumpstore_session=<64 hex chars>`; `Path=/`, `HttpOnly`, `SameSite=Strict`, `Max-Age=<session_ttl>`, `Secure` when served over HTTPS |
+| Wrong credentials, or no password configured | `/login?error=Invalid+username+or+password.` | — |
+| Rate limited | `/login?error=Too+many+attempts.+Try+again+later.` | — |
+
+Rate limit: 10 attempts per source IP per 60 s window, counting successful attempts too. Behind a reverse proxy all clients share the proxy's IP.
+
+### POST /auth/logout
+
+Deletes the session server-side, expires the cookie (`Max-Age=-1`), and redirects (`302`) to `/login`. Works without a session too.
+
+### GET /api/whoami
+
+```json
+{ "user": "admin" }
+```
+
+`user` is the `X-Remote-User` header when present, otherwise the configured username (for a session cookie). `401 {"error":"unauthorized"}` without either.
+
+### GET /api/auth/config
+
+```json
+{ "username": "admin", "session_ttl": "24h0m0s" }
+```
+
+`session_ttl` uses Go duration formatting. The password hash, trusted proxies and TLS fields are not returned.
+
+### POST /api/auth/change-password
+
+```json
+{ "current_password": "old-secret", "new_password": "new-secret" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `current_password` | yes | Must match the stored hash |
+| `new_password` | yes | Non-empty; no other strength rules |
+
+The new password is hashed (argon2id) in Go and written to `password_hash` in `dumpstore.conf` by `auth_set_password.yml`. The new hash is used for the next login straight away; existing sessions stay valid. Returns Ansible task steps.
+
+`400` invalid body or empty `new_password` · `401 "current password is incorrect"` (also when no password is configured) · `500` hashing or playbook failure.
+
+### POST /api/auth/change-username
+
+```json
+{ "username": "storage-admin" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `username` | yes | `^[a-zA-Z][a-zA-Z0-9._-]{0,62}$` — starts with a letter, max 63 chars |
+
+Does not ask for the current password. Writes `username` in `dumpstore.conf` via `auth_set_username.yml`, then **invalidates all sessions**, including the caller's, so everyone has to log in again. Returns Ansible task steps.
+
+`400` invalid body or username · `500` playbook failure.
+
+---
+
+## System
+
+### GET /api/sysinfo
+
+Host and process information. The installed-software probes and platform warnings run about 13 external binaries, so they are cached for 5 minutes. Everything else is read on each request.
+
+```json
+{
+  "app_version": "v0.9.0",
+  "otel": { "enabled": false },
+  "hostname": "nas",
+  "os": "linux",
+  "arch": "amd64",
+  "kernel": "6.8.0-45-generic",
+  "cpu_count": 8,
+  "uptime_secs": 864213.4,
+  "load1": 0.52,
+  "load5": 0.58,
+  "load15": 0.59,
+  "pid": 1234,
+  "proc_uptime_secs": 3600.2,
+  "heap_alloc_mb": 6.1,
+  "sys_mb": 22.4,
+  "goroutines": 41,
+  "num_gc": 87,
+  "software": [
+    { "name": "ZFS", "version": "zfs-2.2.3-1", "required": true },
+    { "name": "smartctl", "version": "smartctl 7.4 2023-08-01 r5530 …", "required": false, "feature": "SMART drive health" },
+    { "name": "lego (ACME)", "version": "", "required": false, "feature": "TLS via ACME (Let's Encrypt)" }
+  ]
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `otel` | `{"enabled": false}`, or, when an `OTEL_EXPORTER_OTLP_*` endpoint is set, `enabled`, `endpoint`, `protocol` (default `http/protobuf`), `service_name` |
+| `software[].version` | First output line of the tool's version command, `"installed"` for tools probed only by presence, `""` when missing |
+| `warnings` | FreeBSD only, omitted when empty: ZFS kernel module not loaded, `zfs_enable` not `YES` in rc.conf, zfs-auto-snapshot installed without a cron entry |
+
+### GET /api/version
+
+```json
+{ "version": "zfs-2.2.3-1" }
+```
+
+First line of `zpool version`. If the command fails, the response is still `200` with `"version": ""`.
+
+### GET /api/network
+
+All network interfaces (Go `net.Interfaces()`).
+
+```json
+[
+  {
+    "name": "eno1",
+    "state": "up",
+    "mac": "3c:ec:ef:12:34:56",
+    "mtu": 1500,
+    "addrs": ["192.168.1.10/24", "fe80::3eec:efff:fe12:3456/64"],
+    "speed_mbps": 1000,
+    "rx_bytes": 123456789,
+    "tx_bytes": 98765432,
+    "virtual": false
+  }
+]
+```
+
+| Field | Notes |
+|-------|-------|
+| `state` | `up` or `down` (interface flag, not link carrier) |
+| `speed_mbps` | `-1` if unknown. Linux: `/sys/class/net/<if>/speed`; FreeBSD: parsed from `ifconfig -a` `media:` line |
+| `rx_bytes`, `tx_bytes` | Linux only (`/sys/class/net/<if>/statistics`); always `0` on FreeBSD |
+| `virtual` | Loopback, or name starts with `docker`, `virbr`, `veth`, `br-`, `tun`, `tap` |
+
+`500` if the interfaces cannot be listed.
+
+### GET /api/schema
+
+Dataset property definitions filtered for the running OS, plus host metadata the UI needs to build its forms.
+
+```json
+{
+  "os": "linux",
+  "dataset_properties": [
+    {
+      "name": "compression",
+      "label": "Compression",
+      "input_type": "select",
+      "editable": true,
+      "create": true,
+      "applies_to": ["filesystem", "volume"],
+      "options": [
+        { "value": "", "label": "— inherit —" },
+        { "value": "lz4", "label": "lz4", "default": true },
+        { "value": "zstd", "label": "zstd" }
+      ]
+    }
+  ],
+  "user_shells": ["/bin/sh", "/bin/bash", "/usr/sbin/nologin"],
+  "capabilities": { "rewrite": true, "draid": true }
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `dataset_properties[].input_type` | `select` or `text` |
+| `dataset_properties[].editable` / `create` | Shown in the edit / create dialog |
+| `user_shells` | Non-comment lines of `/etc/shells`; fallback `["/bin/bash","/bin/sh","/sbin/nologin","/usr/sbin/nologin"]` if unreadable |
+| `capabilities.rewrite` | `zfs rewrite` subcommand present (gates `POST /api/rewrite/{name}`) |
+| `capabilities.draid` | `draid` listed in `zpool upgrade -v` |
+
+Capabilities are probed once per process; reinstalling ZFS requires a restart to update them. The same property schema is written to `playbooks/vars/zfs_allowed_values.yml` at startup for playbook validation.
+
+### GET /metrics
+
+Prometheus text exposition (`text/plain; version=0.0.4`). Unauthenticated by default (`unprotected_paths: ["/metrics"]`).
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `process_start_time_seconds` | gauge | — |
+| `go_goroutines`, `go_memstats_*`, `go_gc_cycles_total`, `go_gc_pause_ns_total` | gauge / counter | — |
+| `dumpstore_build_info` | gauge (`1`) | `version`, `goversion` |
+| `http_requests_total` | counter | `method`, `path` (normalised, e.g. `/api/datasets/{name}`), `status` |
+| `http_request_duration_seconds` | histogram | `method`, `path` |
+| `ansible_runs_total` | counter | `playbook`, `status` |
+| `ansible_run_duration_seconds` | histogram | `playbook` |
+| `dumpstore_op_runs_total` | counter | `op`, `status` (in-process single-command writes) |
+| `dumpstore_op_duration_seconds` | histogram | `op` |
+
+No pool, dataset or SMART metrics are exported. Only `/api/*` and `/metrics` requests are counted in the HTTP metrics; static files are not.
+
+### GET /api/smart
+
+S.M.A.R.T. summary for every device found by `smartctl --scan`, read with `smartctl -j -a <dev>`.
+
+```json
+{
+  "available": true,
+  "drives": [
+    {
+      "device": "/dev/sda",
+      "model": "WDC WD40EFRX-68N32N0",
+      "serial": "WD-WCC7K1234567",
+      "protocol": "ATA",
+      "capacity_bytes": 4000787030016,
+      "temp_c": 34,
+      "power_on_hours": 21873,
+      "passed": true,
+      "reallocated_sectors": 0,
+      "pending_sectors": 0,
+      "uncorrectable_errors": 0,
+      "grown_defects": 0,
+      "media_errors": 0
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `available` | `false` when `smartctl` is not in `PATH` (`drives` is then `null`) |
+| `protocol` | `ATA`, `SCSI`, or `NVMe` |
+| `temp_c`, `capacity_bytes` | `0` if unknown |
+| `reallocated_sectors` / `pending_sectors` / `uncorrectable_errors` | ATA attributes 5 / 197 / 198 (raw value) |
+| `grown_defects` | SCSI only |
+| `media_errors` | NVMe only |
+
+Always `200`. Drives that return no output or invalid JSON are left out. Each call queries every drive one after another, with no timeout.
+
+### GET /api/iostat
+
+One fresh sample per pool from `zpool iostat -H -p -y 1 1`, so the request blocks for about 1 s.
+
+```json
+[
+  { "pool": "tank", "read_ops": 12, "write_ops": 443, "read_bw": 1572864, "write_bw": 28311552 }
+]
+```
+
+`read_bw` / `write_bw` are bytes per second; ops are per second. `500` if `zpool iostat` fails (30 s timeout). Also pushed on the `iostat` SSE topic.
+
+---
+
+## Pools (read)
+
+### GET /api/pools
+
+From `zpool list -H -p -o name,size,alloc,free,health,frag,cap,dedup`.
+
+```json
+[
+  {
+    "name": "tank",
+    "size": 3985729650688,
+    "alloc": 1288490188800,
+    "free": 2697239461888,
+    "health": "ONLINE",
+    "frag": "4",
+    "cap": "32",
+    "dedup": "1.00",
+    "used_percent": 32.33
+  }
+]
+```
+
+`size` / `alloc` / `free` are bytes. `frag`, `cap`, `dedup` are the raw `zpool list -p` strings (`frag` is `-` when not applicable). `used_percent` is `alloc / size × 100`, computed server-side. Empty array if there are no pools; `500` if `zpool list` fails. Also pushed on the `pool.query` SSE topic.
+
+### GET /api/poolstatus
+
+Parsed `zpool status` for every pool.
+
+```json
+[
+  {
+    "name": "tank",
+    "state": "ONLINE",
+    "status": "Some supported and requested features are not enabled on the pool.",
+    "scan": "scrub repaired 0B in 01:12:44 with 0 errors on Sun Nov  8 01:36:45 2026",
+    "errors": "No known data errors",
+    "vdevs": [
+      { "name": "tank",     "state": "ONLINE", "read": 0, "write": 0, "cksum": 0, "depth": 0 },
+      { "name": "mirror-0", "state": "ONLINE", "read": 0, "write": 0, "cksum": 0, "depth": 1 },
+      { "name": "sda",      "state": "ONLINE", "read": 0, "write": 0, "cksum": 0, "depth": 2 },
+      { "name": "sdb",      "state": "ONLINE", "read": 0, "write": 0, "cksum": 0, "depth": 2 }
+    ]
+  }
+]
+```
+
+| Field | Notes |
+|-------|-------|
+| `status` | First line of the advisory message only; omitted when absent |
+| `scan` | Scan/scrub/resilver text; continuation lines joined with `\n`. The UI derives the scrub state (in progress / paused / idle) from it |
+| `vdevs` | Flat list in `zpool status` order; `depth` (indent ÷ 2) encodes the tree. Section headers such as `logs`, `cache`, `spares` appear as entries with empty `state` |
+
+`500` if `zpool status` fails. Also pushed on the `poolstatus` SSE topic.
+
+---
+
 ## Datasets
+
+### GET /api/datasets
+
+Lists every filesystem and volume. Runs `zfs list -H -p -o name,used,avail,refer,mountpoint,type,compressratio,compression,quota,reservation,sharenfs,sharesmb,acltype`. Sizes are in bytes.
+
+```json
+[
+  {
+    "name": "tank/data",
+    "used": 10737418240,
+    "avail": 53687091200,
+    "refer": 10737418240,
+    "mountpoint": "/tank/data",
+    "type": "filesystem",
+    "compress_ratio": "1.42x",
+    "compression": "lz4",
+    "quota": 0,
+    "reservation": 0,
+    "pool": "tank",
+    "depth": 1,
+    "sharenfs": "off",
+    "sharesmb": "off",
+    "acltype": "posix"
+  }
+]
+```
+
+- `pool` and `depth` are derived from the name: the first path component, and the number of `/` characters.
+- `quota: 0` and `reservation: 0` mean none.
+- Volumes report `mountpoint: "-"`.
+- `acltype` is normalised to `posix`, `nfsv4` or `off`.
+
+The same payload is pushed on the `dataset.query` SSE topic.
 
 ### POST /api/datasets
 
@@ -161,6 +520,48 @@ Update dataset properties. Any subset of editable properties may be sent. An emp
 A `mountpoint` change is subject to the [reference guard](#reference-guard-409).
 
 Editable properties: `compression`, `quota`, `mountpoint`, `recordsize`, `atime`, `exec`, `sync`, `dedup`, `copies`, `xattr`, `readonly`, `acltype`, `sharenfs`, `sharesmb`.
+
+### GET /api/dataset-props/{name}
+
+Returns the editable properties of one dataset, each with its value and source. Runs `zfs get -H` for `compression, quota, mountpoint, recordsize, atime, exec, sync, dedup, copies, xattr, readonly, acltype, sharenfs, sharesmb`.
+
+```json
+{
+  "compression": { "value": "lz4",        "source": "inherited from tank" },
+  "quota":       { "value": "50G",        "source": "local" },
+  "mountpoint":  { "value": "/tank/data", "source": "default" },
+  "recordsize":  { "value": "128K",       "source": "default" },
+  "readonly":    { "value": "off",        "source": "default" }
+}
+```
+
+- Values are human-readable (no `-p`).
+- On volumes, filesystem-only properties come back as `"-"` / `"-"`.
+- Returns `400` if the name is invalid.
+- Returns `500` if `zfs get` fails, which includes a dataset that does not exist.
+
+### POST /api/datasets/rename
+
+Renames a dataset or volume within its current parent.
+
+```json
+{ "name": "tank/data", "new_name": "tank/archive" }
+```
+
+Validation (`400`):
+- both names are required and must be valid ZFS names
+- neither name may be a pool root (both must contain `/`)
+- both names must have the same parent. Moving to another parent is refused.
+
+Other status codes:
+- `404` if `name` does not exist.
+- `409` from the [reference guard](#reference-guard-409). The check covers the dataset and all of its descendants.
+
+Runs `zfs_dataset_rename.yml` (`zfs rename <name> <new_name>`) and publishes `dataset.query` and `snapshot.query`.
+
+```json
+{ "name": "tank/data", "new_name": "tank/archive", "tasks": [ { "name": "Rename dataset", "status": "changed" } ] }
+```
 
 ### POST /api/rewrite/{name}
 
@@ -244,6 +645,29 @@ Replication conflicts also carry the task `id`. If the references cannot be read
 
 ## Snapshots
 
+### GET /api/snapshots
+
+Lists all snapshots. Runs `zfs list -H -p -t snapshot -o name,used,refer,creation,clones`.
+
+```json
+[
+  {
+    "name": "tank/data@2026-05-06",
+    "dataset": "tank/data",
+    "snap_label": "2026-05-06",
+    "used": 1048576,
+    "refer": 10737418240,
+    "creation": 1778073693,
+    "clones": ""
+  }
+]
+```
+
+- `creation` is a Unix timestamp in seconds.
+- `clones` is the raw comma-separated `clones` property. It is `""` when the snapshot has no clones (`zfs list -p` prints an empty field).
+
+The same payload is pushed on the `snapshot.query` SSE topic.
+
 ### POST /api/snapshots
 
 ```json
@@ -252,6 +676,27 @@ Replication conflicts also carry the task `id`. If the references cannot be read
   "snapname": "2024-01-15_backup",
   "recursive": false
 }
+```
+
+### POST /api/snapshots/clone
+
+Clones a snapshot into a new writable dataset. Runs in-process as `zfs clone <snapshot> <target>`.
+
+```json
+{ "snapshot": "tank/data@2026-05-06", "target": "tank/data-restore" }
+```
+
+Validation (`400`):
+- both fields are required
+- `snapshot` must be `dataset@label` with a valid dataset name and label
+- `target` must be a valid ZFS name that contains `/`
+
+The snapshot is not checked for existence beforehand. If it is missing, or `target` already exists or is in a different pool, `zfs clone` fails and the request returns `500` with `tasks`.
+
+On success, returns `201` and publishes `dataset.query` and `snapshot.query`.
+
+```json
+{ "snapshot": "tank/data@2026-05-06", "target": "tank/data-restore", "tasks": [ { "name": "Clone tank/data@2026-05-06 to tank/data-restore", "status": "changed" } ] }
 ```
 
 ### POST /api/snapshots/send
@@ -304,6 +749,37 @@ Query parameters:
 ```
 
 Entries are capped at 10 000 (`truncated: true` when more changed). The dataset must be mounted for `zfs diff` to work.
+
+### DELETE /api/snapshots/{dataset}@{snapname}
+
+Destroys one snapshot. Runs in-process as `zfs destroy [-r] <dataset>@<snapname>`.
+
+- `?recursive=true` passes `-r`. This also destroys the snapshot with the **same name in every descendant dataset**. It does not destroy clones: dependent clones make the destroy fail.
+- Returns `400` if the path is not a valid `dataset@label`.
+- Returns `404` if the snapshot does not exist.
+- Does **not** release `dumpstore-repl` holds. A held replication snapshot fails with "dataset is busy". Use `POST /api/snapshots/delete-batch`, which releases those holds first.
+
+```json
+{ "snapshot": "tank/data@2026-05-06", "tasks": [ { "name": "Destroy snapshot tank/data@2026-05-06", "status": "changed" } ] }
+```
+
+### POST /api/snapshots/delete-batch
+
+Destroys up to 100 snapshots in one request.
+
+```json
+{ "snapshots": ["tank/data@2026-05-05", "tank/home@2026-05-05"] }
+```
+
+- Every entry must be a valid `dataset@label`. If any entry is invalid, the request returns `400` and nothing is destroyed.
+- An empty list returns `400`, and so does a list of more than 100.
+- Any `dumpstore-repl` holds on the listed snapshots are released first, so replication snapshots can be deleted.
+- Each snapshot gets its own step, `zfs destroy <snap>`, run in-process.
+- One failure does not stop the remaining steps. If any step failed, the response is `500` with an aggregate error (`"N of M step(s) failed: …"`) and every step in `tasks`.
+
+```json
+{ "snapshots": ["tank/data@2026-05-05", "tank/home@2026-05-05"], "tasks": [ { "name": "Destroy snapshot tank/data@2026-05-05", "status": "changed" }, { "name": "Destroy snapshot tank/home@2026-05-05", "status": "changed" } ] }
+```
 
 ---
 
@@ -422,10 +898,6 @@ Returns the recent `RunRecord` list (capped at 20):
 ]
 ```
 
-### DELETE /api/snapshots/{dataset}@{snapname}
-
-Append `?recursive=true` to also destroy clones.
-
 ---
 
 ## Pool lifecycle
@@ -444,7 +916,7 @@ Create a new pool via `zpool create`. **Destroys all existing data on the select
 }
 ```
 
-`vdev_type`: `single` (stripe, no redundancy keyword), `mirror`, `raidz1`, `raidz2`, `raidz3`, `draid`, `draid2`, `draid3`. Minimum device counts are enforced (mirror ≥ 2, raidzN ≥ N+1, draidN ≥ N+1). `ashift` (9–16) and `compression` are optional. Returns `409` if a pool with that name already exists. Returns Ansible task steps.
+`vdev_type`: `single` (stripe, no redundancy keyword), `mirror`, `raidz1`, `raidz2`, `raidz3`, `draid`, `draid2`, `draid3`. Minimum device counts are enforced (mirror ≥ 2, raidzN ≥ N+1, draidN ≥ N+1). `ashift` (9–16) and `compression` are optional. Returns `409` if a pool with that name already exists. Returns task steps (runs in-process, no playbook).
 
 ### GET /api/pools/importable
 
@@ -463,11 +935,11 @@ Scans with `zpool import` (no pool name) and returns pools available for import.
 { "pool": "tank", "force": false }
 ```
 
-`force: true` passes `-f` — needed for pools that were not cleanly exported or belonged to another system. Returns Ansible task steps.
+`force: true` passes `-f` — needed for pools that were not cleanly exported or belonged to another system. Returns task steps (runs in-process, no playbook).
 
 ### POST /api/pools/{pool}/export
 
-Export the pool via `zpool export`. Fails when the pool is busy (open files, active shares, running jobs) — the error is surfaced in the op-log. Returns Ansible task steps.
+Export the pool via `zpool export`. Fails when the pool is busy (open files, active shares, running jobs) — the error is surfaced in the op-log. Returns task steps (runs in-process, no playbook).
 
 ### POST /api/pools/{pool}/vdevs
 
@@ -477,21 +949,32 @@ Add a data vdev via `zpool add`. **Irreversible on most pool layouts** — the U
 { "vdev_type": "mirror", "devices": ["/dev/sdd", "/dev/sde"] }
 ```
 
-`vdev_type`: `single`, `mirror`, `raidz1`, `raidz2`, `raidz3` (minimum device counts enforced). Returns Ansible task steps.
+`vdev_type`: `single`, `mirror`, `raidz1`, `raidz2`, `raidz3` (minimum device counts enforced). Returns task steps (runs in-process, no playbook).
 
 ### POST /api/pools/{pool}/cache · /log · /spare
 
-Add auxiliary devices: L2ARC cache, SLOG log, or hot spare.
+Adds auxiliary devices: an L2ARC cache, a SLOG log, or a hot spare. Runs in-process as `zpool add <pool> cache|log [mirror]|spare <devices…>`. No playbook runs.
 
 ```json
 { "devices": ["/dev/nvme0n1"] }
 ```
 
-For `/log`, an optional `"mirror": true` mirrors the log devices (requires ≥ 2). Returns Ansible task steps.
+For `/log`, an optional `"mirror": true` adds the `mirror` keyword and requires at least 2 devices.
+
+Validation (`400`):
+- `pool` must be a valid pool name, with no `/`
+- `devices` must contain at least one device
+- each device must match `^/?[a-zA-Z0-9][a-zA-Z0-9/_.:-]*$`
+
+If `zpool add` itself fails, the request returns `500` with `tasks`. On success, it publishes `pool.query`.
+
+```json
+{ "pool": "tank", "tasks": [ { "name": "Add log devices to tank", "status": "changed" } ] }
+```
 
 ### DELETE /api/pools/{pool}/devices/{device}
 
-Remove a cache, log, or spare device via `zpool remove`. zpool itself rejects removals that aren't legal for the given vdev. Returns Ansible task steps.
+Remove a cache, log, or spare device via `zpool remove`. zpool itself rejects removals that aren't legal for the given vdev. Returns task steps (runs in-process, no playbook).
 
 ---
 
@@ -516,15 +999,15 @@ Replace a vdev with a new device via `zpool replace`. A resilver onto the new de
 { "old_device": "sdb", "new_device": "/dev/sdc" }
 ```
 
-`old_device` accepts a device name, path, or the numeric guid `zpool status` prints for missing devices. Returns Ansible task steps.
+`old_device` accepts a device name, path, or the numeric guid `zpool status` prints for missing devices. Returns task steps (runs in-process, no playbook).
 
 ### POST /api/pools/{pool}/offline
 
-Take a device offline for maintenance via `zpool offline`. Body: `{ "device": "sdb" }`. Returns Ansible task steps.
+Take a device offline for maintenance via `zpool offline`. Body: `{ "device": "sdb" }`. Returns task steps (runs in-process, no playbook).
 
 ### POST /api/pools/{pool}/online
 
-Bring an offlined device back via `zpool online`. Body: `{ "device": "sdb" }`. Returns Ansible task steps.
+Bring an offlined device back via `zpool online`. Body: `{ "device": "sdb" }`. Returns task steps (runs in-process, no playbook).
 
 ---
 
@@ -532,11 +1015,11 @@ Bring an offlined device back via `zpool online`. Body: `{ "device": "sdb" }`. R
 
 ### POST /api/scrub/{pool}
 
-Start a scrub on the named pool. Returns Ansible task steps.
+Start a scrub on the named pool. Returns task steps (runs in-process, no playbook).
 
 ### DELETE /api/scrub/{pool}
 
-Cancel a running scrub on the named pool. Returns Ansible task steps.
+Cancel a running scrub on the named pool. Returns task steps (runs in-process, no playbook).
 
 ### GET /api/scrub-schedules
 
@@ -571,11 +1054,13 @@ Remove a pool from the periodic scrub schedule. Returns Ansible task steps.
 
 ## Auto-snapshot scheduling
 
-Manages `com.sun:auto-snapshot*` ZFS user properties per dataset. These properties are consumed by `zfs-auto-snapshot` (Linux) or `zfstools` (FreeBSD) to automatically create and rotate snapshots. dumpstore sets/clears the properties; the external daemon handles snapshot creation.
+Manages `com.sun:auto-snapshot*` ZFS user properties per dataset. Snapshots are created and pruned either by **dumpstore's built-in scheduler** (registered at startup when no OS daemon is active, or via `POST /api/auto-snapshot/takeover`) or by the OS daemon — `zfs-auto-snapshot` (Linux) or `zfstools` (FreeBSD). Both use the same properties and the `zfs-auto-snap_<bucket>-YYYY-MM-DD-HHMM` naming, so either can prune the other's snapshots. `GET /api/auto-snapshot/status` shows which one is active.
 
 #### Default behaviour — important
 
-`zfs-auto-snapshot` uses an **opt-out** model: any dataset where `com.sun:auto-snapshot` is **not explicitly set** is snapshotted by default. Setting the property to `false` is how you exclude a dataset.
+**The two schedulers select datasets differently.** dumpstore's built-in scheduler is **opt-in**: a dataset is snapshotted in a bucket only when `com.sun:auto-snapshot` is `true` (set or inherited) *and* that bucket's property is a positive keep-count. After a takeover, datasets that were only snapshotted implicitly by the daemon are no longer snapshotted until you set the properties.
+
+`zfs-auto-snapshot` (the OS daemon) uses an **opt-out** model: any dataset where `com.sun:auto-snapshot` is **not explicitly set** is snapshotted by default. Setting the property to `false` is how you exclude a dataset.
 
 The recommended pattern for snapshotting only specific datasets:
 
@@ -601,6 +1086,94 @@ zfs get -r com.sun:auto-snapshot tank
 zfs get -r -s local com.sun:auto-snapshot tank
 ```
 
+### GET /api/auto-snapshot-schedules
+
+Returns the `com.sun:auto-snapshot*` properties of every filesystem and volume, keyed by dataset name. Each property has the same `{value, source}` shape as `GET /api/auto-snapshot/{dataset}`. Inherited values are already resolved by `zfs get`. An unset property returns `"-"` for both value and source.
+
+```json
+{
+  "tank": {
+    "com.sun:auto-snapshot":          { "value": "false", "source": "local" },
+    "com.sun:auto-snapshot:frequent": { "value": "-",     "source": "-" },
+    "com.sun:auto-snapshot:hourly":   { "value": "-",     "source": "-" },
+    "com.sun:auto-snapshot:daily":    { "value": "-",     "source": "-" },
+    "com.sun:auto-snapshot:weekly":   { "value": "-",     "source": "-" },
+    "com.sun:auto-snapshot:monthly":  { "value": "-",     "source": "-" }
+  },
+  "tank/data": {
+    "com.sun:auto-snapshot":          { "value": "true",  "source": "local" },
+    "com.sun:auto-snapshot:daily":    { "value": "7",     "source": "local" },
+    "…": "…"
+  }
+}
+```
+
+The same payload is pushed on the `autosnapshot.query` SSE topic after every `PUT /api/auto-snapshot/{dataset}`.
+
+### GET /api/auto-snapshot/status
+
+Reports which component runs auto-snapshots: the OS daemon or dumpstore's built-in scheduler.
+
+```json
+{
+  "os_daemon": "zfs-auto-snapshot",
+  "os_daemon_active": false,
+  "dumpstore_managed": true,
+  "last_runs": {
+    "frequent": "2026-11-10T09:45:00Z",
+    "hourly":   "2026-11-10T09:00:00Z"
+  }
+}
+```
+
+- `os_daemon` is `zfs-auto-snapshot` on Linux and `zfstools` on FreeBSD. On any other OS it is `""`. On Linux and FreeBSD it is reported whether or not the daemon is installed.
+- `os_daemon_active` on Linux is true if any `zfs-auto-snapshot-<bucket>.timer` is enabled, or if any of `/etc/cron.d/zfs-auto-snapshot` or `/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` exists.
+- `os_daemon_active` on FreeBSD is true if `daily_zfs_snapshot_enable="YES"` appears in `/etc/periodic.conf` or `/etc/periodic.conf.local`.
+- `dumpstore_managed` is true when the five bucket tasks are registered with the internal scheduler. At startup they are registered automatically if the OS daemon is not active.
+- `last_runs` maps a bucket name (`frequent`, `hourly`, `daily`, `weekly`, `monthly`) to the time that bucket last fired. It is omitted when no bucket has fired.
+
+### POST /api/auto-snapshot/takeover
+
+Disables the OS daemon, then registers dumpstore's bucket tasks. Runs `auto_snapshot_takeover.yml` with `timer_state_file=<state dir>/autosnap-disabled-timers`. The playbook:
+
+- **Linux, systemd timers:** stops and disables the enabled `zfs-auto-snapshot-*.timer` units and records their names in `timer_state_file`.
+- **Linux, cron packaging:** renames each zfs-auto-snapshot cron file to `<file>.dumpstore-disabled`.
+- **FreeBSD:** sets `daily_zfs_snapshot_enable="NO"` in `/etc/periodic.conf`, and in `/etc/periodic.conf.local` if that file exists.
+
+The request is idempotent. Bucket schedules (cron syntax):
+
+| Bucket | Schedule |
+|--------|----------|
+| frequent | `*/15 * * * *` |
+| hourly | `0 * * * *` |
+| daily | `0 0 * * *` |
+| weekly | `0 0 * * 0` |
+| monthly | `0 0 1 * *` |
+
+On success, publishes `autosnap.status` (this payload has no `last_runs`).
+
+```json
+{ "tasks": [ { "name": "Linux — stop and disable zfs-auto-snapshot systemd timers", "status": "changed" } ] }
+```
+
+Returns `500` if the autosnap runner is not initialised, if the playbook fails (with `tasks`), or if scheduler registration fails.
+
+### POST /api/auto-snapshot/release
+
+The inverse of takeover. It first unregisters dumpstore's bucket tasks, then runs `auto_snapshot_release.yml`. The playbook:
+
+- **Linux, cron packaging:** renames each `<file>.dumpstore-disabled` back to `<file>`, unless the package has recreated the file in the meantime.
+- **Linux, systemd timers:** re-enables and starts the timers listed in `timer_state_file`. If there is no record, it enables every installed `zfs-auto-snapshot-*.timer`. It then deletes the record.
+- **FreeBSD:** sets `daily_zfs_snapshot_enable="YES"` in `/etc/periodic.conf`.
+
+The package is never reinstalled. Publishes `autosnap.status`.
+
+```json
+{ "tasks": [ { "name": "Linux — enable and start zfs-auto-snapshot systemd timers", "status": "changed" } ] }
+```
+
+Returns `500` if the autosnap runner is not initialised or the playbook fails. The bucket tasks are already unregistered at that point.
+
 ### GET /api/auto-snapshot/{dataset}
 
 Returns the current `com.sun:auto-snapshot*` property values and their source (local/inherited/default) for the given dataset.
@@ -612,11 +1185,11 @@ Returns the current `com.sun:auto-snapshot*` property values and their source (l
   "com.sun:auto-snapshot:hourly":   { "value": "24",    "source": "local" },
   "com.sun:auto-snapshot:daily":    { "value": "7",     "source": "local" },
   "com.sun:auto-snapshot:weekly":   { "value": "4",     "source": "local" },
-  "com.sun:auto-snapshot:monthly":  { "value": "-",     "source": "default" }
+  "com.sun:auto-snapshot:monthly":  { "value": "-",     "source": "-" }
 }
 ```
 
-A `value` of `"-"` with `source` of `"default"` means the property is not set (inherits system default).
+A `value` and `source` of `"-"` mean the property is not set anywhere in the hierarchy.
 
 ### PUT /api/auto-snapshot/{dataset}
 
@@ -757,7 +1330,240 @@ Returns Ansible task steps. `409` if the service is not installed on this host.
 
 ---
 
+## Users & Groups
+
+Local Unix users and groups. Reads parse `/etc/passwd` and `/etc/group` directly. Writes go through playbooks, are serialised server-side, and push fresh `user.query` / `group.query` SSE events when they succeed.
+
+**System-account protection:** modify, delete and SSH-key writes return `403` when the account's UID/GID is below `UID_MIN` from `/etc/login.defs` (default `1000`). Modify and delete also return `403` for `nobody` and `nfsnobody` (users) and for `nogroup`, `nobody` and `nfsnobody` (groups), whatever their ID. The playbooks repeat the check with a fixed `>= 1000`.
+
+Names (user, group, members, supplementary groups) must match `^[a-zA-Z_][a-zA-Z0-9._-]{0,31}$`. Lists are comma-separated. Paths (`shell`, `home`) must match `^/[a-zA-Z0-9/_.-]+$`. Passwords are **plaintext** — the OS hashes them (`chpasswd` on Linux, `pw usermod -h 0` on FreeBSD) — and must not contain newline characters.
+
+A playbook failure, including a failed playbook `assert`, returns `500` with `tasks`.
+
+### GET /api/users
+
+All entries in `/etc/passwd`, including system accounts.
+
+```json
+[
+  { "username": "root",  "uid": 0,    "gid": 0,    "home": "/root",       "shell": "/bin/bash" },
+  { "username": "alice", "uid": 1001, "gid": 1001, "home": "/home/alice", "shell": "/bin/bash" }
+]
+```
+
+### POST /api/users
+
+Create a local user (`user_create.yml`). The home directory is always created.
+
+```json
+{
+  "username": "alice",
+  "shell": "/bin/bash",
+  "uid": "1001",
+  "group": "",
+  "groups": "wheel,backup",
+  "password": "s3cret",
+  "create_group": true,
+  "smb_user": true
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `username` | yes | Login name |
+| `shell` | no | Login shell, defaults to `/bin/bash` |
+| `uid` | no | Explicit UID **as a string**; must be `>= 1000` (playbook assert). Empty = auto |
+| `group` | no | Primary group name; created if it doesn't exist |
+| `groups` | no | Comma-separated supplementary groups |
+| `password` | no | Plaintext password; empty leaves the account without one |
+| `create_group` | no | `true` creates a group named after the user and makes it the primary group (unless `group` is set) |
+| `smb_user` | no | `true` also registers the user in Samba (`smbpasswd -a`) with the same password. Skipped when `password` is empty |
+
+Returns `201`:
+
+```json
+{ "username": "alice", "tasks": [ … ] }
+```
+
+### PUT /api/users/{name}
+
+Modify a user (`user_modify.yml`). `404` if the user doesn't exist, `403` for system and protected accounts.
+
+```json
+{
+  "shell": "/bin/zsh",
+  "group": "storage",
+  "user_groups": "wheel,backup",
+  "password": "",
+  "home": "/tank/home/alice",
+  "move_home": true,
+  "smb_sync": false
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `shell` | no | New login shell; empty = unchanged |
+| `group` | no | New primary group (must already exist); empty = unchanged |
+| `user_groups` | no | Comma-separated supplementary groups. **Replaces** the current set; empty or omitted **clears all** supplementary groups |
+| `password` | no | New plaintext password; empty = unchanged |
+| `home` | no | New home directory; created as `0700` and owned by the user. Empty = unchanged |
+| `move_home` | no | With `home`: copy the old home's contents, dotfiles included, then delete the old directory |
+| `smb_sync` | no | With `password`: also update the Samba password (`smbpasswd -s`) |
+
+```json
+{ "username": "alice", "tasks": [ … ] }
+```
+
+### DELETE /api/users/{name}
+
+Delete a user **and their home directory** (`userdel` with remove and force). `404` if the user doesn't exist, `403` for system and protected accounts. Doesn't remove the user from Samba — use [`DELETE /api/smb-users/{name}`](#delete-apismb-usersname).
+
+```json
+{ "username": "alice", "tasks": [ … ] }
+```
+
+### GET /api/users/{name}/sshkeys
+
+Reads `<home>/.ssh/authorized_keys` and returns one entry per non-blank, non-`#` line. If the file is missing, `keys` is `[]`. `404` if the user doesn't exist.
+
+```json
+{ "keys": [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop" ] }
+```
+
+### POST /api/users/{name}/sshkeys
+
+Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `authorized_keys` (`0600`) if they are missing, owned by `<user>:<user>`. The key is appended only if that exact line isn't already present.
+
+```json
+{ "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop" }
+```
+
+`key` is trimmed and must be a single line starting with `ssh-`, `ecdsa-sha2-` or `sk-` (`400` otherwise). `404` if the user doesn't exist, `403` if UID < `UID_MIN`.
+
+```json
+{ "tasks": [ … ] }
+```
+
+### DELETE /api/users/{name}/sshkeys
+
+Remove an authorized key (`user_ssh_key_remove.yml`). The key travels in the request **body**, not the query string, and must match the line in `authorized_keys` exactly (after trimming).
+
+```json
+{ "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop" }
+```
+
+`400` if `key` is empty, `404` if the user doesn't exist, `403` if UID < `UID_MIN`.
+
+```json
+{ "tasks": [ … ] }
+```
+
+### GET /api/groups
+
+All entries in `/etc/group`. `members` lists only supplementary members, never users whose primary group this is. It is always an array.
+
+```json
+[
+  { "name": "wheel",   "gid": 0,    "members": [ "root" ] },
+  { "name": "storage", "gid": 1500, "members": [ "alice", "bob" ] }
+]
+```
+
+### POST /api/groups
+
+Create a local group (`group_create.yml`).
+
+```json
+{ "groupname": "storage", "gid": "1500" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `groupname` | yes | Group name |
+| `gid` | no | Explicit GID **as a string**; must be `>= 1000` (playbook assert). Empty = auto |
+
+Returns `201`:
+
+```json
+{ "groupname": "storage", "tasks": [ … ] }
+```
+
+### PUT /api/groups/{name}
+
+Rename a group, change its GID, and set its member list (`group_modify.yml`). `404` if the group doesn't exist, `403` for system and protected groups.
+
+```json
+{ "new_name": "media", "gid": "1501", "members": "alice,bob" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `new_name` | no | Rename to this name (`groupmod -n` / `pw groupmod -l`); empty = keep |
+| `gid` | no | New GID as a string, `>= 1000`; empty = keep |
+| `members` | no | Comma-separated members. **Always applied** (`gpasswd -M` / `pw groupmod -M`): replaces the current list, and empty or omitted **removes all members**. Every name must be an existing user — otherwise `400 "unknown member(s): …"` |
+
+`groupname` in the response is the new name if the group was renamed:
+
+```json
+{ "groupname": "media", "tasks": [ … ] }
+```
+
+### DELETE /api/groups/{name}
+
+Delete a local group (`group_delete.yml`). `404` if the group doesn't exist, `403` for system and protected groups.
+
+```json
+{ "groupname": "storage", "tasks": [ … ] }
+```
+
+---
+
+## Dataset ownership
+
+Owner and group of a dataset's **mountpoint directory**. Volumes, and datasets with `mountpoint=none`, return `400 "dataset … has no mountpoint"`.
+
+### GET /api/chown/{dataset}
+
+```json
+{ "dataset": "tank/data", "mountpoint": "/tank/data", "owner": "alice", "group": "storage" }
+```
+
+`owner` and `group` are numeric strings (e.g. `"1005"`) when the UID or GID has no name.
+
+### POST /api/chown/{dataset}
+
+Set the mountpoint's owner and group (`dataset_chown.yml`, which runs `chown [-R] owner:group <mountpoint>`).
+
+```json
+{ "owner": "alice", "group": "storage", "recursive": false }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `owner` | yes | User name |
+| `group` | yes | Group name — both are required; to change only one, send the current value for the other |
+| `recursive` | no | `true` applies `chown -R` to everything below the mountpoint |
+
+`404` if the dataset doesn't exist. The response follows; a failed `chown` (e.g. unknown user) returns `500` with `tasks`.
+
+```json
+{ "dataset": "tank/data", "tasks": [ … ] }
+```
+
+---
+
 ## ACLs
+
+### GET /api/acl-status
+
+Map of dataset name → `true`/`false` for every mounted filesystem (volumes and datasets with mountpoint `none`/`-` are left out). Used for the ACL badge in the datasets table.
+
+```json
+{ "tank": false, "tank/data": true, "tank/media": false }
+```
+
+A dataset is `true` if `getfacl` shows more than the three base entries (or `nfs4_getfacl` shows any entry), **or** if its `acltype` is anything other than `off`. So `true` means "extended entries present or ACLs enabled", not strictly "has extra entries". When neither tool is installed, the result is based on `acltype` alone. `500` only if `zfs list` fails.
 
 ### GET /api/acl/{dataset}
 
@@ -806,6 +1612,116 @@ Remove an ACL entry. The `entry` query parameter:
 - **NFSv4**: full ACE string to match
 
 Append `&recursive=true` (POSIX only) to remove recursively.
+
+---
+
+## SMB shares & users
+
+dumpstore owns `smb.conf` (`/etc/samba/smb.conf` on Linux, `/usr/local/etc/smb4.conf` on FreeBSD) and renders it from a template on every config write. Per-dataset shares are Samba **usershares** (`net usershare`), stored in dumpstore's own directory (`/etc/dumpstore/smb/usershares`, or `/usr/local/etc/dumpstore/smb/usershares` on FreeBSD).
+
+**Init gate:** `GET /api/smb-shares`, `POST`/`DELETE /api/smb-share/…`, `POST`/`DELETE /api/smb-users/{name}` (as well as homes, Time Machine and wsdd writes) return `409 "Samba not initialised — run POST /api/smb/init first"` while `smb.conf` doesn't exist.
+
+### GET /api/smb/status
+
+```json
+{
+  "initialized": true,
+  "conf_path": "/etc/samba/smb.conf",
+  "os": "linux",
+  "conf_mtime": "2026-11-10T09:14:02Z",
+  "wsdd": { "installed": true, "unit": "wsdd", "state": "active", "active": true, "enabled": true,
+            "conf_path": "/etc/default/wsdd", "manageable": true, "managed": true, "workgroup": "WORKGROUP" }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `initialized` | `smb.conf` exists at `conf_path` |
+| `conf_path` | OS-specific `smb.conf` path |
+| `os` | `linux` or `freebsd` |
+| `conf_mtime` | UTC mtime of `smb.conf`; omitted when the file is missing |
+| `wsdd` | See [Windows Discovery (wsdd)](#windows-discovery-wsdd); omitted when `smb.conf` can't be parsed |
+
+### POST /api/smb/init
+
+Initialise Samba for dumpstore. Safe to call again.
+
+1. Returns `422 "Samba not installed — run: <install command>"` if `smbd` is missing.
+2. `smb_init.yml`: copies an existing `smb.conf` to `smb.conf.pre-dumpstore` once (never overwritten). On Linux it ensures the `sambashare` group exists. It creates the usershares directory (`1770 root:sambashare` on Linux, `1755 root:wheel` on FreeBSD).
+3. `smb_apply.yml`: renders `smb.conf` from the template and carries over `workgroup` and `server string` from the existing file (defaults `WORKGROUP` / `Samba Server`). It creates the referenced directories, deploys the file (keeping a backup), reloads Samba (`smbd`+`nmbd`, or `samba_server` on FreeBSD), and renders the wsdd options file if wsdd is installed.
+
+```json
+{ "initialized": true, "tasks": [ … ] }
+```
+
+`tasks` holds the steps from both playbooks, in order.
+
+### GET /api/smb-shares
+
+Reads the usershare files directly, so the list also includes shares whose path no longer exists (`path_missing: true`). Samba hides those shares but re-activates them when the path reappears. Sorted by name; `[]` if there are none.
+
+```json
+[
+  { "name": "data",  "path": "/tank/data",  "path_missing": false },
+  { "name": "olds",  "path": "/tank/olds",  "path_missing": true }
+]
+```
+
+### POST /api/smb-share/{dataset}
+
+Create or update a usershare for the dataset's mountpoint (`smb_usershare_set.yml` → `net usershare add <sharename> <mountpoint> "" everyone:F guest_ok=n`). Adding the share holds the [reference guard](#reference-guard-409) lock, so the dataset can't be destroyed or moved at the same moment. Once the share exists, it blocks destroy, rename and mountpoint changes of the dataset.
+
+```json
+{ "sharename": "data" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `sharename` | yes | 1–80 chars of `[a-zA-Z0-9._-]` |
+
+`400` for an invalid dataset name or sharename. A dataset whose mountpoint is `none` or `-` fails the playbook (`500` with `tasks`).
+
+```json
+{ "dataset": "tank/data", "sharename": "data", "tasks": [ … ] }
+```
+
+### DELETE /api/smb-share/{dataset}?name=\<sharename\>
+
+Remove a usershare (`smb_usershare_unset.yml` → `net usershare delete <sharename>`). The `name` query parameter is required (`400` otherwise) and alone selects the share. `{dataset}` is only echoed in the response.
+
+```json
+{ "dataset": "tank/data", "sharename": "data", "tasks": [ … ] }
+```
+
+### GET /api/smb-users
+
+Users in Samba's passdb (`pdbedit -L`). Not behind the init gate. If `pdbedit` isn't installed, the response is `200` with `available: false`.
+
+```json
+{ "available": true, "users": [ "alice", "bob" ] }
+```
+
+### POST /api/smb-users/{name}
+
+Register an existing local user with Samba, or reset their Samba password (`smb_user_add.yml` → `smbpasswd -a -s`).
+
+```json
+{ "password": "s3cret" }
+```
+
+`password` is required and must not contain newline characters (`400`). The playbook fails (`500` with `tasks`) if `smbpasswd` is missing or the Unix user doesn't exist.
+
+```json
+{ "username": "alice", "tasks": [ … ] }
+```
+
+### DELETE /api/smb-users/{name}
+
+Remove a user from Samba's passdb (`smb_user_remove.yml` → `pdbedit -x -u`). The Unix account isn't touched.
+
+```json
+{ "username": "alice", "tasks": [ … ] }
+```
 
 ---
 
@@ -924,6 +1840,100 @@ Create or update a Time Machine share. Returns Ansible task steps.
 ### DELETE /api/smb/timemachine/{sharename}
 
 Remove a Time Machine share from `smb.conf`. Returns Ansible task steps.
+
+---
+
+## TLS / HTTPS
+
+TLS settings live in `dumpstore.conf` (`tls_enabled`, `tls_cert_path`, `tls_key_path`), written by `tls_set_config.yml`. **No endpoint switches the running server to HTTPS.** HTTPS starts only when dumpstore is restarted with `--tls` and both cert paths are set. The certificate is read once at startup, so a restart is also needed after every gencert/issue/renew. With `--tls`, `-addr` is ignored: HTTPS listens on `--tls-port` (default `443`) and plain HTTP on `--http-port` (default `80`) answers with `301` to `https://`.
+
+Path fields must be absolute and must not contain NUL, `;`, `|`, `&`, `$` or `` ` ``. Hostnames and domains must be DNS names (labels of letters, digits and `-`).
+
+### GET /api/tls/status
+
+```json
+{
+  "enabled": true,
+  "cert_path": "/etc/dumpstore/tls/cert.pem",
+  "key_path": "/etc/dumpstore/tls/key.pem",
+  "cn": "nas.local",
+  "sans": ["nas.local", "127.0.0.1"],
+  "expires_at": "2036-11-08T10:12:00Z",
+  "days_remaining": 3649,
+  "self_signed": true
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `enabled` | The `tls_enabled` config flag, **not** whether HTTPS is being served (that depends on `--tls`) |
+| `cn`, `sans`, `expires_at`, `days_remaining`, `self_signed` | Parsed from the first PEM block of `cert_path`; omitted if the file cannot be read or parsed. `sans` = DNS names + IPs. `self_signed` = issuer equals subject. `days_remaining` is negative once expired and omitted when `0` |
+| `acme_email`, `acme_domain` | Present only after `POST /api/tls/acme/issue` in the current process (not persisted, see below) |
+
+All fields except `enabled` are omitted when empty.
+
+### POST /api/tls/gencert
+
+Generate a self-signed certificate and point the config at it.
+
+```json
+{ "hostname": "nas.local", "cert_dir": "/etc/dumpstore/tls" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `hostname` | yes | Becomes CN and DNS SAN |
+| `cert_dir` | no | Default `<config dir>/tls` (e.g. `/etc/dumpstore/tls`, `/usr/local/etc/dumpstore/tls`) |
+
+Runs `tls_gencert.yml`: creates `cert_dir` (`0700`), then `openssl req -x509` with an ECDSA P-256 key, valid 3650 days, SAN `IP:127.0.0.1,DNS:<hostname>`, written to `cert.pem` / `key.pem` (key `0600`). **If `cert.pem` already exists it is not regenerated**, even if `hostname` is different. Then `tls_set_config.yml` stores both paths and `tls_enabled: true`. Returns the Ansible task steps of both playbooks.
+
+`400` missing/invalid `hostname` or invalid `cert_dir` · `500` playbook failure.
+
+### PATCH /api/tls/config
+
+Use an existing certificate + key from disk (e.g. from certbot or acme.sh).
+
+```json
+{ "cert_path": "/etc/letsencrypt/live/nas.example.com/fullchain.pem",
+  "key_path":  "/etc/letsencrypt/live/nas.example.com/privkey.pem" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `cert_path` | yes | PEM certificate (chain) |
+| `key_path` | yes | PEM private key matching the certificate |
+
+Before anything is written, the pair is loaded in Go (`tls.LoadX509KeyPair`), so files that are missing, unreadable or don't match are rejected. Then `tls_set_config.yml` stores the paths and `tls_enabled: true`. Files are not copied. Returns Ansible task steps.
+
+`400` missing/invalid path or `invalid cert/key pair: …` · `500` playbook failure.
+
+### POST /api/tls/acme/issue
+
+Issue a Let's Encrypt certificate with [`lego`](https://go-acme.github.io/lego/).
+
+```json
+{ "email": "admin@example.com", "domain": "nas.example.com", "cert_dir": "/etc/dumpstore/tls/acme" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `email` | yes | ACME account email |
+| `domain` | yes | Single domain; no wildcards |
+| `cert_dir` | no | lego `--path`; default `<config dir>/tls/acme` |
+
+Runs `tls_acme_issue.yml`: checks that `lego` is installed, creates `cert_dir` (`0700`), runs `lego --email … --domains … --path … --tls run`. This is the **TLS-ALPN-01** challenge: Let's Encrypt must reach this host on port 443, and nothing (including dumpstore itself with `--tls`) may be listening on 443. Then `tls_set_config.yml` stores `<cert_dir>/certificates/<domain>.crt` / `.key` and `tls_enabled: true`. Returns the Ansible task steps of both playbooks.
+
+`email`/`domain` are kept **in memory only**, not in `dumpstore.conf`. After a restart, renew no longer knows them (see below).
+
+`400` missing/invalid `email`, `domain` or `cert_dir` · `500` lego missing, challenge failed, or playbook failure.
+
+### POST /api/tls/acme/renew
+
+No request body. Runs `tls_acme_renew.yml` → `lego --email … --domains … --path <cert_dir> --tls renew --days 30` using the email/domain from the last issue. lego renews only when the certificate expires within 30 days; otherwise the call succeeds without changing anything. `cert_dir` is derived from the configured cert path (two levels up from `certificates/<domain>.crt`).
+
+**Renewal is manual.** dumpstore has no renewal timer. Same port-443 constraint as issue, so this fails while dumpstore itself serves HTTPS on 443. Restart afterwards to load the renewed certificate. Returns Ansible task steps.
+
+`400 "ACME is not configured"` if no issue has run since the process started (includes every restart after an issue) · `400 "ACME email and domain are not set"` · `500` lego missing or renewal failed.
 
 ---
 
