@@ -710,7 +710,7 @@
           <span class="pool-name">OpenTelemetry export</span>
           <span class="health-badge badge-purple">OTLP</span>
         </div>
-        <p>Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and dumpstore pushes traces (per-request spans named after the route, Ansible/ops child spans, background job/replication/autosnap spans), logs with <code>trace_id</code> correlation, and Go runtime metrics to any OTLP collector (Grafana Alloy, OpenTelemetry Collector, Tempo/Loki/Mimir, Jaeger). No-op without the env var; the System tab shows whether export is active.</p>
+        <p>Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and dumpstore pushes traces (per-request spans named after the route, Ansible/ops child spans, background job/replication/autosnap spans), logs with <code>trace_id</code> correlation, and metrics (everything on <code>/metrics</code> plus Go runtime and HTTP server metrics) to any OTLP collector (Grafana Alloy, OpenTelemetry Collector, Tempo/Loki/Mimir, Jaeger). No-op without the env var; the System tab shows whether export is active.</p>
         <pre style="margin-top:0.6rem;font-size:0.78rem;white-space:pre-wrap"># systemd: systemctl edit dumpstore
 Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
 # FreeBSD
@@ -795,13 +795,6 @@ sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318"</pre>
           <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/167" style="color:inherit">#167</a></span>
         </div>
         <p>Child spans for the <code>zfs</code>/<code>zpool</code> read commands.</p>
-      </div>
-      <div class="pool-card">
-        <div class="pool-card-header">
-          <span class="pool-name">OTEL: metrics migration</span>
-          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/168" style="color:inherit">#168</a></span>
-        </div>
-        <p>Move the Prometheus metrics onto the OTEL meter, keeping <code>/metrics</code> names stable.</p>
       </div>
     </div>
   </section>

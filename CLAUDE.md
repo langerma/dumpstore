@@ -84,7 +84,8 @@ go test -tags integration ./tests/integration/...  # integration tests (requires
 External Go dependencies:
 - `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format); official golang.org/x package
 - `golang.org/x/term` — echo-disabled password prompting in `--set-password`; official golang.org/x package
-- `go.opentelemetry.io/otel` + SDK/contrib modules — traces, runtime metrics, and the log pipeline (#49); CNCF-governed. All exporters are env-gated (`OTEL_EXPORTER_OTLP_*`) and no-op by default. The log SDK always runs: `internal/logging.JournalExporter` is the single producer for journald output, and the OTLP log branch attaches to the same provider when enabled — never tee logs at the slog level.
+- `go.opentelemetry.io/otel` + SDK/contrib modules — traces, metrics, and the log pipeline (#49); CNCF-governed. All OTLP exporters are env-gated (`OTEL_EXPORTER_OTLP_*`) and no-op by default. The log SDK always runs: `internal/logging.JournalExporter` is the single producer for journald output, and the OTLP log branch attaches to the same provider when enabled — never tee logs at the slog level. The meter provider always runs too (#168): record every metric once on `otel.Meter("dumpstore")`; never write Prometheus text by hand.
+- `go.opentelemetry.io/otel/exporters/prometheus` + `github.com/prometheus/client_golang` (`prometheus`, `promhttp`) + `github.com/prometheus/otlptranslator` — the meter's Prometheus reader that serves `/metrics` from a private registry (#168); CNCF projects. New metrics keep Prometheus-compatible names: counters without `_total` (the exporter adds it), durations as unit `s` (the exporter adds `_seconds`).
 
 ---
 
@@ -189,7 +190,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/zfs/zfs.go` | `ListPools`, `ListDatasets`, `ListSnapshots`, `IOStats` — all direct CLI calls |
 | `internal/zfs/acl.go` | ACL helpers for POSIX and NFSv4 — `GetPosixACL`, `GetNFS4ACL` |
 | `internal/ansible/runner.go` | `Runner.Run` — executes a playbook and returns parsed `PlaybookOutput`; `RunAndGetStdout` — convenience wrapper |
-| `internal/ansible/metrics.go` | Prometheus counters/histograms for Ansible playbook runs |
+| `internal/ansible/metrics.go` | OTEL counter/histogram for Ansible playbook runs (`ansible_runs_total`, `ansible_run_duration_seconds`) |
 | `internal/operations/operations.go` | Write-operation registry (#184): `Begin`/`Step`/`Finish`/`Get`, per-op `seq`, tagged `ansible.progress` publish, bounded in-memory retention; `api/operations.go` holds the `Operations` middleware (`X-Operation-ID`) and `GET /api/operations/{id}` |
 | `internal/ops/ops.go` | In-process executor for single-command writes — `Runner.Run(steps)`, argv exec, `ansible.TaskStep`-shaped results (#115) |
 | `internal/api/handlers.go` | Shared infra: validation helpers, `Handler` struct (with `authMu` RWMutex for config access), `RegisterRoutes`, `runOp`, `writeJSON`/`writeError`/`writeRunOpError`, `getSysInfo`, `getVersion`, `getEvents`, `getSchema` |
@@ -197,7 +198,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/logging/journal_exporter.go` | `JournalExporter` — OTEL log exporter reproducing the journald format (single producer for journald + OTLP logs, #49) |
 | `internal/logging/apphandler.go` | `NewAppHandler` — process-wide slog handler: otelslog bridge + level gate + req_id injection |
 | `internal/logging/middleware.go` | `RequestLogger` — HTTP middleware for per-request logging with req_id correlation; renames the otelhttp span to `METHOD /route` after mux dispatch |
-| `internal/otel/otel.go` | `Init`/`Enabled`/`Tracer` — env-gated OTEL SDK setup: trace/meter providers, log pipeline, autoexport OTLP factories (#49) |
+| `internal/otel/otel.go` | `Init`/`Enabled`/`Tracer` — OTEL SDK setup: always-on log pipeline and meter provider (Prometheus reader → `Providers.MetricsHandler`, #168), env-gated trace provider and OTLP log/metric branches via autoexport (#49) |
 | `internal/api/zfs_handlers.go` | ZFS handlers: pools, datasets, snapshots, SMART, IOStat, chown, scrub, auto-snapshot, rewrite (background job) |
 | `internal/api/device_handlers.go` | Block device list, `zpool replace`, device offline/online |
 | `internal/blockdev/blockdev.go` | `List` — physical block devices (`/sys/block` on Linux, `geom disk list` on FreeBSD); `MarkInUse` — best-effort vdev→device matching |
@@ -207,8 +208,9 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/api/iscsi_handlers.go` | iSCSI target handlers; FreeBSD: ctld init gate, read-modify-render of `ctl.conf` via `applyCtlConf` |
 | `internal/iscsi/iscsi.go` | `Target` model, `Backend`, `ListTargets`, targetcli saveconfig reader |
 | `internal/iscsi/ctld.go` | ctld (#186): `ParseCtld`/`LoadCtld`, `Import` (takes over an existing `ctl.conf`), `Render` (whole file from `ctl.conf.tmpl`), `CtldInitialized`, `Listeners` |
-| `internal/api/httpmetrics.go` | HTTP middleware for request count/latency metrics |
-| `internal/api/metrics.go` | `/metrics` handler (Prometheus exposition) |
+| `internal/api/httpmetrics.go` | `RecordHTTP` — OTEL request counter/latency histogram (called from `RequestLogger`), path normalisation |
+| `internal/api/metrics.go` | Go runtime + build-info observable callback; `/metrics` serves the handler injected via `SetMetricsHandler` |
+| `metrics_test.go` | Golden test pinning the `/metrics` exposition (names, types, labels, buckets, HELP) (#168) |
 | `internal/system/system.go` | `ListUsers`, `ListGroups`, `UIDMin` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` |
 | `internal/smart/smart.go` | `ListDrives` — calls `smartctl` for disk health data |
 | `internal/broker/broker.go` | SSE broker — fan-out of events to connected clients |

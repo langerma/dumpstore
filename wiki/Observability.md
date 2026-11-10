@@ -5,7 +5,7 @@ dumpstore **exports** telemetry to the monitoring stack you already run — it n
 | Output | Transport | On by default | Configure with |
 |---|---|---|---|
 | Prometheus metrics | pull, `GET /metrics` | yes | nothing; scrape it |
-| OpenTelemetry traces, logs, runtime metrics | push, OTLP (HTTP or gRPC) | no — nothing is exported until an endpoint is configured | standard `OTEL_*` environment variables |
+| OpenTelemetry traces, logs, metrics | push, OTLP (HTTP or gRPC) | no — nothing is exported until an endpoint is configured | standard `OTEL_*` environment variables |
 | Local logs | journald (Linux) / `/var/log/dumpstore.log` (FreeBSD) | yes | `-debug`, `-log-stdout` |
 
 The **System** tab's info card shows whether OTEL export is active, with the endpoint, protocol, and service name (header env vars, which may carry credentials, are never shown).
@@ -44,7 +44,7 @@ dumpstore does **not** export ZFS pool, dataset, or disk metrics; use [`node_exp
 
 ## OpenTelemetry
 
-Set the standard OTLP environment variables on the service and restart it. Export is enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` or one of the per-signal endpoints is set (and `OTEL_SDK_DISABLED` is not `true`); otherwise tracing and metrics are no-ops. The OTEL log SDK always runs — it is what writes the local logs — but without an endpoint it has no OTLP branch.
+Set the standard OTLP environment variables on the service and restart it. Export is enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` or one of the per-signal endpoints is set (and `OTEL_SDK_DISABLED` is not `true`); otherwise tracing is a no-op and metrics are only served on `/metrics`. The OTEL log SDK always runs — it is what writes the local logs — but without an endpoint it has no OTLP branch.
 
 ```bash
 # Linux (systemd) — the shipped unit has these lines commented out
@@ -93,7 +93,7 @@ With OTLP enabled, every log line — the same records written locally — is al
 
 ### Metrics
 
-OTLP metrics carry the Go runtime metrics and `http.server.*` request metrics. The Prometheus registry above is separate and unchanged (moving it onto the OTEL meter is [#168](https://github.com/langerma/dumpstore/issues/168)).
+Prometheus and OTLP share one meter provider, so OTLP metrics carry everything in the Prometheus table above, under the OTEL instrument names: `http_requests`, `http_request_duration` (unit `s`), `ansible_runs`, `ansible_run_duration`, `dumpstore_op_runs`, `dumpstore_op_duration`, and the `go_*` / `process_start_time_seconds` / `dumpstore_build_info` series as-is. The Prometheus exporter adds the `_total` and `_seconds` suffixes. On top of that, OTLP carries the OTEL Go runtime instrumentation (`go.memory.*`, `go.goroutine.count`, …) and otelhttp's `http.server.*` request metrics. With OTLP enabled, those also appear on `/metrics` (e.g. `go_memory_used_bytes`, `http_server_request_duration_seconds`).
 
 ---
 

@@ -71,8 +71,9 @@ func main() {
 	// Single-producer logging: slog feeds the OTEL log pipeline, whose journald
 	// exporter reproduces the classic format (syslog <N> priority prefixes under
 	// systemd, see internal/logging). When OTEL_EXPORTER_OTLP_* is set, the same
-	// records are additionally exported over OTLP, and trace/metric providers
-	// are installed (no-op otherwise). -log-stdout=false drops the local branch
+	// records are additionally exported over OTLP and the trace provider is
+	// installed (no-op otherwise). The meter provider always runs: it serves
+	// /metrics and, with OTLP configured, pushes the same instruments. -log-stdout=false drops the local branch
 	// for OTLP-only setups.
 	var logOut io.Writer = os.Stdout
 	if !*logStdout {
@@ -176,6 +177,9 @@ func main() {
 
 	apiHandler := api.NewHandler(runner, version, b, jobMgr, replRunner, autosnapRunner, cfg, store, *configPath)
 	apiHandler.SetOtelInfo(otelx.Status())
+	if otelProviders != nil {
+		apiHandler.SetMetricsHandler(otelProviders.MetricsHandler)
+	}
 
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, cfg, store, rl)

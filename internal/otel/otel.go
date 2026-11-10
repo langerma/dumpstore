@@ -3,20 +3,27 @@
 // Everything is driven by the standard OTEL environment variables
 // (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL,
 // OTEL_SERVICE_NAME, OTEL_TRACES_SAMPLER, ...) via the contrib autoexport
-// factories. When no OTLP endpoint is configured the SDK is never installed:
-// traces and metrics stay on the default no-op globals and the logging
-// pipeline carries only the journald exporter.
+// factories. The meter provider is always installed: it backs the
+// Prometheus /metrics endpoint (MetricsHandler). When no OTLP endpoint is
+// configured nothing else is: traces stay on the default no-op global and the
+// logging pipeline carries only the journald exporter.
 package otel
 
 import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/otlptranslator"
 
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -35,7 +42,8 @@ func Tracer() trace.Tracer {
 }
 
 // Enabled reports whether an OTLP endpoint is configured and the SDK is not
-// explicitly disabled. This is the single switch for all OTEL machinery.
+// explicitly disabled. This is the single switch for tracing and all OTLP
+// export; the log pipeline and the meter behind /metrics run regardless.
 func Enabled() bool {
 	if os.Getenv("OTEL_SDK_DISABLED") == "true" {
 		return false
@@ -53,12 +61,16 @@ func Enabled() bool {
 	return false
 }
 
-// Providers holds the constructed SDK providers. Logs is always non-nil (the
-// journald exporter runs through it even with OTEL disabled); the trace and
-// meter providers are only installed when Enabled().
+// Providers holds the constructed SDK providers. Logs and MetricsHandler are
+// always non-nil (journald logging and /metrics run through them even with
+// OTEL disabled); the trace provider and the OTLP branches are only installed
+// when Enabled().
 type Providers struct {
-	Logs      *sdklog.LoggerProvider
-	shutdowns []func(context.Context) error
+	Logs *sdklog.LoggerProvider
+	// MetricsHandler serves every instrument on the global meter in
+	// Prometheus exposition format (GET /metrics).
+	MetricsHandler http.Handler
+	shutdowns      []func(context.Context) error
 }
 
 // Shutdown flushes and stops all providers.
@@ -72,10 +84,11 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Init builds the logging pipeline (always) and, when Enabled(), installs the
-// trace and meter providers plus the OTLP log branch. logOut is the journald
-// destination (stdout in production, a buffer in tests); nil disables the
-// local branch entirely (-log-stdout=false, OTLP-only setups).
+// Init builds the logging pipeline and the meter provider with its Prometheus
+// reader (always) and, when Enabled(), installs the trace provider plus the
+// OTLP log and metric branches. logOut is the journald destination (stdout in
+// production, a buffer in tests); nil disables the local branch entirely
+// (-log-stdout=false, OTLP-only setups).
 func Init(ctx context.Context, version string, logOut io.Writer) (*Providers, error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -106,36 +119,55 @@ func Init(ctx context.Context, version string, logOut io.Writer) (*Providers, er
 	p.Logs = sdklog.NewLoggerProvider(logOpts...)
 	p.shutdowns = append(p.shutdowns, p.Logs.Shutdown)
 
-	if !Enabled() {
-		return p, nil
-	}
-
-	spanExp, err := autoexport.NewSpanExporter(ctx)
+	// One registry for all dumpstore metrics: the Prometheus reader serves
+	// /metrics, the OTLP reader (when enabled) pushes the same instruments.
+	// A private registry keeps client_golang's own Go/process collectors out;
+	// the translation strategy is pinned so names do not depend on
+	// prometheus/common's global validation scheme; target_info and
+	// otel_scope_* labels are dropped to keep the exposition unchanged.
+	reg := prometheus.NewRegistry()
+	promExp, err := otelprom.New(
+		otelprom.WithRegisterer(reg),
+		otelprom.WithTranslationStrategy(otlptranslator.UnderscoreEscapingWithSuffixes),
+		otelprom.WithoutTargetInfo(),
+		otelprom.WithoutScopeInfo(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(spanExp),
-	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{}, propagation.Baggage{},
-	))
-	p.shutdowns = append(p.shutdowns, tp.Shutdown)
+	p.MetricsHandler = promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	mpOpts := []sdkmetric.Option{sdkmetric.WithResource(res), sdkmetric.WithReader(promExp)}
 
-	reader, err := autoexport.NewMetricReader(ctx)
-	if err != nil {
-		return nil, err
+	if Enabled() {
+		spanExp, err := autoexport.NewSpanExporter(ctx)
+		if err != nil {
+			return nil, err
+		}
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithResource(res),
+			sdktrace.WithBatcher(spanExp),
+		)
+		otel.SetTracerProvider(tp)
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{}, propagation.Baggage{},
+		))
+		p.shutdowns = append(p.shutdowns, tp.Shutdown)
+
+		reader, err := autoexport.NewMetricReader(ctx)
+		if err != nil {
+			return nil, err
+		}
+		mpOpts = append(mpOpts, sdkmetric.WithReader(reader))
 	}
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(reader),
-	)
+
+	mp := sdkmetric.NewMeterProvider(mpOpts...)
 	otel.SetMeterProvider(mp)
 	p.shutdowns = append(p.shutdowns, mp.Shutdown)
-	if err := runtime.Start(runtime.WithMeterProvider(mp)); err != nil {
-		return nil, err
+
+	if Enabled() {
+		if err := runtime.Start(runtime.WithMeterProvider(mp)); err != nil {
+			return nil, err
+		}
 	}
 
 	return p, nil

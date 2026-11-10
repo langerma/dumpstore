@@ -5,6 +5,7 @@ package integration
 import (
 	"bufio"
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -154,6 +155,29 @@ func TestReadEndpoints(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		t.Errorf("/metrics: status %d, content-type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read /metrics: %v", err)
+	}
+	// Every family the pre-#168 emitters exposed must still be there (the
+	// unit-level golden in metrics_test.go pins types, labels and buckets).
+	// The histograms only appear once observed — this test runs after the
+	// ansible- and ops-backed writes in acl_chown_test.go and api_test.go.
+	for _, name := range []string{
+		"process_start_time_seconds", "go_goroutines",
+		"go_memstats_alloc_bytes", "go_memstats_alloc_bytes_total", "go_memstats_sys_bytes",
+		"go_memstats_heap_alloc_bytes", "go_memstats_heap_sys_bytes", "go_memstats_heap_idle_bytes",
+		"go_memstats_heap_inuse_bytes", "go_memstats_heap_released_bytes", "go_memstats_heap_objects",
+		"go_memstats_mallocs_total", "go_memstats_frees_total", "go_memstats_next_gc_bytes",
+		"go_gc_cycles_total", "go_gc_pause_ns_total", "dumpstore_build_info",
+		"http_requests_total", "http_request_duration_seconds",
+		"ansible_runs_total", "ansible_run_duration_seconds",
+		"dumpstore_op_runs_total", "dumpstore_op_duration_seconds",
+	} {
+		if !strings.Contains(string(body), "\n# TYPE "+name+" ") {
+			t.Errorf("/metrics: family %s missing", name)
+		}
 	}
 }
 

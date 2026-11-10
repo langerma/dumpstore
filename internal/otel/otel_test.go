@@ -41,8 +41,11 @@ func TestDisabledByDefault(t *testing.T) {
 	}
 	defer p.Shutdown(context.Background()) //nolint:errcheck
 
-	if got := len(p.shutdowns); got != 1 {
-		t.Errorf("want only the log provider registered, got %d shutdowns", got)
+	if got := len(p.shutdowns); got != 2 {
+		t.Errorf("want only the log and meter providers registered, got %d shutdowns", got)
+	}
+	if p.MetricsHandler == nil {
+		t.Error("MetricsHandler nil with OTEL disabled; /metrics must stay on")
 	}
 }
 
@@ -73,7 +76,7 @@ func TestNoLocalLogBranch(t *testing.T) {
 }
 
 // TestOTLPExport drives a span and a log record through Init against an
-// httptest OTLP sink and asserts both signals arrive.
+// httptest OTLP sink and asserts all three signals arrive.
 func TestOTLPExport(t *testing.T) {
 	var mu sync.Mutex
 	paths := map[string]int{}
@@ -119,6 +122,11 @@ func TestOTLPExport(t *testing.T) {
 	}
 	if paths["/v1/logs"] == 0 {
 		t.Errorf("no log export seen; got %v", paths)
+	}
+	// The OTLP reader shares the meter provider with the Prometheus reader;
+	// Shutdown flushes it.
+	if paths["/v1/metrics"] == 0 {
+		t.Errorf("no metric export seen; got %v", paths)
 	}
 	if !strings.Contains(journal.String(), "hello otlp") {
 		t.Errorf("journald branch missed the record: %q", journal.String())
