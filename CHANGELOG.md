@@ -174,6 +174,10 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Security: no-password loopback safeguard bypassed with `--tls`** (#192). Without a password dumpstore binds `127.0.0.1:8080`, but with `--tls` the HTTPS and redirect listeners bound all interfaces. They now stay on loopback too until a password is set.
+- **Security: TLS cert paths could inject command options** (#194). `cert_dir` was interpolated unquoted into the openssl/lego command strings, and the path check allowed whitespace, so a path with a space or newline split into extra options run as root (admin-only). The TLS playbooks now pass arguments as `argv`, and cert/key paths and `cert_dir` must be plain absolute paths (`A-Z a-z 0-9 . _ / -`). The other playbooks that build command strings were audited and are not affected: passwords reach `smbpasswd` via stdin, and the home-directory move only uses the allow-listed `home`.
+- **Security: `whoami` trusted `X-Remote-User` from any client** (#195). It now honours the header only from `trusted_proxies`, through the same identity helper the auth middleware uses; otherwise it reports the session user.
+
 - **The SSE stream was traced again since the `/api/v1` move.** The OTEL tracing filter still excluded the old `/api/events` path, so with OTLP enabled every open browser tab produced a server span lasting hours. The filter now excludes `/api/v1/events`, and `TestTraceRequest` checks that the excluded path is the SSE route the server actually registers. (#181 Phase 3 regression)
 
 - **`POST /api/snapshots/clone` and `POST /api/replication` answered 201 with `Content-Type: text/plain`** — the status was written before the JSON content type was set. Both now send `application/json`. (#181 Phase 2)

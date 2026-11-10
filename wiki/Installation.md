@@ -118,7 +118,7 @@ The prompt reads from `/dev/tty` so it works correctly even when stdin is piped.
 
 ### No password configured
 
-If the config file is missing or has no `password_hash`, the service starts but **binds to `127.0.0.1:8080` only** and logs a warning. Run `--set-password` and restart to enable public binding.
+If the config file is missing or has no `password_hash`, the service starts but **binds to loopback only** and logs a warning: `127.0.0.1:8080`, or with `--tls` `127.0.0.1:<tls-port>` and `127.0.0.1:<http-port>`. Run `--set-password` and restart to enable public binding.
 
 ### Config file reference
 
