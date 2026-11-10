@@ -73,11 +73,19 @@ func ServiceNames(goos string) []string {
 	return []string{"smbd", "nmbd"}
 }
 
-// IsInitialized reports whether smb.conf exists at the expected OS path.
+// confHeader starts every smb.conf rendered from smb.conf.tmpl — unchanged
+// since the template was introduced (#82) — so it marks a file dumpstore owns.
+const confHeader = "# This file is managed by dumpstore."
+
+// IsInitialized reports whether smb.conf exists and was rendered by
+// dumpstore (#193). A distro-default or hand-written smb.conf does not count:
+// POST /api/v1/smb/init must back it up to smb.conf.pre-dumpstore first.
 func IsInitialized(goos string) bool {
-	_, err := os.Stat(ConfPath(goos))
-	return err == nil
+	data, err := os.ReadFile(ConfPath(goos))
+	return err == nil && isManaged(data)
 }
+
+func isManaged(data []byte) bool { return bytes.HasPrefix(data, []byte(confHeader)) }
 
 // ParseSMBConfig reads smb.conf and returns the current configuration.
 // Returns a zero-value SMBConfig (no homes, no TM shares) if the file is

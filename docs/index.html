@@ -605,7 +605,7 @@
           <span class="pool-name">SMB sharing</span>
           <span class="health-badge badge-blue">usershares</span>
         </div>
-        <p>Samba usershares per dataset. Manage Samba users. dumpstore takes full ownership of <code>smb.conf</code> — rendered from a template on every write. All sub-features gated behind one-time initialisation; directories created automatically on apply. A dataset that a share (or an iSCSI target or replication task) still points at can't be destroyed, renamed, or re-mounted — the op-log lists the blockers; leftover shares whose path is gone are shown for cleanup.</p>
+        <p>Samba usershares per dataset. Manage Samba users. dumpstore takes full ownership of <code>smb.conf</code> — rendered from a template on every write. All sub-features gated behind one-time initialisation, which backs up an existing <code>smb.conf</code> (a distro default included) to <code>smb.conf.pre-dumpstore</code>; directories created automatically on apply. A dataset that a share (or an iSCSI target or replication task) still points at can't be destroyed, renamed, or re-mounted — the op-log lists the blockers; leftover shares whose path is gone are shown for cleanup.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
