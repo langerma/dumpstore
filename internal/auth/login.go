@@ -58,7 +58,7 @@ func RegisterRoutes(reg *apispec.Registry, cfg *Config, store *SessionStore, rl 
 	reg.Handle(apispec.Route{
 		Method: "GET", Path: "/api/v1/auth/whoami", Group: "auth", Name: "whoami",
 		Summary: "The authenticated user", Response: reflect.TypeFor[WhoamiResponse](),
-		Handler: handleWhoami(cfg, store),
+		Handler: handleWhoami(NewMiddleware(cfg, store)),
 	})
 	reg.Handle(apispec.Route{
 		Method: "GET", Path: "/api/v1/auth/config", Group: "auth", Name: "config",
@@ -136,16 +136,10 @@ func handleLogout(store *SessionStore) http.HandlerFunc {
 
 // handleWhoami returns the authenticated username (used by the frontend to
 // populate the header badge).
-func handleWhoami(cfg *Config, store *SessionStore) http.HandlerFunc {
+func handleWhoami(m *Middleware) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Determine identity: trusted proxy header or session cookie.
-		user := ""
-		if ru := r.Header.Get("X-Remote-User"); ru != "" {
-			user = ru
-		} else if c, err := r.Cookie(sessionCookieName); err == nil && store.Valid(c.Value) {
-			user = cfg.Username
-		}
-		if user == "" {
+		user, ok := m.Identity(r)
+		if !ok {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})

@@ -50,14 +50,8 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Trusted proxy delegation via X-Remote-User.
-		if user := r.Header.Get("X-Remote-User"); user != "" && m.isTrustedProxy(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// 4. Session cookie check.
-		if c, err := r.Cookie("dumpstore_session"); err == nil && m.store.Valid(c.Value) {
+		// 3./4. Trusted-proxy X-Remote-User or a valid session cookie.
+		if _, ok := m.Identity(r); ok {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -71,6 +65,21 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	})
+}
+
+// Identity returns the authenticated user of r: the X-Remote-User header
+// when the request comes from a trusted proxy CIDR, otherwise the admin user
+// for a valid session cookie. ok is false for an unauthenticated request.
+// X-Remote-User from any other address is ignored (#195) — this is the one
+// place that decides who a request is.
+func (m *Middleware) Identity(r *http.Request) (user string, ok bool) {
+	if u := r.Header.Get("X-Remote-User"); u != "" && m.isTrustedProxy(r) {
+		return u, true
+	}
+	if c, err := r.Cookie(sessionCookieName); err == nil && m.store.Valid(c.Value) {
+		return m.cfg.Username, true
+	}
+	return "", false
 }
 
 // isTrustedProxy reports whether the request's remote IP is in a configured
