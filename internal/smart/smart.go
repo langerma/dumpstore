@@ -3,10 +3,12 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // DriveInfo holds summarized S.M.A.R.T. data for one physical drive.
@@ -149,15 +151,25 @@ func queryDrive(device string) (DriveInfo, error) {
 	return info, nil
 }
 
+// cmdTimeout bounds one smartctl run, matching the ZFS reads: a drive that
+// hangs on a SMART query must not stall the handler indefinitely.
+const cmdTimeout = 30 * time.Second
+
 // runSmartctl calls smartctl with -j plus the given args.
-// Always returns stdout if any was produced (smartctl exit codes are informational bitmasks).
+// Always returns stdout if any was produced (smartctl exit codes are informational
+// bitmasks), unless the run timed out and the output may be truncated.
 func runSmartctl(args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
 	all := append([]string{"-j"}, args...)
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("smartctl", all...)
+	cmd := exec.CommandContext(ctx, "smartctl", all...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("smartctl %s: timed out after %s", strings.Join(args, " "), cmdTimeout)
+	}
 	if stdout.Len() > 0 {
 		return stdout.Bytes(), nil
 	}
