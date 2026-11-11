@@ -532,7 +532,9 @@ document.getElementById('smbHomesApplyBtn').addEventListener('click', async () =
   try {
     const result = await op.api('PUT', v1`/smb/homes`, body);
     op.done('Home shares enabled', result.tasks, null);
-    storeSet('smbHomes', result.config);
+    // The result is GET /smb/homes's shape plus `tasks` (#231).
+    const { tasks, ...homes } = result;
+    storeSet('smbHomes', homes);
   } catch (err) {
     op.done('Failed to enable home shares', err.tasks, err.message);
   }
