@@ -4,9 +4,9 @@ Thanks for your interest in contributing. dumpstore is a focused project with a 
 
 ## Philosophy
 
-- **Minimal, justified Go dependencies.** Stdlib first — a dependency needs stdlib-grade governance and a reason the stdlib can't cover. Current exceptions: `golang.org/x` (argon2id hashing, terminal prompting) and the CNCF-governed OpenTelemetry SDK (env-gated, no-op by default). If you think you need anything else, find a way without it.
+- **Minimal, justified Go dependencies.** Stdlib first — a dependency needs stdlib-grade governance and a reason the stdlib can't cover. Current exceptions: `golang.org/x` (argon2id hashing, terminal prompting), the CNCF-governed OpenTelemetry SDK, and the Prometheus client/exporter modules that serve `/metrics` (see the dependency list in [AGENTS.md](AGENTS.md)). If you think you need anything else, find a way without it.
 - **No frameworks on the frontend.** Vanilla JS, no build step, no bundler.
-- **Minimal footprint on the host.** Reads go through direct CLI calls; writes go through Ansible playbooks. Don't blur that line.
+- **Minimal footprint on the host.** Reads are direct CLI calls. Writes take one of three paths: single commands in-process (`internal/ops`), config files and OS resources via Ansible playbooks, long-running transfers via the jobs manager. Don't blur those lines (see *Read / write split* in [AGENTS.md](AGENTS.md)).
 
 ## Getting started
 
@@ -30,30 +30,13 @@ You need `ansible-playbook` in your PATH and a machine with ZFS to test write op
    - relevant page in `wiki/`
 5. Open a PR against `main` using the pull request template.
 
-## Adding a new operation
+## Conventions
 
-| Type | What to do |
-|------|-----------|
-| Read | Add a function to `internal/zfs/zfs.go` + handler in `internal/api/handlers.go` |
-| Write | Add a playbook in `playbooks/` + handler wired via `h.runner.Run(...)` |
-| Both | Register the route in `handlers.go:RegisterRoutes` |
-| UI | Render function in `static/app.js`, markup in `static/index.html` |
+[AGENTS.md](AGENTS.md) is the single reference for how the code is organised and how changes are made — for human contributors as much as for coding agents. Read at least these sections before your first PR:
 
-See [CLAUDE.md](CLAUDE.md) for detailed conventions on playbooks and the frontend.
-
-## Playbook conventions
-
-- Target `localhost`, `gather_facts: false`.
-- Always include an `assert` task before any mutating command.
-- Task names must be stable — the Go runner looks them up by name.
-- Required extra vars must be documented in a header comment.
-
-## Frontend conventions
-
-- All data lives in the `state` object.
-- Render functions are pure: read `state`, write `innerHTML`.
-- Always escape user-controlled strings via `esc()` before inserting into HTML.
-- Always show the Ansible op-log dialog (`showOpLog`) after every write operation — never `toast()` alone.
+- **Adding a new operation**: typed handlers, route registration with OpenAPI metadata, `make openapi`
+- **Read / write split** and **Service ownership principle**
+- **Conventions → Playbooks / Frontend / UI consistency / Security**: including `startOp` for every write and the `v1` path template
 
 ## Code review bar
 

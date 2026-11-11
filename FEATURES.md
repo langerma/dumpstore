@@ -90,7 +90,7 @@
 
 ## Planned
 
-Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CLAUDE.md#scope-boundary--manage-vs-integrate) (#121): *manage* = full config + lifecycle ownership, *integrate* = read/display/link out with minimal in-tree surface, *internal* = infrastructure/refactoring with no external domain.
+Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](AGENTS.md#scope-boundary--manage-vs-integrate) (#121): *manage* = full config + lifecycle ownership, *integrate* = read/display/link out with minimal in-tree surface, *internal* = infrastructure/refactoring with no external domain.
 
 | Feature                            | Priority | Scope | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|-------|--------------------------------------------------------------------------------------------------------------------------|
