@@ -87,4 +87,7 @@ provision:
         echo "WARN: /dev/vtbd1 not found — extra pool not created. zroot is still available."
       fi
 
+      # Checked by `make vm-freebsd-verify`: Lima reports READY even when
+      # provisioning aborted half-way, and FreeBSD keeps no in-VM log of it.
+      touch /var/db/dumpstore-provisioned
       echo "==> Provisioning complete."

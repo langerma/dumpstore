@@ -130,7 +130,7 @@ make test-integration    # end-to-end suite against the deployed VM
 make screenshots         # regenerate screenshots/ from the VM with demo data (needs Chrome + Node)
 
 make ci                  # every PR check from CI, locally and in parallel, with a pass/fail table
-make ci-full             # … plus the Linux VM integration suite (what the run-integration label adds)
+make ci-full             # … plus the Linux and FreeBSD VM integration suites, in parallel
 ```
 
 The VMs need [Lima](https://github.com/lima-vm/lima). See [tests/integration/README.md](tests/integration/README.md) for the integration suite.

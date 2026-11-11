@@ -90,3 +90,14 @@ A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/a
 2. Run `make ci` before committing and again before pushing; `ci-docs` is CI's docs check, run against the working tree. Don't push until every row says `pass`.
 3. Never add `skip-docs-check` yourself. If a change truly has nothing for README/docs, ask the user.
 4. A plan's "Docs" section is a minimum. It never replaces this list.
+
+## 9. "Passes on rerun" is not "flaky": check what the first run had that the rerun didn't
+
+**Mistake:** In #214 the FreeBSD suite failed `TestDatasetRefGuard` ("Create usershare") on its first full run against a new VM. It passed alone and in a second full run, and I reported it as flaky. It failed again on the next new VM. The real bug: `net usershare add … everyone:F` needs a running `smbd` to resolve "everyone". A new FreeBSD VM never starts Samba, and a later test (`TestServices`) does, so every rerun passed. Every SMB share write on a host with Samba stopped had been failing, on Linux too.
+
+**Rule:** A test that fails on a fresh VM and passes on a rerun is telling you about state. Before calling anything flaky:
+
+1. Note what earlier runs or earlier tests changed: services started, directories or files created, config initialised. Test order matters: `go test -list '.*'` shows it.
+2. Get the failing command's real stderr, from the server log or by running the command on the VM. The op-log's "non-zero return code" is not a diagnosis.
+3. Reproduce the fresh state on purpose (stop the service, remove the file) and confirm the failure comes back.
+4. Only call a failure flaky after it fails and passes under the same state, and say so with the evidence.
