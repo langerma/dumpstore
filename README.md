@@ -9,6 +9,8 @@
 
 > **Pre-1.0 notice:** dumpstore is under active development. Until v1.0, any release may introduce breaking changes to the API, config format, or behaviour. Use in production at your own risk.
 
+> **AI disclosure:** dumpstore is developed with heavy use of AI coding assistants, mainly [Claude Code](https://claude.com/claude-code). Most commits are AI-assisted — they carry a `Co-Authored-By: Claude` trailer. Every change is merged by the maintainer and has to pass CI (build, unit tests, CodeQL, OpenAPI lint); the VM integration suite runs nightly and on labelled PRs. AI-written code can still contain subtle mistakes, and dumpstore runs as root and rewrites system configuration: read the code, try it on a non-critical machine first, and report problems through the issue tracker or [SECURITY.md](SECURITY.md). Provided as is — see [LICENSE](LICENSE).
+
 ## Why this exists
 
 I run a [Kobol Helios64](https://wiki.kobol.io/helios64/intro/) as my home NAS — a five-bay ARM board that deserves better than the software ecosystem currently offers it. The storage UIs I tried were too heavy, too opinionated about the underlying distribution, or unmaintained. I wanted to manage my ZFS pools from a browser on a machine that stays as close to a vanilla Linux or FreeBSD install as possible: no container runtime, no database, no Node.js — a single compiled binary, some Ansible playbooks, and a handful of static files.

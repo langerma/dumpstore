@@ -144,6 +144,16 @@
       line-height: 1.65;
     }
     .hero-tagline strong { color: var(--text); font-weight: 600; }
+    .hero-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      max-width: 560px;
+      line-height: 1.6;
+      border-left: 2px solid var(--border);
+      padding-left: 10px;
+    }
+    .hero-note strong { color: var(--text); font-weight: 600; }
+    .hero-note a { color: inherit; }
     .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .btn-primary {
@@ -433,6 +443,15 @@
       No container runtime. No database. No Node.js. Just a
       <strong>single compiled binary</strong>, some Ansible playbooks, and a handful of static files.
       Where dumpstore manages a service, it owns the config completely — rendered from a template, never patched.
+    </p>
+    <p class="hero-note">
+      <strong>AI disclosure:</strong> developed with heavy use of AI coding assistants, mainly
+      <a href="https://claude.com/claude-code">Claude Code</a>; most commits carry a <code>Co-Authored-By: Claude</code> trailer.
+      Every change is merged by the maintainer and has to pass CI; the VM integration suite runs nightly.
+      AI-written code can still contain subtle mistakes, and dumpstore runs as root — read the code, try it on a
+      non-critical machine first, and report problems via the
+      <a href="https://github.com/langerma/dumpstore/issues">issue tracker</a> or
+      <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md">SECURITY.md</a>. Provided as is.
     </p>
     <div class="hero-actions">
       <a class="btn-primary" href="#install">install</a>
