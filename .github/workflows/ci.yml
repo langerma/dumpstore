@@ -17,53 +17,38 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - run: npx --yes @redocly/cli@2.77.0 lint api/openapi.json
+          node-version-file: .node-version
+      - run: make ci-openapi-lint
 
+  # Every job below runs one Makefile target; `make ci` runs the same targets
+  # locally, so the two cannot drift. Tool versions are pinned in the Makefile.
+  #
   # Generates a TypeScript SDK from the committed spec with Forge
   # (cloudflare/forge) and type-checks it (#181 Phase 4). Forge is not on npm
-  # yet, so it is built from a pinned commit; bump FORGE_REV deliberately and
-  # re-check the output. Fails on a Forge error, a client without the API's
-  # groups, or a type error in the generated code. Forge's code runs only
-  # here, from that pinned commit, with no repository credentials.
+  # yet, so it is built from the commit pinned in the Makefile (FORGE_REV);
+  # bump it deliberately and re-check the output. Fails on a Forge error, a
+  # client without the API's groups, or a type error in the generated code.
+  # Forge's code runs only from that pinned commit, fetched anonymously (no
+  # repository credentials).
   forge-sdk:
     runs-on: ubuntu-latest
-    env:
-      FORGE_REV: 0d1877431691b07cbe3b042a4b64cb0bd8e81c03
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
-        with:
-          repository: cloudflare/forge
-          ref: ${{ env.FORGE_REV }}
-          path: forge-src
-          persist-credentials: false
+      - name: Forge revision (pinned in the Makefile)
+        run: echo "FORGE_REV=$(make -s forge-rev)" >> "$GITHUB_ENV"
       - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.rustup/toolchains
-            forge-src/target
+            .cache/forge/target
           key: forge-${{ runner.os }}-${{ env.FORGE_REV }}
-      # rustup installs the toolchain pinned in Forge's rust-toolchain.toml.
-      - run: cargo build --release --locked --bin forge
-        working-directory: forge-src
-      - run: forge-src/target/release/forge api/openapi.json --target ts --out sdk
-      - name: Client covers the API's groups
-        run: |
-          groups=$(find sdk -mindepth 1 -maxdepth 1 -type d ! -name _ | wc -l)
-          echo "generated groups: $groups"
-          test "$groups" -ge 15
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      # Forge types date-time fields as Temporal.Instant, which TypeScript's
-      # esnext lib declares from 7.0.
-      - run: >-
-          npx --yes -p typescript@7.0.2 tsc --noEmit --strict --skipLibCheck
-          --target esnext --module nodenext --moduleResolution nodenext --lib esnext,dom
-          sdk/index.ts
+          node-version-file: .node-version
+      # rustup installs the toolchain pinned in Forge's rust-toolchain.toml.
+      - run: make ci-forge
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -73,15 +58,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - run: go build ./...
-      - run: go vet ./...
-      # The integration suite (build tag `integration`) only runs against a VM,
-      # but its code must compile on every PR (#234).
-      - run: go vet -tags integration ./tests/integration/
-      # FreeBSD is a first-class target with no CI VM yet: at least catch
-      # code that doesn't build or vet there.
-      - run: GOOS=freebsd go vet ./...
-      - run: go test -race ./...
+      # build, vet (also with the integration tag and for FreeBSD), race tests
+      - run: make ci-go
 
   # Syntax-checks every frontend ES module. A syntax error at module top level
   # stops the whole UI from loading (lessons.md #3), and `node --check` on a
@@ -93,16 +71,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - name: node --check every module
-        run: |
-          dir=$(mktemp -d)
-          for f in static/app.js static/js/*.js; do
-            out="$dir/$(echo "$f" | tr / _).mjs"
-            cp "$f" "$out"
-            node --check "$out" || { echo "syntax error in $f"; exit 1; }
-          done
-          echo "checked $(ls "$dir" | wc -l) modules"
+          node-version-file: .node-version
+      - run: make ci-frontend
 
   # Exercises the exact release recipe (make release, all four GOOS/GOARCH
   # targets) so a broken release pipeline is caught on the PR, not at tag
@@ -115,11 +85,4 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Build the full release matrix
-        run: make release VERSION=v0.0.0-smoke
-      - name: Verify the version ldflag in the native binary
-        run: |
-          tar -xzf dist/dumpstore-v0.0.0-smoke-linux-amd64.tar.gz
-          OUT=$(./dumpstore-v0.0.0-smoke-linux-amd64/dumpstore --version)
-          echo "version reported: $OUT"
-          test "$OUT" = "v0.0.0-smoke"
+      - run: make ci-release

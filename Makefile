@@ -2,6 +2,8 @@ BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
         test-integration screenshots release openapi \
+        ci ci-full ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs \
+        ci-integration ci-freebsd vm-linux-verify forge-rev \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -43,6 +45,105 @@ release:
 	  rm -rf dist/$$NAME $(BINARY); \
 	done
 	@ls -l dist/
+
+# ---------------------------------------------------------------------------
+# CI — every job in .github/workflows/ci.yml and check-docs.yml is one target
+# here; the workflows only set up toolchains and call these, so a local run
+# and CI cannot drift (same pattern as `release`).
+#
+#   make ci          all PR checks, in parallel, with a pass/fail table
+#   make ci-full     + the Linux VM integration suite (the run-integration label)
+#   make ci-freebsd  the FreeBSD VM suite (local only; CI has no FreeBSD VM)
+#
+# Pinned tool versions live here, not in the workflows.
+# ---------------------------------------------------------------------------
+
+REDOCLY_VERSION := 2.77.0
+TSC_VERSION     := 7.0.2
+# cloudflare/forge commit; bump deliberately and review the generated SDK (#181).
+FORGE_REV       := 0d1877431691b07cbe3b042a4b64cb0bd8e81c03
+FORGE_DIR       ?= .cache/forge
+SDK_DIR         := .cache/forge-sdk
+CI_JOBS         := ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs
+
+ci:
+	@MAKE="$(MAKE)" dev/ci/run.sh $(CI_JOBS)
+
+ci-full: ci ci-integration
+
+ci-go:
+	go build ./...
+	go vet ./...
+	go vet -tags integration ./tests/integration/
+	GOOS=freebsd go vet ./...
+	go test -race ./...
+
+# node --check on a .js file misses ESM errors, so each module is checked as
+# an .mjs copy (#234).
+ci-frontend:
+	@set -e; dir=$$(mktemp -d); \
+	for f in static/app.js static/js/*.js; do \
+	  out="$$dir/$$(echo "$$f" | tr / _).mjs"; \
+	  cp "$$f" "$$out"; \
+	  node --check "$$out" || { echo "syntax error in $$f"; exit 1; }; \
+	done; \
+	echo "checked $$(ls "$$dir" | wc -l | tr -d ' ') modules"; rm -r "$$dir"
+
+ci-openapi-lint:
+	npx --yes @redocly/cli@$(REDOCLY_VERSION) lint api/openapi.json
+
+# Builds Forge from FORGE_REV (not on npm yet), generates the TypeScript SDK
+# from api/openapi.json and type-checks it. Forge's code runs only from that
+# pinned commit. TypeScript 7's esnext lib declares Temporal.Instant, which
+# Forge uses for date-time fields.
+ci-forge:
+	@if [ "$$(git -C $(FORGE_DIR) rev-parse HEAD 2>/dev/null)" != "$(FORGE_REV)" ]; then \
+	  echo "==> Fetching forge $(FORGE_REV)"; \
+	  mkdir -p $(FORGE_DIR) && git -C $(FORGE_DIR) init -q && \
+	  git -C $(FORGE_DIR) fetch -q --depth 1 https://github.com/cloudflare/forge $(FORGE_REV) && \
+	  git -C $(FORGE_DIR) checkout -q -f FETCH_HEAD; \
+	fi
+	cd $(FORGE_DIR) && cargo build --release --locked --bin forge
+	rm -rf $(SDK_DIR)
+	$(FORGE_DIR)/target/release/forge api/openapi.json --target ts --out $(SDK_DIR)
+	@groups=$$(find $(SDK_DIR) -mindepth 1 -maxdepth 1 -type d ! -name _ | wc -l | tr -d ' '); \
+	echo "generated groups: $$groups"; test "$$groups" -ge 15
+	npx --yes -p typescript@$(TSC_VERSION) tsc --noEmit --strict --skipLibCheck \
+	  --target esnext --module nodenext --moduleResolution nodenext --lib esnext,dom \
+	  $(SDK_DIR)/index.ts
+
+forge-rev:
+	@echo $(FORGE_REV)
+
+# The exact release recipe for all targets (#118). The version ldflag is
+# checked by running the archive for this host when there is one (CI:
+# linux/amd64); elsewhere (macOS) by finding the string in a linux binary.
+ci-release:
+	$(MAKE) --no-print-directory release VERSION=v0.0.0-smoke
+	@set -e; n=dumpstore-v0.0.0-smoke-$$(go env GOOS)-$$(go env GOARCH); \
+	if [ -f dist/$$n.tar.gz ]; then \
+	  tar -xzf dist/$$n.tar.gz -C dist; out=$$(dist/$$n/dumpstore --version); \
+	  echo "version reported: $$out"; test "$$out" = v0.0.0-smoke; \
+	else \
+	  n=dumpstore-v0.0.0-smoke-linux-amd64; tar -xzf dist/$$n.tar.gz -C dist; \
+	  grep -aq v0.0.0-smoke dist/$$n/dumpstore; \
+	  echo "no archive for this host: found v0.0.0-smoke in $$n"; \
+	fi
+
+# README.md and docs/index.html must change with code (check-docs.yml).
+# Locally this compares the merge base with origin/main to the working tree.
+ci-docs:
+	@dev/ci/check-docs.sh
+
+# Linux VM suite as in integration-tests.yml: provisioning verified, every
+# tool required (DUMPSTORE_REQUIRE_TOOLS=1).
+ci-integration: vm-linux-start vm-linux-verify vm-linux-deploy
+	DUMPSTORE_REQUIRE_TOOLS=1 $(MAKE) --no-print-directory test-integration
+
+ci-freebsd: vm-freebsd-start vm-freebsd-deploy
+	DUMPSTORE_URL=http://localhost:8081 DUMPSTORE_VM=$(VM_FREEBSD) \
+	DUMPSTORE_TEST_DISKS=/dev/vtbd2,/dev/vtbd3,/dev/vtbd4 \
+	$(MAKE) --no-print-directory test-integration
 
 # Run locally on macOS (or any machine without ZFS/Ansible).
 # Fake CLI stubs in dev/bin/ intercept zfs, zpool, and ansible-playbook.
@@ -175,14 +276,26 @@ vm-linux-stop:
 vm-linux-ssh:
 	limactl shell $(VM_LINUX)
 
+# Lima reports READY even when provisioning aborted half-way; tests whose tool
+# is missing would then skip. Fail here instead, with the reason (#234).
+VM_REQUIRED_TOOLS := zfs zpool ansible-playbook make smbd net setfacl targetcli zfs-auto-snapshot
+
+vm-linux-verify:
+	@limactl shell --tty=false $(VM_LINUX) -- sudo grep -q '==> Provisioning complete.' /var/log/cloud-init-output.log \
+	  || { echo "provision script did not complete:"; limactl shell --tty=false $(VM_LINUX) -- sudo tail -n 40 /var/log/cloud-init-output.log; exit 1; }
+	@missing=""; for tool in $(VM_REQUIRED_TOOLS); do \
+	  limactl shell --tty=false $(VM_LINUX) -- sh -c "command -v $$tool" >/dev/null || missing="$$missing $$tool"; \
+	done; [ -z "$$missing" ] || { echo "missing in VM:$$missing"; exit 1; }
+	limactl shell --tty=false $(VM_LINUX) -- sudo zpool list -H -o name tank
+
 vm-linux-deploy:
 	@echo "==> Packing source..."
-	COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/dumpstore-src.tar.gz \
-	  --exclude='.git' --exclude='dumpstore' --exclude='*.tar.gz' \
+	COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/$(VM_LINUX)-src.tar.gz \
+	  --exclude='.git' --exclude='dumpstore' --exclude='*.tar.gz' --exclude='.cache' --exclude='dist' \
 	  -C $(CURDIR) .
 	@echo "==> Copying source to $(VM_LINUX)..."
-	limactl copy /tmp/dumpstore-src.tar.gz $(VM_LINUX):/tmp/dumpstore-src.tar.gz
-	@rm -f /tmp/dumpstore-src.tar.gz
+	limactl copy /tmp/$(VM_LINUX)-src.tar.gz $(VM_LINUX):/tmp/dumpstore-src.tar.gz
+	@rm -f /tmp/$(VM_LINUX)-src.tar.gz
 	@echo "==> Running make install in VM..."
 	limactl shell --tty=false $(VM_LINUX) -- sudo sh -c \
 	  'rm -rf /tmp/dumpstore-src && mkdir /tmp/dumpstore-src && \
@@ -251,18 +364,20 @@ vm-freebsd-ssh:
 
 vm-freebsd-deploy:
 	@echo "==> Packing source..."
-	COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/dumpstore-src.tar.gz \
-	  --exclude='.git' --exclude='dumpstore' --exclude='*.tar.gz' \
+	COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/$(VM_FREEBSD)-src.tar.gz \
+	  --exclude='.git' --exclude='dumpstore' --exclude='*.tar.gz' --exclude='.cache' --exclude='dist' \
 	  -C $(CURDIR) .
 	@echo "==> Copying source to $(VM_FREEBSD)..."
-	limactl copy /tmp/dumpstore-src.tar.gz $(VM_FREEBSD):/tmp/dumpstore-src.tar.gz
-	@rm -f /tmp/dumpstore-src.tar.gz
+	limactl copy /tmp/$(VM_FREEBSD)-src.tar.gz $(VM_FREEBSD):/tmp/dumpstore-src.tar.gz
+	@rm -f /tmp/$(VM_FREEBSD)-src.tar.gz
 	@echo "==> Running make install in VM..."
 	limactl shell --tty=false $(VM_FREEBSD) -- sudo sh -c \
 	  'rm -rf /tmp/dumpstore-src && mkdir /tmp/dumpstore-src && \
 	   tar --no-xattrs -xzf /tmp/dumpstore-src.tar.gz -C /tmp/dumpstore-src && \
 	   cd /tmp/dumpstore-src && \
-	   PATH=/usr/local/go/bin:/usr/local/bin:$$PATH make install'
+	   PATH=/usr/local/go/bin:/usr/local/bin:$$PATH make install \
+	     >/tmp/dumpstore-install.log 2>&1 </dev/null; \
+	   rc=$$?; cat /tmp/dumpstore-install.log; exit $$rc'
 	@echo "==> Deployed. Open http://localhost:8081  (admin / admin)"
 
 vm-freebsd-destroy:

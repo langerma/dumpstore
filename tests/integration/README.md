@@ -15,6 +15,11 @@ make vm-linux-deploy    # build + install dumpstore inside the VM
 make test-integration   # run the suite from the host against http://localhost:8080
 ```
 
+`make ci-full` runs exactly what CI does: the PR checks (`make ci`), then
+start, `make vm-linux-verify`, deploy and the suite with
+`DUMPSTORE_REQUIRE_TOOLS=1`. `make ci-freebsd` starts, deploys and runs the
+suite against the FreeBSD VM.
+
 The suite logs in as `admin` / `admin` (the dev VM default) and uses
 `limactl shell` for fixtures the API can't provide (writing files into
 datasets, pre-cleaning stale state) and to verify results on the host
@@ -107,7 +112,7 @@ make test-integration
 on manual dispatch, and on PRs labeled `run-integration`. FreeBSD stays a
 local target — GitHub's macOS arm64 runners lack nested virtualization.
 
-Before the suite runs, a *Verify VM provisioning* step fails the job if the
+Before the suite runs, a *Verify VM provisioning* step (`make vm-linux-verify`) fails the job if the
 provision script did not reach `==> Provisioning complete.`, if any tool the
 suite uses is missing, or if `tank` doesn't exist. Lima reports READY even
 when provisioning aborted half-way. The suite then runs with

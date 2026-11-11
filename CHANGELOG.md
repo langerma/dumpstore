@@ -227,6 +227,12 @@ All notable changes to this project will be documented here.
 
 ### Changed
 
+- **The whole CI pipeline runs locally with `make ci`.** Before, CI's checks lived as inline shell in three workflows, and running them locally meant copying commands by hand. The copies drifted, and problems first showed up after a push.
+  - **One source:** every job is a Makefile target: `ci-go`, `ci-frontend`, `ci-openapi-lint`, `ci-forge`, `ci-release` and `ci-docs` (the docs check, now `dev/ci/check-docs.sh`). The integration workflow's provisioning check is `vm-linux-verify`. The workflows only set up toolchains and call these targets. The Redocly, TypeScript and Forge versions moved into the Makefile, and the Node version into `.node-version`, which the workflows read.
+  - **`make ci`** runs all PR checks in parallel and prints a pass/fail table, with logs in `.cache/ci/`. It warns when the local Node major differs from CI's. `make ci-full` adds the Linux VM integration suite with `DUMPSTORE_REQUIRE_TOOLS=1`, as the `run-integration` label does. `make ci-freebsd` runs the suite on the FreeBSD VM.
+  - **`ci-docs`** compares the merge base with `origin/main` to the working tree, untracked files included, so a missing README or docs-site update shows up before the commit.
+  - **Release smoke test:** on a host without a matching release archive (macOS), the version check looks for the version string in the linux/amd64 binary instead of running it.
+  - **Fixed:** `make vm-freebsd-deploy` no longer hangs after a successful install. The restarted daemon inherited the SSH session's stdout and held it open. The install output now goes to a log in the VM, which is printed afterwards. Both deploy targets also leave `.cache/` and `dist/` out of the source tarball and use one tarball per VM, so the Linux and FreeBSD deploys can run at the same time.
 - **CI checks that were missing** (part of #234):
   - Every PR now compiles the integration suite (`go vet -tags integration ./tests/integration/`) and vets the code for FreeBSD (`GOOS=freebsd go vet ./...`).
   - A new `frontend-check` job syntax-checks every frontend ES module as an `.mjs` copy, since `node --check` on a `.js` file misses ESM errors.

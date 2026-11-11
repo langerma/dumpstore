@@ -75,7 +75,12 @@ The test: *does the feature make dumpstore better at running ZFS + shares, or do
 
 ## Build & Check
 
+**Run `make ci` before every commit and push** — it runs every PR check from `.github/workflows/` (the workflows call the same Makefile targets, so the two cannot drift) and prints a pass/fail table; logs in `.cache/ci/`. Backend changes also need `make ci-full` (Linux VM suite) and, for OS-layer code, `make ci-freebsd`. Don't push to find out whether CI passes.
+
 ```bash
+make ci                    # all PR checks in parallel: ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs
+make ci-full               # + Linux VM integration suite with DUMPSTORE_REQUIRE_TOOLS=1
+make ci-freebsd            # FreeBSD VM suite (local only)
 go build ./...             # must always pass before committing
 go vet ./...               # must always pass
 go test ./...              # unit tests (no external dependencies)
@@ -87,8 +92,8 @@ External Go dependencies:
 - `golang.org/x/crypto/argon2` — password hashing for authentication (argon2id, PHC string format); official golang.org/x package
 - `golang.org/x/term` — echo-disabled password prompting in `--set-password`; official golang.org/x package
 - `go.opentelemetry.io/otel` + SDK/contrib modules — traces, metrics, and the log pipeline (#49); CNCF-governed. All OTLP exporters are env-gated (`OTEL_EXPORTER_OTLP_*`) and no-op by default. The log SDK always runs: `internal/logging.JournalExporter` is the single producer for journald output, and the OTLP log branch attaches to the same provider when enabled — never tee logs at the slog level. The meter provider always runs too (#168): record every metric once on `otel.Meter("dumpstore")`; never write Prometheus text by hand.
-- No Go dependency for OpenAPI (#181): `internal/apispec` is stdlib reflection. The spec linter (`@redocly/cli`, pinned in `ci.yml`, config `redocly.yaml` + `.redocly.lint-ignore.yaml`) is CI-only Node tooling, never a runtime dependency.
-- Forge (cloudflare/forge) is CI-only too: the `forge-sdk` job builds it from the commit pinned in `FORGE_REV` and type-checks the generated TypeScript SDK (#181). Routes with `Internal: true` are emitted with `x-forge-skip`/`x-fern-ignore` and get no SDK method. If you bump `FORGE_REV`, regenerate the SDK locally and review the output first.
+- No Go dependency for OpenAPI (#181): `internal/apispec` is stdlib reflection. The spec linter (`@redocly/cli`, pinned in the Makefile as `REDOCLY_VERSION`, config `redocly.yaml` + `.redocly.lint-ignore.yaml`) is CI-only Node tooling, never a runtime dependency.
+- Forge (cloudflare/forge) is CI-only too: the `forge-sdk` job (`make ci-forge`) builds it from the commit pinned in `FORGE_REV` in the Makefile and type-checks the generated TypeScript SDK (#181). Routes with `Internal: true` are emitted with `x-forge-skip`/`x-fern-ignore` and get no SDK method. If you bump `FORGE_REV`, regenerate the SDK locally and review the output first.
 - `go.opentelemetry.io/otel/exporters/prometheus` + `github.com/prometheus/client_golang` (`prometheus`, `promhttp`) + `github.com/prometheus/otlptranslator` — the meter's Prometheus reader that serves `/metrics` from a private registry (#168); CNCF projects. New metrics keep Prometheus-compatible names: counters without `_total` (the exporter adds it), durations as unit `s` (the exporter adds `_seconds`).
 
 ---
@@ -102,6 +107,7 @@ make vm-linux-deploy      # pack the tree, copy it in, `make install` inside the
 make vm-linux-ssh         # shell in the VM
 make test-integration     # drive the deployed instance over HTTP (see tests/integration/README.md)
 make vm-freebsd-start     # FreeBSD 15 VM (UI on :8081); then make vm-freebsd-deploy
+make vm-linux-verify      # fail if VM provisioning is incomplete (tools, tank pool)
 make openapi              # regenerate api/openapi.json after route/type changes
 make screenshots          # regenerate screenshots/ against the Linux VM
 sudo make install         # build + install binary, playbooks, static/ and the service (systemd or rc.d)

@@ -67,15 +67,7 @@ jobs:
       # (set -e on a failed apt step), and tests whose tool is missing would
       # then skip. Fail here instead, with the reason (#234).
       - name: Verify VM provisioning
-        run: |
-          limactl shell --tty=false dumpstore-linux -- sudo grep -q '==> Provisioning complete.' /var/log/cloud-init-output.log \
-            || { echo "provision script did not complete:"; limactl shell --tty=false dumpstore-linux -- sudo tail -n 40 /var/log/cloud-init-output.log; exit 1; }
-          missing=""
-          for tool in zfs zpool ansible-playbook make smbd net setfacl targetcli zfs-auto-snapshot; do
-            limactl shell --tty=false dumpstore-linux -- sh -c "command -v $tool" >/dev/null || missing="$missing $tool"
-          done
-          [ -z "$missing" ] || { echo "missing in VM:$missing"; exit 1; }
-          limactl shell --tty=false dumpstore-linux -- sudo zpool list -H -o name tank
+        run: make vm-linux-verify
 
       - name: Deploy dumpstore into VM
         run: make vm-linux-deploy
