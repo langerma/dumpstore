@@ -16,7 +16,7 @@ cd dumpstore
 make ci          # every PR check from CI, run locally — must pass before you push
 ```
 
-`make ci` needs Go, Node (version in `.node-version`) and, for the Forge SDK check, Rust (`cargo`). `make ci-full` adds the Linux and FreeBSD VM integration suites (needs [Lima](https://github.com/lima-vm/lima)); CI only runs the Linux one, so FreeBSD is covered by this local run alone.
+`make ci` needs Go, Node (version in `.node-version`) and, for the Forge SDK check, Rust (`cargo`). `make ci-full` adds the Linux and FreeBSD VM integration suites (needs [Lima](https://github.com/lima-vm/lima)). CI runs both nightly and on PRs labeled `run-integration`.
 
 You need `ansible-playbook` in your PATH and a machine with ZFS to test write operations end-to-end. Read-only development can be done on any Linux box.
 

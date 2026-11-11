@@ -53,8 +53,8 @@ release:
 #
 #   make ci          all PR checks, in parallel, with a pass/fail table
 #   make ci-full     + the Linux and FreeBSD VM suites, in parallel
-#   make ci-integration / ci-freebsd   one VM suite (CI's run-integration label
-#                    runs the Linux one; CI has no FreeBSD VM)
+#   make ci-integration / ci-freebsd   one VM suite (the linux-vm / freebsd-vm
+#                    jobs of integration-tests.yml)
 #
 # Pinned tool versions live here, not in the workflows.
 # ---------------------------------------------------------------------------
