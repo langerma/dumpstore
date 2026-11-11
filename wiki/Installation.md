@@ -153,6 +153,8 @@ For setups behind nginx, Caddy, Traefik, or Authelia:
 2. Configure your proxy to set `X-Remote-User: <username>` after SSO authentication
 3. dumpstore will accept that header as the authenticated identity — no password login required from those IPs
 
+> **Same-host proxy caveat.** With the proxy on the dumpstore host, `trusted_proxies` has to contain `127.0.0.1/32` — and then **every local user or process** that can reach `127.0.0.1:8080` can send `X-Remote-User` and use the full API (dumpstore runs as root). Only use this on hosts without untrusted local users, or run the proxy on another host. Trust scoped to a permission-restricted unix socket is planned in [#212](https://github.com/langerma/dumpstore/issues/212).
+
 ### Reverse proxy: keep `%2F` encoded
 
 API paths carry dataset, snapshot and device names as **one percent-encoded path segment**: `tank/data` travels as `tank%2Fdata`, as in `GET /api/v1/datasets/tank%2Fdata/acl`. The proxy must forward the path **without decoding `%2F`**. If it decodes it, those requests reach dumpstore as `/datasets/tank/data/acl` and return `404`.

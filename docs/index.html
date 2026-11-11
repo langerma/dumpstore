@@ -756,10 +756,10 @@ sysrc dumpstore_env="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318"</pre>
     <div class="card-grid">
       <div class="pool-card">
         <div class="pool-card-header">
-          <span class="pool-name">privilege separation</span>
-          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/116" style="color:inherit">#116</a></span>
+          <span class="pool-name">proxy-fronted mode</span>
+          <span class="health-badge badge-blue"><a href="https://github.com/langerma/dumpstore/issues/212" style="color:inherit">#212</a></span>
         </div>
-        <p>Non-root web frontend with a narrow root helper over a unix socket.</p>
+        <p>Unix-socket listener with identity trusted only over the socket, plus tested reverse proxy + SSO setups (Caddy/Authelia, Traefik, nginx/oauth2-proxy).</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

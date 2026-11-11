@@ -83,14 +83,8 @@
 
 | Bug                                                                                         | Priority | Issue                                                   | Notes                                                                                                   |
 |---------------------------------------------------------------------------------------------|----------|---------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
-| No-password loopback safeguard bypassed with `--tls` | High | [#192](https://github.com/langerma/dumpstore/issues/192) | TLS listeners bind all interfaces even without a password |
 | Let's Encrypt certificates cannot be renewed from dumpstore | Medium | [#190](https://github.com/langerma/dumpstore/issues/190) | ACME settings not persisted; TLS-ALPN-01 needs port 443; no timer; cert loaded once |
-| FreeBSD rc.d script cannot pass `--tls` | Medium | [#191](https://github.com/langerma/dumpstore/issues/191) | No variable for extra dumpstore flags |
-| SMB init gate only checks that `smb.conf` exists | Medium | [#193](https://github.com/langerma/dumpstore/issues/193) | Distro-default smb.conf counts as initialised |
-| TLS cert paths may contain whitespace | Medium | [#194](https://github.com/langerma/dumpstore/issues/194) | Split into extra openssl/lego arguments |
-| FreeBSD: SMB writes fail while Samba is stopped | Medium | [#196](https://github.com/langerma/dumpstore/issues/196) | `reload` does not start the service |
-| `/api/v1/auth/whoami` trusts `X-Remote-User` without CIDR check | Low | [#195](https://github.com/langerma/dumpstore/issues/195) | Display-only today |
-| Smaller defects from the docs audit | Low | [#197](https://github.com/langerma/dumpstore/issues/197) | SSH key group, chown on `legacy`, snapshot holds, periodic.conf patching, … |
+| Same-host proxy: `trusted_proxies: ["127.0.0.1/32"]` trusts every local user's `X-Remote-User` | Medium | [#212](https://github.com/langerma/dumpstore/issues/212) | Any local process can impersonate the admin; fixed by socket-scoped trust in #212. Until then: proxy on another host, or no shared shell access |
 
 ---
 
@@ -100,7 +94,7 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 
 | Feature                            | Priority | Scope | Issue | Notes                                                                                                                    |
 |------------------------------------|----------|-------|-------|--------------------------------------------------------------------------------------------------------------------------|
-| Privilege separation               | Medium   | internal | [#116](https://github.com/langerma/dumpstore/issues/116) | Non-root web frontend + narrow root helper over a unix socket |
+| Proxy-fronted mode                 | Medium   | integrate | [#212](https://github.com/langerma/dumpstore/issues/212) | Unix-socket listener, `X-Remote-User` trusted only over that socket, tested proxy + SSO reference setups (Caddy/Authelia, Traefik, nginx/oauth2-proxy); replaces #116 |
 | FreeBSD port (sysutils/dumpstore)  | Medium   | internal | [#89](https://github.com/langerma/dumpstore/issues/89) | Port skeleton in contrib/, poudriere testing, ports-tree submission |
 | .deb / .rpm packages               | Medium   | internal | [#142](https://github.com/langerma/dumpstore/issues/142) | Linux counterpart to the FreeBSD port (#89): native packages with the systemd unit, playbooks, and static assets |
 | ZFS native encryption              | Low      | manage | [#20](https://github.com/langerma/dumpstore/issues/20) | Load/unload keys, keystatus display |
@@ -126,3 +120,4 @@ Every row carries a **Scope** verdict from the [manage-vs-integrate boundary](CL
 | Multi-filesystem abstraction | Adds significant complexity for little gain; dumpstore is ZFS + Linux/FreeBSD, period |
 | lldap integration ([#62](https://github.com/langerma/dumpstore/issues/62)) | Won't fix — not pursued; local users/groups stay the only identity source |
 | UPS / NUT integration ([#52](https://github.com/langerma/dumpstore/issues/52)) | Won't fix — not pursued; UPS monitoring and shutdown stay with NUT itself |
+| Privilege separation ([#116](https://github.com/langerma/dumpstore/issues/116)) | Not planned — an authenticated session is root-equivalent by design, so a split only protects the pre-login surface, which a reverse proxy + SSO already covers unprivileged; replaced by proxy-fronted mode ([#212](https://github.com/langerma/dumpstore/issues/212)) |
