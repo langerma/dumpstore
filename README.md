@@ -107,6 +107,8 @@ Per-distro package names and commands are in [Installation](https://github.com/l
 
 dumpstore runs as root, because ZFS requires it. If no password is configured, it binds to `127.0.0.1` only. Do not expose it on a public interface without TLS and authentication in front of it — see [SECURITY.md](SECURITY.md) for the recommended deployment.
 
+Values handed to the Ansible playbooks (passwords included) travel in a root-only temporary file, not on the command line, and are marked `!unsafe` so Ansible never evaluates them as templates (#214).
+
 ## Documentation
 
 The [wiki](https://github.com/langerma/dumpstore/wiki) holds the details:

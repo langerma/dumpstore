@@ -29,7 +29,7 @@ func statusOf(err error) int {
 }
 
 // fakeAnsibleHandler returns a Handler whose runner execs a stub
-// ansible-playbook that records its --extra-vars JSON per playbook and
+// ansible-playbook that copies its `--extra-vars @file` per playbook and
 // succeeds without output. vars(playbook) returns the recorded map.
 func fakeAnsibleHandler(t *testing.T) (*Handler, func(playbook string) map[string]string) {
 	t.Helper()
@@ -39,10 +39,10 @@ func fakeAnsibleHandler(t *testing.T) (*Handler, func(playbook string) map[strin
 		"pb=; ev=\n" +
 		"while [ $# -gt 0 ]; do case \"$1\" in\n" +
 		"  -i) shift ;;\n" +
-		"  --extra-vars) shift; ev=\"$1\" ;;\n" +
+		"  --extra-vars) shift; ev=\"${1#@}\" ;;\n" +
 		"  *) pb=$(basename \"$1\") ;;\n" +
 		"esac; shift; done\n" +
-		"printf '%s' \"$ev\" > \"" + rec + "/$pb\"\n"
+		"cp \"$ev\" \"" + rec + "/$pb\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "ansible-playbook"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -58,9 +58,20 @@ func fakeAnsibleHandler(t *testing.T) (*Handler, func(playbook string) map[strin
 		if err != nil {
 			t.Fatalf("%s was not run: %v", playbook, err)
 		}
-		var m map[string]string
-		if err := json.Unmarshal(data, &m); err != nil {
-			t.Fatalf("%s extra vars %q: %v", playbook, data, err)
+		// The runner's format: "--- !unsafe", then one `key: <JSON string>`
+		// line per var.
+		header, body, _ := strings.Cut(string(data), "\n")
+		if header != "--- !unsafe" {
+			t.Fatalf("%s extra vars header %q", playbook, header)
+		}
+		m := map[string]string{}
+		for line := range strings.Lines(body) {
+			k, v, _ := strings.Cut(strings.TrimSuffix(line, "\n"), ": ")
+			var s string
+			if err := json.Unmarshal([]byte(v), &s); err != nil {
+				t.Fatalf("%s extra var %q: %v", playbook, line, err)
+			}
+			m[k] = s
 		}
 		return m
 	}

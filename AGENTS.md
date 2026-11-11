@@ -210,7 +210,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 ### Security
 
 - Handlers validate every value with allow-list regexes and validators (`internal/api/handlers.go`) before it reaches an argv or a playbook.
-- **Ansible templates extra-var values** (`{{ … }}` is evaluated, as root). Never pass free-form text or content read from user-controlled files into a playbook until #214 is fixed; prefer validated values or Go-side handling.
+- **Playbook values are data, never templates** (#214). The runner writes extra vars to a 0600 temp file whose root mapping is tagged `!unsafe` and passes `--extra-vars @file`, so Ansible never evaluates `{{ … }}` in a value and no value appears on the command line. Never add a code path that hands a playbook a template or puts values back on argv (`-e key=value`, inline JSON). Keep the tag on the root mapping: on ansible-core ≥ 2.19 a per-value `!unsafe "true"` becomes a boolean.
 - The `static/` directory is served with `http.FileServer` — do not put secrets there.
 - The service runs as root (required for ZFS). Do not expose it on a public interface without authentication in front of it.
 

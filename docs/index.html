@@ -1035,6 +1035,7 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
     <p style="max-width:640px;line-height:1.6;color:var(--text-muted)">
       dumpstore has built-in session-based authentication. A argon2id-hashed password is set during install and stored in
       <code>/etc/dumpstore/dumpstore.conf</code> (Linux) / <code>/usr/local/etc/dumpstore/dumpstore.conf</code> (FreeBSD). If no password is configured the service binds to <code>127.0.0.1</code> only.
+      Values handed to the Ansible playbooks (passwords included) travel in a root-only temporary file, not on the command line, and are marked <code>!unsafe</code> so Ansible never evaluates them as templates.
       dumpstore runs as root (required for ZFS). See <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md" style="color:var(--accent)">SECURITY.md</a>
       for notes on TLS and the recommended deployment topology.
     </p>

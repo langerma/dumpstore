@@ -137,6 +137,13 @@ Config-file writes (e.g. SMB shares, user creation) take the same shape
 but execute via ansible-playbook with the ndjson callback.
 ```
 
+Playbook values never travel on the command line. The runner writes them to a
+temporary vars file (mode `0600`, removed after the run) and passes
+`--extra-vars @<file>`. The file's root mapping is tagged `!unsafe`, so Ansible
+treats every value as plain data and never evaluates `{{ … }}` or `{% … %}`
+inside it (#214). Playbooks still use the values normally (`{{ var }}`,
+`var == "true"`, `var | bool`, `var | from_json`).
+
 ## Frontend
 
 The frontend is vanilla JS with no build step. All data lives in a single `state` object. Render functions are pure — they read from `state` and write `innerHTML`.
@@ -203,7 +210,8 @@ Prometheus stays the pull path (`GET /metrics`, always on). OpenTelemetry is the
 
 ## Security
 
-- Input to Ansible extra-vars is validated for shell-special characters (`@;|&$\``) before the playbook call
+- Handlers validate every value with allow-list validators before it reaches an argv or a playbook
+- Playbook values are passed as `!unsafe` data in a 0600 vars file, never on the command line, so Ansible does not template them (#214)
 - `static/` is served by `http.FileServer` — do not put secrets there
 - The service runs as root (required for ZFS); do not expose it on a public interface without authentication in front of it
 

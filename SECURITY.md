@@ -48,6 +48,14 @@ A future release may add a built-in TLS flag (`-tls-cert` / `-tls-key`).
 
 ---
 
+## Values passed to Ansible
+
+Configuration writes run `ansible-playbook` as root. Their values (passwords included) are written to a temporary vars file readable only by root (mode `0600`, removed when the playbook finishes) and passed as `--extra-vars @<file>`, so they don't appear in process arguments that other local users can read with `ps`. The file is tagged `!unsafe`, so Ansible never evaluates `{{ … }}` or `{% … %}` in a value (#214).
+
+Known exception: on Linux, creating an iSCSI target with CHAP runs `targetcli … set auth password=<secret>`, which puts the CHAP secret on that command's argv while it runs (#218).
+
+---
+
 ## Reverse proxy delegation
 
 If you run dumpstore behind an authenticating proxy (nginx, Caddy, Authelia, etc.) you can configure the proxy's CIDR in `trusted_proxies` and have the proxy set `X-Remote-User`. dumpstore will accept that header as the authenticated identity from those IPs, bypassing the password login.
