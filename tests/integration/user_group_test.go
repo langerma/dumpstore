@@ -137,6 +137,41 @@ func TestSSHKeyForeignPrimaryGroup(t *testing.T) {
 	}
 }
 
+// TestExtraVarsNotTemplated (#214): Jinja syntax in a value must reach the
+// playbook as literal text. Before the fix Ansible evaluated it — the key
+// comment came back as "xxx" and the password was set to "pwd!".
+func TestExtraVarsNotTemplated(t *testing.T) {
+	const name = "itest-jinja"
+	const password = `p{{ "w" }}d{% if 1 %}!{% endif %}`
+	removeUserInVM(name)
+	t.Cleanup(func() { removeUserInVM(name) })
+	assertTasks(t, apiStatus(t, http.StatusCreated, "POST", "/api/v1/users", map[string]any{
+		"username": name, "shell": "/bin/sh", "password": password, "create_group": true,
+	}))
+
+	// Compare the stored hash with crypt(3) of the literal password; the
+	// password goes through the environment, so no shell quoting is involved.
+	hash := "h=$(getent shadow " + name + " 2>/dev/null | cut -d: -f2); " +
+		"[ -n \"$h\" ] || h=$(pw usershow " + name + " | cut -d: -f2); "
+	check := hash + `H="$h" P='` + password + `' python3 -W ignore -c ` +
+		`'import crypt, os; print("match" if crypt.crypt(os.environ["P"], os.environ["H"]) == os.environ["H"] else "nomatch")'`
+	if out := strings.TrimSpace(vmExec(t, check)); out != "match" {
+		t.Errorf("stored password does not match the literal %q: %s", password, out)
+	}
+
+	const comment = "{{ 'x' * 3 }}"
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOKtWwfbM2iF+MtO37AgDseyCwAS8RAERcXAj41LUEHu " + comment
+	assertTasks(t, apiOK(t, "POST", v1("/users/%s/ssh-keys", name), map[string]string{"key": key}))
+	keys := decode[struct {
+		Keys []struct {
+			Comment string `json:"comment"`
+		} `json:"keys"`
+	}](t, apiOK(t, "GET", v1("/users/%s/ssh-keys", name), nil)).Keys
+	if len(keys) != 1 || keys[0].Comment != comment {
+		t.Errorf("key comments = %+v, want one literal %q", keys, comment)
+	}
+}
+
 // TestUserNegatives covers the guards: invalid names, system users, missing users.
 func TestUserNegatives(t *testing.T) {
 	apiStatus(t, http.StatusBadRequest, "POST", "/api/v1/users", map[string]string{"username": "bad name"})

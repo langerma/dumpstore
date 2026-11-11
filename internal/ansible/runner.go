@@ -121,11 +121,14 @@ func (r *Runner) runCore(ctx context.Context, playbook string, extraVars map[str
 
 	args := []string{"-i", r.InventoryPath, playbookPath}
 	if len(extraVars) > 0 {
-		ev, err := json.Marshal(extraVars)
+		// Values go through a 0600 file, not argv (#218), and are tagged
+		// !unsafe so Ansible never templates them (#214).
+		path, err := writeExtraVars(extraVars)
 		if err != nil {
-			return nil, fmt.Errorf("marshal extra-vars: %w", err)
+			return nil, err
 		}
-		args = append(args, "--extra-vars", string(ev))
+		defer os.Remove(path)
+		args = append(args, "--extra-vars", "@"+path)
 	}
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.Timeout)
