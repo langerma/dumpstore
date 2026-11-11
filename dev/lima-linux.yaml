@@ -26,11 +26,16 @@ additionalDisks:
   - name: dumpstore-linux-test3
     format: false
 
+# Pinned to a dated release with its digest (#234), so CI and new dev VMs
+# boot a known image. Bump both together: the release directory and the
+# hashes from its SHA256SUMS.
 images:
-  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release-20261017/ubuntu-24.04-server-cloudimg-arm64.img"
     arch: aarch64
-  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+    digest: "sha256:50e24e1fb79e89116e939d90aa7738f7af48c442fa1bc2510131e0b39c50348e"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release-20261017/ubuntu-24.04-server-cloudimg-amd64.img"
     arch: x86_64
+    digest: "sha256:04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94"
 
 # Forward dumpstore UI port to host
 portForwards:

@@ -16,8 +16,8 @@ make test-integration   # run the suite from the host against http://localhost:8
 ```
 
 `make ci-full` runs the PR checks (`make ci`), then both VM suites in
-parallel: `make ci-integration` (Linux) and `make ci-freebsd` — what CI's
-`run-integration` label runs as `linux-vm` and `freebsd-vm`. Each starts its VM, verifies provisioning
+parallel: `make ci-integration` (Linux) and `make ci-freebsd` — what CI
+runs as `linux-vm` and `freebsd-vm`. Each starts its VM, verifies provisioning
 (`make vm-linux-verify` / `make vm-freebsd-verify`), deploys, and runs the
 suite with `DUMPSTORE_REQUIRE_TOOLS=1`. CI's `freebsd-vm` job runs
 `make ci-freebsd` itself.
@@ -112,11 +112,23 @@ make test-integration
 
 ## CI
 
-`.github/workflows/integration-tests.yml` runs both VM suites nightly, on
-manual dispatch, and on PRs labeled `run-integration`: `linux-vm` (Ubuntu
-24.04) and `freebsd-vm` (FreeBSD 15 amd64, `make ci-freebsd`). Both use Lima
-with KVM on `ubuntu-latest`; FreeBSD guests need Lima ≥ 2.1, so the workflow
-pins Lima 2.3.0.
+`.github/workflows/integration-tests.yml` runs both VM suites: `linux-vm`
+(Ubuntu 24.04, `make ci-integration`) and `freebsd-vm` (FreeBSD 15 amd64,
+`make ci-freebsd`), under Lima with KVM on `ubuntu-latest`.
+
+- **When:** nightly, on manual dispatch, and on pull requests whose diff
+  touches backend paths (Go code, `go.mod`/`go.sum`, the Makefile,
+  `playbooks/`, `tests/integration/`, `dev/lima-*`, `dev/ci/`, the workflow
+  itself) — decided by `dev/ci/integration-needed.sh`. The `run-integration`
+  label forces a run on any other PR; it takes effect on the next push, or
+  dispatch the workflow on the branch (`gh workflow run "Integration Tests"
+  --ref <branch>`).
+- **Result:** the `integration` job fails when a suite failed or was
+  cancelled and passes when both ran green or weren't needed — the one check
+  to require in branch protection.
+- **Pins:** `dev/ci/vm-runner-setup.sh` installs Lima by version and SHA-256
+  (FreeBSD guests need Lima ≥ 2.1); both Lima templates pin their images by
+  digest.
 
 Before the suite runs, a *Verify VM provisioning* step (`make vm-linux-verify`; FreeBSD: `make vm-freebsd-verify`) fails the job if the
 provision script did not reach `==> Provisioning complete.`, if any tool the
