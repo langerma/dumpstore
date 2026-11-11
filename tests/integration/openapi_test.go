@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -17,8 +19,15 @@ import (
 // schema against it. Typed handlers can't drift from their schema, but
 // hand-declared response types and nullability can — this catches both on
 // real hosts.
+//
+// Init-gated reads (e.g. GET /smb/shares answers 409 until Samba is
+// initialised, #193) must not depend on test order: Samba is initialised
+// here when installed (and restored afterwards), and a documented non-200
+// answer on a host where a feature is unavailable is checked against that
+// response's schema and skipped, never silently passed.
 func TestOpenAPISpec(t *testing.T) {
 	login(t)
+	ensureSMBInit(t)
 	raw := apiOK(t, "GET", "/api/v1/openapi.json", nil)
 	var spec struct {
 		OpenAPI string `json:"openapi"`
@@ -77,15 +86,24 @@ func TestOpenAPISpec(t *testing.T) {
 			continue // untyped (Phase 2 of #181) or not JSON
 		}
 		t.Run(op.OperationID, func(t *testing.T) {
-			body := apiOK(t, "GET", path, nil)
+			status, body := api(t, "GET", path, nil)
+			schema := content.Schema
+			if status != http.StatusOK {
+				resp, documented := op.Responses[strconv.Itoa(status)]
+				if !documented {
+					t.Fatalf("GET %s: undocumented status %d, body: %s", path, status, truncate(body, 500))
+				}
+				schema = resp.Content["application/json"].Schema
+				defer t.Skipf("GET %s answered documented %d on this host; its 200 schema is not checked here", path, status)
+			}
 			dec := json.NewDecoder(bytes.NewReader(body))
 			dec.UseNumber()
 			var doc any
 			if err := dec.Decode(&doc); err != nil {
 				t.Fatalf("decode %s: %v", path, err)
 			}
-			if errs := v.validate("$", content.Schema, doc); len(errs) > 0 {
-				t.Errorf("GET %s does not match its schema:\n  %s", path, strings.Join(errs, "\n  "))
+			if errs := v.validate("$", schema, doc); len(errs) > 0 {
+				t.Errorf("GET %s (status %d) does not match its schema:\n  %s", path, status, strings.Join(errs, "\n  "))
 			}
 		})
 		checked = append(checked, path)

@@ -224,3 +224,30 @@ func TestSMBWriteWhileStopped(t *testing.T) {
 		t.Fatalf("Samba not running after a config write while it was stopped: %v", err)
 	}
 }
+
+// ensureSMBInit initialises Samba for tests that need the init-gated SMB
+// routes (#193) without depending on an earlier test having done it: a fresh
+// CI VM ships the distro smb.conf, which is not initialised. When it has to
+// initialise, the VM's smb.conf and any .pre-dumpstore backup are set aside
+// first and restored on cleanup, so the host is left as it was. Returns false
+// when Samba is not installed.
+func ensureSMBInit(t *testing.T) bool {
+	t.Helper()
+	if _, err := vmExecErr("command -v smbd"); err != nil {
+		return false
+	}
+	st := decode[struct {
+		Initialized bool   `json:"initialized"`
+		ConfPath    string `json:"conf_path"`
+	}](t, apiOK(t, "GET", "/api/v1/smb/status", nil))
+	if st.Initialized {
+		return true
+	}
+	conf := st.ConfPath
+	vmExec(t, "for f in "+conf+" "+conf+".pre-dumpstore; do rm -f $f.itest-bak; [ -e $f ] && cp -p $f $f.itest-bak; done; true")
+	t.Cleanup(func() {
+		_, _ = vmExecErr("for f in " + conf + " " + conf + ".pre-dumpstore; do if [ -e $f.itest-bak ]; then mv $f.itest-bak $f; else rm -f $f; fi; done; smbcontrol all reload-config >/dev/null 2>&1; true")
+	})
+	assertTasks(t, apiOK(t, "POST", "/api/v1/smb/init", nil))
+	return true
+}
