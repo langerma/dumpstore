@@ -12,11 +12,15 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      # Never package a tag that doesn't build, vet or pass its tests (#234).
+      - name: Build, vet and test
+        run: make ci-go
 
       # The build recipe lives in the Makefile (make release) and is smoke-
       # tested on every PR by the release-smoke job in ci.yml (#118).
@@ -24,7 +28,7 @@ jobs:
         run: make release VERSION=${GITHUB_REF_NAME}
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: dist/*.tar.gz
           generate_release_notes: true

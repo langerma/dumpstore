@@ -27,11 +27,14 @@ additionalDisks:
   - name: dumpstore-freebsd-test3
     format: false
 
+# Digests from the release's CHECKSUM.SHA256 (#234); bump with the release.
 images:
   - location: "https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/aarch64/Latest/FreeBSD-15.0-RELEASE-arm64-aarch64-BASIC-CLOUDINIT-zfs.qcow2.xz"
     arch: aarch64
+    digest: "sha256:578f55d5d2f31ead232fc79393e41fa4b3e38d1a97f202129ff12445be69beaa"
   - location: "https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/amd64/Latest/FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-zfs.qcow2.xz"
     arch: x86_64
+    digest: "sha256:7cd43f502df575c76e5b39d0fc164272c40b99facdba9c59387f619dca321c5a"
 
 # Forward dumpstore UI port to host
 portForwards:

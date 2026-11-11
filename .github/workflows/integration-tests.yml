@@ -1,87 +1,70 @@
-# VM-based integration tests (#117).
+# VM-based integration tests (#117, #234).
 #
-# Boots the same Lima VM developers use (dev/lima-linux.yaml), deploys
-# dumpstore into it with `make install`, and runs tests/integration against
-# the live API — real zpool/zfs/Ansible, no mocks.
+# Boots the same Lima VMs developers use (dev/lima-linux.yaml,
+# dev/lima-freebsd.yaml), deploys dumpstore into each with `make install`, and
+# runs tests/integration against the live API — real zpool/zfs/Ansible, no
+# mocks. Both VMs run under Lima with KVM on ubuntu-latest; each job runs the
+# same Makefile target as locally (`make ci-integration`, `make ci-freebsd`):
+# provisioning verified, then the suite with DUMPSTORE_REQUIRE_TOOLS=1.
 #
-# Triggers:
-#   - nightly (cron)
-#   - manually (workflow_dispatch)
-#   - on PRs carrying the `run-integration` label
+# When the suites run (dev/ci/integration-needed.sh):
+#   - nightly (cron) and on manual dispatch: always
+#   - pull requests: when the diff touches backend paths, or the PR carries
+#     the `run-integration` label (applied on the next push; or dispatch the
+#     workflow on the branch)
 #
-# Two jobs, same triggers: linux-vm (Ubuntu 24.04) and freebsd-vm (FreeBSD
-# 15, amd64). Both run under Lima with KVM on ubuntu-latest; FreeBSD guests
-# need Lima >= 2.1. The FreeBSD job runs `make ci-freebsd`, the same target
-# as locally.
+# The `integration` job is the single result to require in branch protection:
+# it fails when a suite failed or was cancelled, and passes when the suites
+# ran green or were not needed.
 name: Integration Tests
 
 on:
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
+  # No `labeled`: an unrelated label would start a skipped run whose
+  # `integration` result could mask a failing one, and cancel a running run.
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
-
-env:
-  # Same Lima as local development; FreeBSD guests need >= 2.1.
-  LIMA_VERSION: "2.3.0"
 
 concurrency:
   group: integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: dev/ci/integration-needed.sh ${BASE:+"$BASE" "$HEAD"}
+
   linux-vm:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration')
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      - name: Enable KVM for the runner user
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Install QEMU and Lima
-        run: |
-          # Tolerate index failures from unrelated third-party repos on the
-          # runner image; qemu comes from the default Ubuntu archive.
-          sudo apt-get update -qq || true
-          # ovmf: UEFI firmware Lima needs to boot x86_64 guests
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf
-          curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
-            | sudo tar Cxz /usr/local
-          limactl --version
-
-      - name: Start Linux VM
-        run: make vm-linux-start
-
-      # Lima reports READY even when the provision script aborted half-way
-      # (set -e on a failed apt step), and tests whose tool is missing would
-      # then skip. Fail here instead, with the reason (#234).
-      - name: Verify VM provisioning
-        run: make vm-linux-verify
-
-      - name: Deploy dumpstore into VM
-        run: make vm-linux-deploy
-
-      - name: Run integration tests
-        env:
-          # Every tool is provisioned (verified above): a missing one fails
-          # its tests instead of skipping them.
-          DUMPSTORE_REQUIRE_TOOLS: "1"
-        run: make test-integration
-
+      - name: KVM, QEMU and Lima
+        run: dev/ci/vm-runner-setup.sh
+      - name: Linux VM suite
+        run: make ci-integration
       - name: Collect VM logs on failure
         if: failure()
         run: |
@@ -91,38 +74,19 @@ jobs:
           limactl shell --tty=false dumpstore-linux -- sudo zpool status || true
 
   freebsd-vm:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration')
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      - name: Enable KVM for the runner user
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Install QEMU and Lima
-        run: |
-          sudo apt-get update -qq || true
-          # xorriso: Lima builds the FreeBSD guest's cidata ISO with it on
-          # non-macOS hosts.
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf xorriso
-          curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
-            | sudo tar Cxz /usr/local
-          limactl --version
-
-      # Start, verify provisioning, deploy, and the suite with
-      # DUMPSTORE_REQUIRE_TOOLS=1 — the same target developers run.
+      - name: KVM, QEMU and Lima
+        run: dev/ci/vm-runner-setup.sh
       - name: FreeBSD VM suite
         run: make ci-freebsd
-
       - name: Collect VM logs on failure
         if: failure()
         run: |
@@ -130,3 +94,23 @@ jobs:
           tail -n 80 ~/.lima/dumpstore-freebsd/serial*.log 2>/dev/null || true
           limactl shell --tty=false dumpstore-freebsd -- sudo tail -n 200 /var/log/messages || true
           limactl shell --tty=false dumpstore-freebsd -- sudo zpool status || true
+
+  integration:
+    needs: [changes, linux-vm, freebsd-vm]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Suites passed or were not needed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          LINUX: ${{ needs.linux-vm.result }}
+          FREEBSD: ${{ needs.freebsd-vm.result }}
+        run: |
+          echo "changes=$CHANGES run=$RUN linux-vm=$LINUX freebsd-vm=$FREEBSD"
+          [ "$CHANGES" = success ] || { echo "change detection did not succeed"; exit 1; }
+          if [ "$RUN" = true ]; then
+            [ "$LINUX" = success ] && [ "$FREEBSD" = success ]
+          else
+            echo "no backend changes: suites not needed"
+          fi

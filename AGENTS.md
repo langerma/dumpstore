@@ -75,12 +75,12 @@ The test: *does the feature make dumpstore better at running ZFS + shares, or do
 
 ## Build & Check
 
-**Run `make ci` before every commit and push** — it runs every PR check from `.github/workflows/` (the workflows call the same Makefile targets, so the two cannot drift) and prints a pass/fail table; logs in `.cache/ci/`. Backend changes also need `make ci-full` (the Linux **and** FreeBSD VM suites; CI runs them nightly and on PRs labeled `run-integration`, and a backend PR needs that label). Don't push to find out whether CI passes.
+**Run `make ci` before every commit and push** — it runs every PR check from `.github/workflows/` (the workflows call the same Makefile targets, so the two cannot drift) and prints a pass/fail table; logs in `.cache/ci/`. Backend changes also need `make ci-full` (the Linux **and** FreeBSD VM suites; CI runs them nightly and on every PR that touches backend paths, see `dev/ci/integration-needed.sh`). Don't push to find out whether CI passes.
 
 ```bash
 make ci                    # all PR checks in parallel: ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs
 make ci-full               # + Linux and FreeBSD VM suites in parallel, both with DUMPSTORE_REQUIRE_TOOLS=1
-make ci-integration        # Linux VM suite only (what CI's run-integration label runs)
+make ci-integration        # Linux VM suite only (what CI's linux-vm job runs)
 make ci-freebsd            # FreeBSD VM suite only (what CI's freebsd-vm job runs)
 go build ./...             # must always pass before committing
 go vet ./...               # must always pass
