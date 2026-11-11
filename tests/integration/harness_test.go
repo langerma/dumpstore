@@ -357,12 +357,29 @@ func assertTasks(t *testing.T, b []byte) {
 	}
 }
 
+// requireTools turns "tool missing" skips into failures. CI sets
+// DUMPSTORE_REQUIRE_TOOLS=1: its VM is provisioned with every tool the suite
+// uses, so a missing one means provisioning broke, and a skip would let a run
+// go green with whole suites unexercised (#234). Local runs keep skipping
+// (stale dev VMs, FreeBSD).
+var requireTools = os.Getenv("DUMPSTORE_REQUIRE_TOOLS") == "1"
+
+// skipMissingTool skips (or, with requireTools, fails) a test whose host
+// tooling is absent.
+func skipMissingTool(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if requireTools {
+		t.Fatalf("DUMPSTORE_REQUIRE_TOOLS=1: "+format, args...)
+	}
+	t.Skipf(format, args...)
+}
+
 // skipUnlessVMTool skips the test when tool is not installed in the VM
 // (stale local VMs provisioned before the tool was added, FreeBSD).
 func skipUnlessVMTool(t *testing.T, tool string) {
 	t.Helper()
 	if _, err := vmExecErr("command -v " + tool); err != nil {
-		t.Skipf("%s not installed in VM %s — rebuild it: make vm-linux-destroy vm-linux-start vm-linux-deploy", tool, vmName)
+		skipMissingTool(t, "%s not installed in VM %s — rebuild it: make vm-linux-destroy vm-linux-start vm-linux-deploy", tool, vmName)
 	}
 }
 

@@ -89,6 +89,7 @@ an aborted run cannot poison the next one.
 | `DUMPSTORE_USER` / `DUMPSTORE_PASS` | `admin` / `admin` | Login credentials |
 | `DUMPSTORE_TEST_POOL` | `tank` | Existing pool for dataset/snapshot tests |
 | `DUMPSTORE_TEST_DISKS` | `/dev/vdc,/dev/vdd,/dev/vde` | Three unused disks for pool tests (set empty to skip them) |
+| `DUMPSTORE_REQUIRE_TOOLS` | unset | `1` turns "tool not installed" skips into failures. CI sets it, since its VM is provisioned with every tool; locally, stale VMs keep skipping |
 
 ### Against the FreeBSD VM
 
@@ -105,3 +106,11 @@ make test-integration
 `.github/workflows/integration-tests.yml` runs the Linux VM suite nightly,
 on manual dispatch, and on PRs labeled `run-integration`. FreeBSD stays a
 local target — GitHub's macOS arm64 runners lack nested virtualization.
+
+Before the suite runs, a *Verify VM provisioning* step fails the job if the
+provision script did not reach `==> Provisioning complete.`, if any tool the
+suite uses is missing, or if `tank` doesn't exist. Lima reports READY even
+when provisioning aborted half-way. The suite then runs with
+`DUMPSTORE_REQUIRE_TOOLS=1`, so a missing tool fails its tests instead of
+skipping them. Every PR also compiles this suite
+(`go vet -tags integration ./tests/integration/`) in the `CI` workflow.

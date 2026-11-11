@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -73,10 +74,20 @@ var goldenMetrics = map[string]metricFamily{
 		buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 5, 30, 120, inf}},
 }
 
+// initMetrics builds the OTEL providers once per test binary. The
+// package-level instruments (internal/api, ansible, ops) bind to the first
+// global MeterProvider, exactly as in production, so a second Init would
+// leave them recording into the first provider and a rerun (-count>1) would
+// see no families.
+var initMetrics = sync.OnceValues(func() (*otelx.Providers, error) {
+	return otelx.Init(context.Background(), "test", nil)
+})
+
 // TestMetricsCompat records one sample through every dumpstore instrument,
 // scrapes the OTEL-backed /metrics handler and checks the exposition against
 // goldenMetrics. It lives in package main because the global meter binds to
-// the first SetMeterProvider in a test binary: this must be the only Init.
+// the first SetMeterProvider in a test binary: initMetrics must be the only
+// Init.
 func TestMetricsCompat(t *testing.T) {
 	for _, v := range []string{"OTEL_SDK_DISABLED", "OTEL_EXPORTER_OTLP_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
@@ -94,11 +105,10 @@ func TestMetricsCompat(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	p, err := otelx.Init(context.Background(), "test", nil)
+	p, err := initMetrics()
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer p.Shutdown(context.Background()) //nolint:errcheck
 
 	h := api.NewHandler(ansible.NewRunner(t.TempDir()), "test", broker.New(), nil, nil, nil, nil, nil, "")
 	h.SetMetricsHandler(p.MetricsHandler)

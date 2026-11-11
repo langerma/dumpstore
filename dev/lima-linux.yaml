@@ -46,6 +46,9 @@ provision:
       set -euo pipefail
 
       export DEBIAN_FRONTEND=noninteractive
+      # Retry transient archive failures instead of aborting provisioning
+      # half-way (a failed nightly on 2026-11-09 lost every later package).
+      echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-dumpstore-retries
 
       echo "==> Updating apt..."
       apt-get update -qq

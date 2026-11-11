@@ -75,7 +75,34 @@ jobs:
           cache: false
       - run: go build ./...
       - run: go vet ./...
+      # The integration suite (build tag `integration`) only runs against a VM,
+      # but its code must compile on every PR (#234).
+      - run: go vet -tags integration ./tests/integration/
+      # FreeBSD is a first-class target with no CI VM yet: at least catch
+      # code that doesn't build or vet there.
+      - run: GOOS=freebsd go vet ./...
       - run: go test -race ./...
+
+  # Syntax-checks every frontend ES module. A syntax error at module top level
+  # stops the whole UI from loading (lessons.md #3), and `node --check` on a
+  # .js file outside a "type":"module" package misses ESM errors — so each
+  # file is checked as an .mjs copy (#234).
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: node --check every module
+        run: |
+          dir=$(mktemp -d)
+          for f in static/app.js static/js/*.js; do
+            out="$dir/$(echo "$f" | tr / _).mjs"
+            cp "$f" "$out"
+            node --check "$out" || { echo "syntax error in $f"; exit 1; }
+          done
+          echo "checked $(ls "$dir" | wc -l) modules"
 
   # Exercises the exact release recipe (make release, all four GOOS/GOARCH
   # targets) so a broken release pipeline is caught on the PR, not at tag

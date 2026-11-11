@@ -201,7 +201,7 @@ func iscsiFixture(t *testing.T, zvol, iqn string) (ctld bool) {
 		return false
 	}
 	if _, err := vmExecErr("command -v ctld"); err != nil {
-		t.Skipf("no iSCSI backend (targetcli or ctld) in VM %s", vmName)
+		skipMissingTool(t, "no iSCSI backend (targetcli or ctld) in VM %s", vmName)
 	}
 	// Service commands redirect stdio: a daemon started over `limactl shell`
 	// otherwise inherits the session's fds and the call never returns.
