@@ -1,5 +1,10 @@
 BINARY  := dumpstore
 INSTALL := /usr/local/lib/dumpstore
+
+# install-go puts Go in /usr/local/go. Every recipe runs in its own shell, so
+# an `export PATH` inside install-go never reached `build`: on a host without
+# Go, `make install` installed it and then failed with "go: not found".
+export PATH := $(PATH):/usr/local/go/bin
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
         test-integration screenshots release openapi \
         ci ci-full ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs \
@@ -17,16 +22,18 @@ build:
 openapi:
 	go test ./internal/api/ -run '^TestOpenAPISpec$$' -update
 
-# Cross-build and package every release target into dist/.
+# Cross-build and package every release target into $(DIST) (default dist/).
 # Single source of truth for the release recipe — used by release.yml on
 # tags and by the CI release-smoke job on every PR (#118) so the two
 # cannot drift.
-# Usage: make release VERSION=v1.2.3
+# Usage: make release VERSION=v1.2.3 [DIST=dir]
 RELEASE_TARGETS := linux/amd64 linux/arm64 freebsd/amd64 freebsd/arm64
+DIST ?= dist
 
 release:
 	@test -n "$(VERSION)" || { echo "error: VERSION is required (make release VERSION=v1.2.3)" >&2; exit 1; }
-	@rm -rf dist && mkdir -p dist
+	@case "$(DIST)" in ""|/*|*..*) echo "error: DIST must be a relative directory inside the tree" >&2; exit 1 ;; esac
+	@rm -rf "$(DIST)" && mkdir -p "$(DIST)"
 	@set -e; \
 	for target in $(RELEASE_TARGETS); do \
 	  OS=$${target%/*}; ARCH=$${target#*/}; \
@@ -34,17 +41,17 @@ release:
 	  echo "==> Building $$NAME"; \
 	  GOOS=$$OS GOARCH=$$ARCH go build -buildvcs=false \
 	    -ldflags="-s -w -X main.version=$(VERSION)" -o $(BINARY) .; \
-	  mkdir -p dist/$$NAME; \
-	  cp $(BINARY) dist/$$NAME/; \
-	  cp -r playbooks static README.md install.sh dist/$$NAME/; \
+	  mkdir -p "$(DIST)/$$NAME"; \
+	  cp $(BINARY) "$(DIST)/$$NAME/"; \
+	  cp -r playbooks static README.md install.sh "$(DIST)/$$NAME/"; \
 	  case "$$OS" in \
-	    linux)   cp contrib/dumpstore.service dist/$$NAME/ ;; \
-	    freebsd) cp contrib/dumpstore.rc      dist/$$NAME/ ;; \
+	    linux)   cp contrib/dumpstore.service "$(DIST)/$$NAME/" ;; \
+	    freebsd) cp contrib/dumpstore.rc      "$(DIST)/$$NAME/" ;; \
 	  esac; \
-	  tar -czf dist/$$NAME.tar.gz -C dist $$NAME; \
-	  rm -rf dist/$$NAME $(BINARY); \
+	  tar -czf "$(DIST)/$$NAME.tar.gz" -C "$(DIST)" "$$NAME"; \
+	  rm -rf "$(DIST)/$$NAME" $(BINARY); \
 	done
-	@ls -l dist/
+	@ls -l "$(DIST)/"
 
 # ---------------------------------------------------------------------------
 # CI — every job in .github/workflows/ci.yml and check-docs.yml is one target
@@ -120,15 +127,19 @@ forge-rev:
 # The exact release recipe for all targets (#118). The version ldflag is
 # checked by running the archive for this host when there is one (CI:
 # linux/amd64); elsewhere (macOS) by finding the string in a linux binary.
+# Output goes to .cache/dist, outside the tree `go build ./...` walks: in
+# dist/, the release's rm -rf raced ci-go when `make ci` ran both at once.
+SMOKE_DIST := .cache/dist
+
 ci-release:
-	$(MAKE) --no-print-directory release VERSION=v0.0.0-smoke
-	@set -e; n=dumpstore-v0.0.0-smoke-$$(go env GOOS)-$$(go env GOARCH); \
-	if [ -f dist/$$n.tar.gz ]; then \
-	  tar -xzf dist/$$n.tar.gz -C dist; out=$$(dist/$$n/dumpstore --version); \
+	$(MAKE) --no-print-directory release VERSION=v0.0.0-smoke DIST=$(SMOKE_DIST)
+	@set -e; d=$(SMOKE_DIST); n=dumpstore-v0.0.0-smoke-$$(go env GOOS)-$$(go env GOARCH); \
+	if [ -f $$d/$$n.tar.gz ]; then \
+	  tar -xzf $$d/$$n.tar.gz -C $$d; out=$$($$d/$$n/dumpstore --version); \
 	  echo "version reported: $$out"; test "$$out" = v0.0.0-smoke; \
 	else \
-	  n=dumpstore-v0.0.0-smoke-linux-amd64; tar -xzf dist/$$n.tar.gz -C dist; \
-	  grep -aq v0.0.0-smoke dist/$$n/dumpstore; \
+	  n=dumpstore-v0.0.0-smoke-linux-amd64; tar -xzf $$d/$$n.tar.gz -C $$d; \
+	  grep -aq v0.0.0-smoke $$d/$$n/dumpstore; \
 	  echo "no archive for this host: found v0.0.0-smoke in $$n"; \
 	fi
 
@@ -190,7 +201,12 @@ install-ansible:
 	  OS=$$(uname -s); \
 	  case "$$OS" in \
 	    FreeBSD) pkg install -y sysutils/ansible ;; \
-	    Linux)   apt-get install -y -qq ansible ;; \
+	    Linux) \
+	      if command -v apt-get >/dev/null 2>&1; then \
+	        apt-get update -qq && apt-get install -y -qq ansible; \
+	      else \
+	        echo "error: 'ansible-playbook' not found — automatic install supports apt (Debian/Ubuntu) and FreeBSD; install Ansible with your distribution's package manager" >&2; exit 1; \
+	      fi ;; \
 	    *) echo "error: 'ansible-playbook' not found — please install Ansible" >&2; exit 1 ;; \
 	  esac; \
 	fi

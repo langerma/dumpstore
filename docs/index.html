@@ -582,14 +582,14 @@
           <span class="pool-name">scheduled replication</span>
           <span class="health-badge badge-green">cron</span>
         </div>
-        <p>Cron-scheduled replication tasks (5-field syntax, 1-minute resolution) for any dataset → dataset path, local or remote. Each fire snapshots the source as <code>dumpstore-repl-&lt;UTC&gt;</code>, places a hold for the duration of the transfer, picks the most recent common <code>dumpstore-repl-*</code> for an incremental send, dispatches the pipeline via the jobs runner, releases the hold, and prunes destination replication snapshots to a configurable retention count. A separate Replication tab lists tasks; runs surface in the Jobs tab tagged <code>replication.run</code> / <code>replication.prune</code>; a "Run now" button fires off-schedule.</p>
+        <p>Cron-scheduled replication tasks (5-field syntax, 1-minute resolution) for any dataset → dataset path, local or remote. Each fire snapshots the source as <code>dumpstore-repl-&lt;UTC&gt;</code>, places a hold for the duration of the transfer, picks the most recent common <code>dumpstore-repl-*</code> for an incremental send, dispatches the pipeline via the jobs runner, releases the hold, and prunes destination replication snapshots to a configurable retention count. A separate Replication tab lists tasks; runs surface in the Jobs tab tagged <code>replication.run</code> (target pruning runs as part of it); a "Run now" button fires off-schedule.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
           <span class="pool-name">background jobs</span>
           <span class="health-badge badge-blue">jobs runner</span>
         </div>
-        <p>Long-running data-plane operations (currently snapshot send/receive) run outside Ansible via the jobs manager. Each job runs in its own process group; cancel sends SIGTERM and escalates to SIGKILL after a 10 s grace. Status, runtime, exit code, and the last 64 KiB of stdout/stderr are surfaced in the Jobs tab. Records are persisted to disk so status survives a service restart — any job that was running at shutdown is rewritten as <code>interrupted</code>.</p>
+        <p>Long-running data-plane operations (snapshot send/receive, replication runs, <code>zfs rewrite</code>) run outside Ansible via the jobs manager. Each job runs in its own process group; cancel sends SIGTERM and escalates to SIGKILL after a 10 s grace. Status, runtime, exit code, and the last 64 KiB of stdout/stderr are surfaced in the Jobs tab. Records are persisted to disk so status survives a service restart — any job that was running at shutdown is rewritten as <code>interrupted</code>.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -912,7 +912,7 @@ cd dumpstore
 sudo ./install.sh</pre>
         <p class="install-note">
           Thin wrapper around <code>make install</code>. Auto-installs Go and Ansible
-          if absent, compiles the binary, copies everything to
+          if absent (Ansible via apt or on FreeBSD), compiles the binary, copies everything to
           <code>/usr/local/lib/dumpstore/</code>, prompts for an admin password,
           then registers and starts the service —
           systemd on Linux, rc.d on FreeBSD.
@@ -934,6 +934,7 @@ sudo ./install.sh</pre>
           <h3>uninstall</h3>
         </div>
         <pre>sudo ./install.sh --uninstall</pre>
+        <p class="install-note">Removes the service and <code>/usr/local/lib/dumpstore/</code>. Config and state directories and the Samba/ctld configs dumpstore rendered stay, so shares keep working; release an auto-snapshot takeover first.</p>
       </div>
 
       <div class="install-card">
