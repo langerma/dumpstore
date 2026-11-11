@@ -16,12 +16,11 @@ make test-integration   # run the suite from the host against http://localhost:8
 ```
 
 `make ci-full` runs the PR checks (`make ci`), then both VM suites in
-parallel: `make ci-integration` (Linux, exactly what CI's `run-integration`
-label runs) and `make ci-freebsd`. Each starts its VM, verifies provisioning
+parallel: `make ci-integration` (Linux) and `make ci-freebsd` — what CI's
+`run-integration` label runs as `linux-vm` and `freebsd-vm`. Each starts its VM, verifies provisioning
 (`make vm-linux-verify` / `make vm-freebsd-verify`), deploys, and runs the
-suite with `DUMPSTORE_REQUIRE_TOOLS=1`. CI has no FreeBSD VM, so
-`make ci-freebsd` is the only FreeBSD run — do it before pushing backend
-changes.
+suite with `DUMPSTORE_REQUIRE_TOOLS=1`. CI's `freebsd-vm` job runs
+`make ci-freebsd` itself.
 
 The suite logs in as `admin` / `admin` (the dev VM default) and uses
 `limactl shell` for fixtures the API can't provide (writing files into
@@ -113,11 +112,13 @@ make test-integration
 
 ## CI
 
-`.github/workflows/integration-tests.yml` runs the Linux VM suite nightly,
-on manual dispatch, and on PRs labeled `run-integration`. FreeBSD stays a
-local target — GitHub's macOS arm64 runners lack nested virtualization.
+`.github/workflows/integration-tests.yml` runs both VM suites nightly, on
+manual dispatch, and on PRs labeled `run-integration`: `linux-vm` (Ubuntu
+24.04) and `freebsd-vm` (FreeBSD 15 amd64, `make ci-freebsd`). Both use Lima
+with KVM on `ubuntu-latest`; FreeBSD guests need Lima ≥ 2.1, so the workflow
+pins Lima 2.3.0.
 
-Before the suite runs, a *Verify VM provisioning* step (`make vm-linux-verify`) fails the job if the
+Before the suite runs, a *Verify VM provisioning* step (`make vm-linux-verify`; FreeBSD: `make vm-freebsd-verify`) fails the job if the
 provision script did not reach `==> Provisioning complete.`, if any tool the
 suite uses is missing, or if `tank` doesn't exist. Lima reports READY even
 when provisioning aborted half-way. The suite then runs with

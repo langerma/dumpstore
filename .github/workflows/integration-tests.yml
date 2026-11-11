@@ -9,9 +9,10 @@
 #   - manually (workflow_dispatch)
 #   - on PRs carrying the `run-integration` label
 #
-# FreeBSD is not covered here: GitHub's macOS arm64 runners do not support
-# nested virtualization, so the FreeBSD VM remains a local target
-# (make vm-freebsd-start; see tests/integration/README.md).
+# Two jobs, same triggers: linux-vm (Ubuntu 24.04) and freebsd-vm (FreeBSD
+# 15, amd64). Both run under Lima with KVM on ubuntu-latest; FreeBSD guests
+# need Lima >= 2.1. The FreeBSD job runs `make ci-freebsd`, the same target
+# as locally.
 name: Integration Tests
 
 on:
@@ -23,6 +24,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Same Lima as local development; FreeBSD guests need >= 2.1.
+  LIMA_VERSION: "2.3.0"
 
 concurrency:
   group: integration-${{ github.ref }}
@@ -48,8 +53,6 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Install QEMU and Lima
-        env:
-          LIMA_VERSION: "1.0.7"
         run: |
           # Tolerate index failures from unrelated third-party repos on the
           # runner image; qemu comes from the default Ubuntu archive.
@@ -86,3 +89,44 @@ jobs:
           tail -n 50 ~/.lima/dumpstore-linux/serial*.log 2>/dev/null || true
           limactl shell --tty=false dumpstore-linux -- sudo journalctl -u dumpstore --no-pager -n 200 || true
           limactl shell --tty=false dumpstore-linux -- sudo zpool status || true
+
+  freebsd-vm:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install QEMU and Lima
+        run: |
+          sudo apt-get update -qq || true
+          # xorriso: Lima builds the FreeBSD guest's cidata ISO with it on
+          # non-macOS hosts.
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf xorriso
+          curl -fsSL "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Linux-x86_64.tar.gz" \
+            | sudo tar Cxz /usr/local
+          limactl --version
+
+      # Start, verify provisioning, deploy, and the suite with
+      # DUMPSTORE_REQUIRE_TOOLS=1 — the same target developers run.
+      - name: FreeBSD VM suite
+        run: make ci-freebsd
+
+      - name: Collect VM logs on failure
+        if: failure()
+        run: |
+          tail -n 100 ~/.lima/dumpstore-freebsd/ha.stderr.log 2>/dev/null || true
+          tail -n 80 ~/.lima/dumpstore-freebsd/serial*.log 2>/dev/null || true
+          limactl shell --tty=false dumpstore-freebsd -- sudo tail -n 200 /var/log/messages || true
+          limactl shell --tty=false dumpstore-freebsd -- sudo zpool status || true
