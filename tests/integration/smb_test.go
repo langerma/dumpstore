@@ -214,6 +214,17 @@ func TestSMBWriteWhileStopped(t *testing.T) {
 		t.Fatal("Samba still running after stop — test setup failed")
 	}
 
+	// A usershare must not need a running smbd either: `net usershare add`
+	// with the name "everyone" in its ACL asked smbd for the SID and failed
+	// while Samba was stopped (every fresh FreeBSD VM). Usershare writes don't
+	// touch the service, so Samba is still stopped here.
+	usDS := testPool + "/itest-us-stopped"
+	const usShare = "itest-us-stopped"
+	createDataset(t, usDS)
+	t.Cleanup(func() { _, _ = vmExecErr("net usershare delete " + usShare + " 2>/dev/null; true") })
+	assertTasks(t, apiOK(t, "PUT", v1("/smb/shares/%s", usShare), map[string]string{"dataset": usDS}))
+	assertTasks(t, apiOK(t, "DELETE", v1("/smb/shares/%s", usShare), nil))
+
 	ds := testPool + "/itest-tm-stopped"
 	const share = "itest-tm-stopped"
 	createDataset(t, ds)

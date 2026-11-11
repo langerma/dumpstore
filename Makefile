@@ -3,7 +3,7 @@ INSTALL := /usr/local/lib/dumpstore
 .PHONY: all build clean dev install uninstall check-prereqs install-go install-ansible \
         test-integration screenshots release openapi \
         ci ci-full ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs \
-        ci-integration ci-freebsd vm-linux-verify forge-rev \
+        ci-integration ci-freebsd vm-linux-verify vm-freebsd-verify forge-rev \
         vm-linux-start vm-linux-stop vm-linux-ssh vm-linux-deploy vm-linux-destroy \
         vm-freebsd-start vm-freebsd-stop vm-freebsd-ssh vm-freebsd-deploy vm-freebsd-destroy
 
@@ -52,8 +52,9 @@ release:
 # and CI cannot drift (same pattern as `release`).
 #
 #   make ci          all PR checks, in parallel, with a pass/fail table
-#   make ci-full     + the Linux VM integration suite (the run-integration label)
-#   make ci-freebsd  the FreeBSD VM suite (local only; CI has no FreeBSD VM)
+#   make ci-full     + the Linux and FreeBSD VM suites, in parallel
+#   make ci-integration / ci-freebsd   one VM suite (CI's run-integration label
+#                    runs the Linux one; CI has no FreeBSD VM)
 #
 # Pinned tool versions live here, not in the workflows.
 # ---------------------------------------------------------------------------
@@ -69,7 +70,8 @@ CI_JOBS         := ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs
 ci:
 	@MAKE="$(MAKE)" dev/ci/run.sh $(CI_JOBS)
 
-ci-full: ci ci-integration
+ci-full: ci
+	@MAKE="$(MAKE)" dev/ci/run.sh ci-integration ci-freebsd
 
 ci-go:
 	go build ./...
@@ -140,10 +142,12 @@ ci-docs:
 ci-integration: vm-linux-start vm-linux-verify vm-linux-deploy
 	DUMPSTORE_REQUIRE_TOOLS=1 $(MAKE) --no-print-directory test-integration
 
-ci-freebsd: vm-freebsd-start vm-freebsd-deploy
+# FreeBSD VM suite, as strict as the Linux one: provisioning verified, every
+# tool required.
+ci-freebsd: vm-freebsd-start vm-freebsd-verify vm-freebsd-deploy
 	DUMPSTORE_URL=http://localhost:8081 DUMPSTORE_VM=$(VM_FREEBSD) \
 	DUMPSTORE_TEST_DISKS=/dev/vtbd2,/dev/vtbd3,/dev/vtbd4 \
-	$(MAKE) --no-print-directory test-integration
+	DUMPSTORE_REQUIRE_TOOLS=1 $(MAKE) --no-print-directory test-integration
 
 # Run locally on macOS (or any machine without ZFS/Ansible).
 # Fake CLI stubs in dev/bin/ intercept zfs, zpool, and ansible-playbook.
@@ -361,6 +365,19 @@ vm-freebsd-stop:
 
 vm-freebsd-ssh:
 	limactl shell $(VM_FREEBSD)
+
+# FreeBSD counterpart of vm-linux-verify. The provision script touches
+# /var/db/dumpstore-provisioned as its last step; tools in /usr/local need
+# root's PATH.
+VM_FREEBSD_REQUIRED_TOOLS := zfs zpool ansible-playbook make python3 smbd net ctladm smartctl
+
+vm-freebsd-verify:
+	@limactl shell --tty=false $(VM_FREEBSD) -- test -e /var/db/dumpstore-provisioned >/dev/null 2>&1 \
+	  || { echo "provision script did not complete (no /var/db/dumpstore-provisioned) — rebuild: make vm-freebsd-destroy vm-freebsd-start"; exit 1; }
+	@missing=""; for tool in $(VM_FREEBSD_REQUIRED_TOOLS); do \
+	  limactl shell --tty=false $(VM_FREEBSD) -- sudo sh -c "command -v $$tool" >/dev/null 2>&1 || missing="$$missing $$tool"; \
+	done; [ -z "$$missing" ] || { echo "missing in VM:$$missing"; exit 1; }
+	@limactl shell --tty=false $(VM_FREEBSD) -- sudo zpool list -H -o name tank 2>/dev/null | grep -x tank
 
 vm-freebsd-deploy:
 	@echo "==> Packing source..."

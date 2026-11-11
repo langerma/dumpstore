@@ -101,6 +101,9 @@ const autosnapCronFiles = "/etc/cron.d/zfs-auto-snapshot /etc/cron.hourly/zfs-au
 // daemon to dumpstore and back, and checks the host's cron entry points come
 // back byte-for-byte (#152).
 func TestAutosnapTakeoverRelease(t *testing.T) {
+	if out, _ := vmExecErr("uname -s"); strings.TrimSpace(out) != "Linux" {
+		t.Skip("cron.d takeover is Linux-only; FreeBSD is TestAutosnapTakeoverReleaseFreeBSD")
+	}
 	skipUnlessVMTool(t, "zfs-auto-snapshot")
 	status := func() autosnapStatus {
 		return decode[autosnapStatus](t, apiOK(t, "GET", "/api/v1/auto-snapshot/status", nil))

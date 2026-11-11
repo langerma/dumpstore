@@ -75,12 +75,13 @@ The test: *does the feature make dumpstore better at running ZFS + shares, or do
 
 ## Build & Check
 
-**Run `make ci` before every commit and push** — it runs every PR check from `.github/workflows/` (the workflows call the same Makefile targets, so the two cannot drift) and prints a pass/fail table; logs in `.cache/ci/`. Backend changes also need `make ci-full` (Linux VM suite) and, for OS-layer code, `make ci-freebsd`. Don't push to find out whether CI passes.
+**Run `make ci` before every commit and push** — it runs every PR check from `.github/workflows/` (the workflows call the same Makefile targets, so the two cannot drift) and prints a pass/fail table; logs in `.cache/ci/`. Backend changes also need `make ci-full` (the Linux **and** FreeBSD VM suites — GitHub has no FreeBSD runner, so this is the only place FreeBSD is tested). Don't push to find out whether CI passes.
 
 ```bash
 make ci                    # all PR checks in parallel: ci-go ci-frontend ci-openapi-lint ci-forge ci-release ci-docs
-make ci-full               # + Linux VM integration suite with DUMPSTORE_REQUIRE_TOOLS=1
-make ci-freebsd            # FreeBSD VM suite (local only)
+make ci-full               # + Linux and FreeBSD VM suites in parallel, both with DUMPSTORE_REQUIRE_TOOLS=1
+make ci-integration        # Linux VM suite only (what CI's run-integration label runs)
+make ci-freebsd            # FreeBSD VM suite only (local only — CI has no FreeBSD VM)
 go build ./...             # must always pass before committing
 go vet ./...               # must always pass
 go test ./...              # unit tests (no external dependencies)
@@ -107,7 +108,7 @@ make vm-linux-deploy      # pack the tree, copy it in, `make install` inside the
 make vm-linux-ssh         # shell in the VM
 make test-integration     # drive the deployed instance over HTTP (see tests/integration/README.md)
 make vm-freebsd-start     # FreeBSD 15 VM (UI on :8081); then make vm-freebsd-deploy
-make vm-linux-verify      # fail if VM provisioning is incomplete (tools, tank pool)
+make vm-linux-verify      # fail if VM provisioning is incomplete (tools, tank pool); FreeBSD: vm-freebsd-verify
 make openapi              # regenerate api/openapi.json after route/type changes
 make screenshots          # regenerate screenshots/ against the Linux VM
 sudo make install         # build + install binary, playbooks, static/ and the service (systemd or rc.d)

@@ -15,10 +15,13 @@ make vm-linux-deploy    # build + install dumpstore inside the VM
 make test-integration   # run the suite from the host against http://localhost:8080
 ```
 
-`make ci-full` runs exactly what CI does: the PR checks (`make ci`), then
-start, `make vm-linux-verify`, deploy and the suite with
-`DUMPSTORE_REQUIRE_TOOLS=1`. `make ci-freebsd` starts, deploys and runs the
-suite against the FreeBSD VM.
+`make ci-full` runs the PR checks (`make ci`), then both VM suites in
+parallel: `make ci-integration` (Linux, exactly what CI's `run-integration`
+label runs) and `make ci-freebsd`. Each starts its VM, verifies provisioning
+(`make vm-linux-verify` / `make vm-freebsd-verify`), deploys, and runs the
+suite with `DUMPSTORE_REQUIRE_TOOLS=1`. CI has no FreeBSD VM, so
+`make ci-freebsd` is the only FreeBSD run — do it before pushing backend
+changes.
 
 The suite logs in as `admin` / `admin` (the dev VM default) and uses
 `limactl shell` for fixtures the API can't provide (writing files into
@@ -94,9 +97,11 @@ an aborted run cannot poison the next one.
 | `DUMPSTORE_USER` / `DUMPSTORE_PASS` | `admin` / `admin` | Login credentials |
 | `DUMPSTORE_TEST_POOL` | `tank` | Existing pool for dataset/snapshot tests |
 | `DUMPSTORE_TEST_DISKS` | `/dev/vdc,/dev/vdd,/dev/vde` | Three unused disks for pool tests (set empty to skip them) |
-| `DUMPSTORE_REQUIRE_TOOLS` | unset | `1` turns "tool not installed" skips into failures. CI sets it, since its VM is provisioned with every tool; locally, stale VMs keep skipping |
+| `DUMPSTORE_REQUIRE_TOOLS` | unset | `1` turns "tool not installed" skips into failures. CI, `make ci-integration` and `make ci-freebsd` set it, after checking the VM's provisioning; a plain `make test-integration` on a stale VM keeps skipping |
 
 ### Against the FreeBSD VM
+
+`make ci-freebsd` does all of this, strict. By hand:
 
 ```sh
 make vm-freebsd-start && make vm-freebsd-deploy

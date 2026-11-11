@@ -40,6 +40,10 @@
         fail_msg: "Dataset {{ dataset }} has no valid mountpoint (got: {{ _mp.stdout | trim }})"
 
     - name: Create usershare
+      # The ACL uses Everyone's well-known SID, not the name "everyone":
+      # resolving a name needs a running smbd, so on a host where Samba is
+      # stopped (a fresh FreeBSD install) `net` failed with "cannot convert
+      # name to a SID". net stores S-1-1-0:F either way.
       ansible.builtin.command:
         argv:
           - net
@@ -48,6 +52,6 @@
           - "{{ sharename }}"
           - "{{ _mp.stdout | trim }}"
           - ""
-          - "everyone:F"
+          - "S-1-1-0:F"
           - "guest_ok=n"
       changed_when: true
