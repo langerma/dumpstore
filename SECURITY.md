@@ -6,9 +6,9 @@ dumpstore is designed for **trusted, private networks** (home lab, local LAN). I
 
 ## Authentication
 
-dumpstore requires a password to access the UI and API. The password is bcrypt-hashed (cost 12) and stored in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD) (mode `0600`). Session tokens are 32 bytes from `crypto/rand` (256-bit entropy), stored in memory, and expire after a configurable TTL (default 24 h).
+dumpstore requires a password to access the UI and API. The password is hashed with argon2id (3 passes, 64 MiB, 4 threads; PHC string format) and stored in `/etc/dumpstore/dumpstore.conf` (Linux) or `/usr/local/etc/dumpstore/dumpstore.conf` (FreeBSD) (mode `0600`). Session tokens are 32 bytes from `crypto/rand` (256-bit entropy), stored in memory, and expire after a configurable TTL (default 24 h).
 
-Login attempts are rate-limited to 10 per IP per 60 seconds.
+Failed login attempts are rate-limited to 10 per IP per 60 seconds; a successful login resets the IP's counter. A blocked browser is redirected to the login page with an error, an API client (`Accept: application/json`) gets `429` with `Retry-After`.
 
 **Set or reset the password:**
 
@@ -35,6 +35,7 @@ dumpstore does **not** enforce HTTPS at the application layer. The session cooki
 - `POST /api/v1/users` — Unix user password
 - `PUT /api/v1/users/{name}` — Unix user password change
 - `PUT /api/v1/smb/users/{name}` — Samba password
+- `POST /api/v1/iscsi/targets` — iSCSI CHAP secret (`chap_password`)
 
 Without TLS these credentials travel in plaintext.
 
@@ -43,8 +44,7 @@ Without TLS these credentials travel in plaintext.
 1. **Reverse proxy with TLS termination** — put dumpstore behind nginx, Caddy, or Traefik and only expose the proxy over HTTPS. The proxy handles certificate management; dumpstore stays on `127.0.0.1`.
 2. **SSH tunnel** — `ssh -L 8080:localhost:8080 nas-host` and access via `http://localhost:8080`. No certificate required.
 3. **VPN** — restrict access to a WireGuard or OpenVPN network you already trust.
-
-A future release may add a built-in TLS flag (`-tls-cert` / `-tls-key`).
+4. **Built-in TLS** — start dumpstore with `--tls` and set `tls_cert_path` / `tls_key_path` in the config file (self-signed generation, an existing certificate, or ACME via `lego` from the UI). HTTPS listens on `--tls-port` (443) and `--http-port` (80) redirects to it. The certificate is loaded at startup, so restart after changing it. See the wiki's Installation page.
 
 ---
 
@@ -61,6 +61,8 @@ Known exception: on Linux, creating an iSCSI target with CHAP runs `targetcli �
 If you run dumpstore behind an authenticating proxy (nginx, Caddy, Authelia, etc.) you can configure the proxy's CIDR in `trusted_proxies` and have the proxy set `X-Remote-User`. dumpstore will accept that header as the authenticated identity from those IPs, bypassing the password login.
 
 **Never** configure `trusted_proxies` to include IPs you do not fully control — any host in that range can impersonate any username.
+
+**Same-host proxy caveat:** with the proxy on the dumpstore host, `trusted_proxies` has to contain `127.0.0.1/32`, and then **every local user or process** that can reach `127.0.0.1:8080` can send `X-Remote-User` and use the full API as root. Only do this on hosts without untrusted local users, or run the proxy on another host. Trust scoped to a permission-restricted unix socket is planned in [#212](https://github.com/langerma/dumpstore/issues/212).
 
 ---
 

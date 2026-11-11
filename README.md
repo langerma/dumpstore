@@ -92,9 +92,9 @@ cd dumpstore
 sudo ./install.sh
 ```
 
-The installer installs Go and Ansible if they are missing, builds the binary, installs to `/usr/local/lib/dumpstore/`, prompts for the admin password, and registers the systemd unit or rc.d script. Open `http://<host>:8080` and log in as `admin`.
+The installer builds the binary, installs to `/usr/local/lib/dumpstore/`, prompts for the admin password, and registers the systemd unit or rc.d script. If Go or Ansible is missing it installs them first: Go to `/usr/local/go`, Ansible only with apt (Debian/Ubuntu) or on FreeBSD; on other distributions install Ansible beforehand. Open `http://<host>:8080` and log in as `admin`.
 
-Remove it again with `sudo ./install.sh --uninstall`.
+Remove it again with `sudo ./install.sh --uninstall`. That removes the service and `/usr/local/lib/dumpstore`, but keeps the config and state directories and the Samba/ctld configs dumpstore rendered — see [Uninstall](https://github.com/langerma/dumpstore/wiki/Installation#uninstall).
 
 ## Requirements
 

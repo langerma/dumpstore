@@ -35,11 +35,20 @@ var (
 	adminUser = envOr("DUMPSTORE_USER", "admin")
 	adminPass = envOr("DUMPSTORE_PASS", "admin")
 	testPool  = envOr("DUMPSTORE_TEST_POOL", "tank")
-	testDisks = splitNonEmpty(envOr("DUMPSTORE_TEST_DISKS", "/dev/vdc,/dev/vdd,/dev/vde"))
+	testDisks = splitNonEmpty(envOrUnset("DUMPSTORE_TEST_DISKS", "/dev/vdc,/dev/vdd,/dev/vde"))
 )
 
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// envOrUnset is envOr where a variable that is set but empty counts as a
+// value: DUMPSTORE_TEST_DISKS= means "no disks", which skips the pool tests.
+func envOrUnset(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return def

@@ -69,7 +69,7 @@ After installing Samba, click **Initialize Samba** in the SMB section of the Use
 
 ## Install script (recommended)
 
-Clone the repository and run `install.sh` as root. It is a thin wrapper around `make install`, which installs Go and Ansible if absent, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
+Clone the repository and run `install.sh` as root. It is a thin wrapper around `make install`, which builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service. If Go or Ansible is missing, it installs them first: Go to `/usr/local/go`, Ansible only with apt (Debian/Ubuntu) or on FreeBSD; on other distributions install Ansible beforehand.
 
 ```bash
 git clone https://github.com/langerma/dumpstore.git
@@ -77,11 +77,7 @@ cd dumpstore
 sudo ./install.sh
 ```
 
-To remove dumpstore completely:
-
-```bash
-sudo ./install.sh --uninstall
-```
+To remove it, see [Uninstall](#uninstall).
 
 ---
 
@@ -300,11 +296,24 @@ The full metric list, all OTEL variables, span names, and the log/audit format a
 
 ## Uninstall
 
+If dumpstore took over auto-snapshots, **release** them first (Datasets tab banner, or `POST /api/v1/auto-snapshot/release`). Otherwise the OS's auto-snapshot cron entries stay disabled (`*.dumpstore-disabled`) or, on FreeBSD, the `zfs-periodic` switches stay `NO`.
+
 ```bash
 sudo make uninstall
 # or
 sudo ./install.sh --uninstall
 ```
+
+This stops and removes the service and `/usr/local/lib/dumpstore`. It deliberately leaves:
+
+| What | Linux | FreeBSD |
+|------|-------|---------|
+| Config: admin password hash, TLS settings, usershares | `/etc/dumpstore/` | `/usr/local/etc/dumpstore/` |
+| State: job records, replication tasks, auto-snapshot takeover records | `/var/lib/dumpstore/` | `/var/db/dumpstore/` |
+| Rendered service configs, still used by Samba/wsdd/ctld | `/etc/samba/smb.conf`, `/etc/default/wsdd` | `/usr/local/etc/smb4.conf`, `/etc/ctl.conf` |
+| The originals from before *Initialize* | `smb.conf.pre-dumpstore` | `smb4.conf.pre-dumpstore`, `ctl.conf.pre-dumpstore` |
+
+Shares, iSCSI targets, users and ZFS properties keep working without dumpstore. To go back to the configs from before dumpstore, restore the `.pre-dumpstore` files and reload the services. To remove everything, delete the config and state directories as well.
 
 ---
 

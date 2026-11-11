@@ -516,7 +516,7 @@ Set or remove a per-user/per-group quota (`userquota@<principal>` / `groupquota@
 { "kind": "user", "principal": "alice", "quota": "10G" }
 ```
 
-`"quota": "none"` removes the limit. Returns Ansible task steps.
+`"quota": "none"` removes the limit. Runs in-process (`zfs set userquota@…` / `groupquota@…`) and returns its step in `tasks`.
 
 ### DELETE /api/v1/datasets/{name}
 
@@ -660,14 +660,14 @@ Query parameters:
 
 Entries are capped at 10 000 (`truncated: true` when more changed). The dataset must be mounted for `zfs diff` to work.
 
-### DELETE /api/v1/snapshots/{snap}@{snapname}
+### DELETE /api/v1/snapshots/{snap}
 
 Destroys one snapshot. Runs in-process as `zfs destroy [-r] <dataset>@<snapname>`.
 
 - `?recursive=true` passes `-r`. This also destroys the snapshot with the **same name in every descendant dataset**. It does not destroy clones: dependent clones make the destroy fail.
 - Returns `400` if the path is not a valid `dataset@label`.
 - Returns `404` if the snapshot does not exist.
-- Does **not** release `dumpstore-repl` holds. A held replication snapshot fails with "dataset is busy". Use `POST /api/v1/snapshots/batch-delete`, which releases those holds first.
+- Releases dumpstore's `dumpstore-repl` hold first (#197), like batch delete, so a replication snapshot can be deleted. Holds placed by anything else still make the destroy fail with "dataset is busy".
 
 ```json
 { "snapshot": "tank/data@2026-05-06", "tasks": [ { "name": "Destroy snapshot tank/data@2026-05-06", "status": "changed" } ] }
@@ -732,7 +732,7 @@ Returns `404 operation not found or expired` for unknown IDs. Records are held i
 
 ## Jobs
 
-Long-running data-plane operations (currently snapshot send/receive) run as direct child processes outside Ansible, since they may run for hours. Each job has a status (`running`, `success`, `failed`, `cancelled`, `interrupted`), the captured argv, bounded stdout/stderr tails (last 64 KiB each), and timestamps. Records are persisted to disk so status survives a restart; any job left in `running` at shutdown is rewritten to `interrupted` on next boot.
+Long-running data-plane operations (job types `snapshot.send`, `replication.run`, `dataset.rewrite`) run as direct child processes outside Ansible, since they may run for hours. Each job has a status (`running`, `success`, `failed`, `cancelled`, `interrupted`), the captured argv, bounded stdout/stderr tails (last 64 KiB each), and timestamps. Records are persisted to disk so status survives a restart; any job left in `running` at shutdown is rewritten to `interrupted` on next boot.
 
 ### GET /api/v1/jobs
 
@@ -1576,7 +1576,7 @@ Reads the usershare files directly, so the list also includes shares whose path 
 
 ### PUT /api/v1/smb/shares/{name}
 
-Create or update a usershare for the dataset's mountpoint (`smb_usershare_set.yml` → `net usershare add <sharename> <mountpoint> "" everyone:F guest_ok=n`). Adding the share holds the [reference guard](#reference-guard-409) lock, so the dataset can't be destroyed or moved at the same moment. Once the share exists, it blocks destroy, rename and mountpoint changes of the dataset.
+Create or update a usershare for the dataset's mountpoint (`smb_usershare_set.yml` → `net usershare add <sharename> <mountpoint> "" S-1-1-0:F guest_ok=n`; `S-1-1-0` is Everyone's well-known SID, so no running `smbd` is needed to resolve it). Adding the share holds the [reference guard](#reference-guard-409) lock, so the dataset can't be destroyed or moved at the same moment. Once the share exists, it blocks destroy, rename and mountpoint changes of the dataset.
 
 The share name is the path parameter (1–80 chars of `[a-zA-Z0-9._-]`); the body names the dataset:
 
@@ -1641,7 +1641,7 @@ Returns the current `[homes]` configuration. If the section is not present, `ena
 ```json
 {
   "enabled": true,
-  "path": "/tank/homes/%S",
+  "path": "/tank/homes/%U",
   "browseable": "yes",
   "read_only": "no",
   "create_mask": "0644",
@@ -1655,7 +1655,7 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 
 ```json
 {
-  "path": "/tank/homes/%S",
+  "path": "/tank/homes/%U",
   "dataset": "tank/homes",
   "browseable": "yes",
   "read_only": "no",
@@ -1666,10 +1666,10 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `path` | yes | Base path for home directories (may include `%S` for username substitution) |
-| `dataset` | no | ZFS dataset to use as base path (alternative to specifying `path` directly) |
-| `browseable` | yes | `"yes"` or `"no"` — whether the share is visible in browse lists |
-| `read_only` | yes | `"yes"` or `"no"` |
+| `path` | one of `path`/`dataset` | Path of the home directories; `%U` is replaced by the username |
+| `dataset` | one of `path`/`dataset` | Dataset whose mountpoint + `/%U` becomes the path (used when `path` is empty) |
+| `browseable` | no | `"yes"` or `"no"` (default `"no"`) — whether the share is visible in browse lists |
+| `read_only` | no | `"yes"` or `"no"` (default `"no"`) |
 | `create_mask` | no | File creation mask (default `"0644"`) |
 | `directory_mask` | no | Directory creation mask (default `"0755"`) |
 
@@ -1712,7 +1712,7 @@ List all Time Machine shares. Parses `smb.conf` for sections with `fruit:time ma
 ```json
 [
   {
-    "sharename": "timemachine",
+    "name": "timemachine",
     "path": "/tank/backups/timemachine",
     "max_size": "1T",
     "valid_users": "alice bob"
@@ -1735,8 +1735,8 @@ Create or update the Time Machine share named by the path parameter. Returns Ans
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `dataset` | no | ZFS dataset (alternative to specifying `path` directly) |
-| `path` | yes | Filesystem path for the share |
+| `dataset` | one of `path`/`dataset` | Dataset whose mountpoint becomes the path (used when `path` is empty) |
+| `path` | one of `path`/`dataset` | Filesystem path for the share |
 | `max_size` | no | Maximum size quota for Time Machine backups |
 | `valid_users` | no | Space-separated list of allowed users |
 

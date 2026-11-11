@@ -4,7 +4,8 @@
 #
 # Usage:
 #   sudo ./install.sh              # install or upgrade
-#   sudo ./install.sh --uninstall  # remove everything
+#   sudo ./install.sh --uninstall  # remove the service and /usr/local/lib/dumpstore
+#                                  # (config, state and rendered smb.conf/ctl.conf stay)
 
 set -e
 

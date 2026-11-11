@@ -1,6 +1,6 @@
 [Unit]
 Description=dumpstore ZFS Web UI
-Documentation=https://github.com/yourorg/dumpstore
+Documentation=https://github.com/langerma/dumpstore
 After=network.target zfs-import.target zfs-mount.service
 Wants=zfs-import.target zfs-mount.service
 

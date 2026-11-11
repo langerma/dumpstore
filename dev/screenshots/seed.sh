@@ -107,7 +107,7 @@ for j in json.load(sys.stdin):
 	echo "==> Samba"
 	api POST /api/v1/smb/init
 	api PUT /api/v1/smb/shares/media "{\"dataset\":\"$POOL/media\"}"
-	api PUT /api/v1/smb/homes "{\"path\":\"/$POOL/homes/%S\",\"browseable\":\"no\",\"read_only\":\"no\",\"create_mask\":\"0644\",\"directory_mask\":\"0755\"}"
+	api PUT /api/v1/smb/homes "{\"path\":\"/$POOL/homes/%U\",\"browseable\":\"no\",\"read_only\":\"no\",\"create_mask\":\"0644\",\"directory_mask\":\"0755\"}"
 	api PUT /api/v1/smb/timemachine/timemachine "{\"path\":\"/$POOL/backups/timemachine\",\"max_size\":\"500G\",\"valid_users\":\"alice bob\"}"
 	if command -v apt-get >/dev/null && ! dpkg -s wsdd-server >/dev/null 2>&1; then
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -q wsdd-server >/dev/null
