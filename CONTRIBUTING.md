@@ -13,9 +13,10 @@ Thanks for your interest in contributing. dumpstore is a focused project with a 
 ```bash
 git clone https://github.com/langerma/dumpstore
 cd dumpstore
-go build ./...   # must pass
-go vet ./...     # must pass
+make ci          # every PR check from CI, run locally — must pass before you push
 ```
+
+`make ci` needs Go, Node (version in `.node-version`) and, for the Forge SDK check, Rust (`cargo`). `make ci-full` adds the Linux VM integration suite (needs [Lima](https://github.com/lima-vm/lima)).
 
 You need `ansible-playbook` in your PATH and a machine with ZFS to test write operations end-to-end. Read-only development can be done on any Linux box.
 
@@ -28,7 +29,8 @@ You need `ansible-playbook` in your PATH and a machine with ZFS to test write op
    - `README.md`
    - `docs/index.html`
    - relevant page in `wiki/`
-5. Open a PR against `main` using the pull request template.
+5. Run `make ci` (and `make ci-full` for backend changes) — it runs the same Makefile targets as the CI workflows.
+6. Open a PR against `main` using the pull request template.
 
 ## Conventions
 

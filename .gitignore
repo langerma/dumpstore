@@ -12,3 +12,6 @@ dist/
 # Claude Code
 .claude/
 dev/screenshots/node_modules/
+
+# local CI logs and tool checkouts (make ci)
+.cache/
