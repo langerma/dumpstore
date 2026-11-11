@@ -77,6 +77,7 @@
 | OpenAPI spec (phase 1)     | Unreleased | OpenAPI 3.1 spec generated from the route registry (`internal/apispec`), served at `GET /api/v1/openapi.json`, committed as `api/openapi.json` (staleness test + Redocly lint in CI); SDK group/method names for Forge on every operation; 28 GET handlers on a typed adapter. Phase 1 of #181 |
 | Metrics on the OTEL meter  | Unreleased | All dumpstore metrics (HTTP, Ansible, ops, Go runtime, build info) recorded once on the OTEL meter; `/metrics` served by its Prometheus exporter with names, types, labels and buckets unchanged (golden-tested), and the same instruments pushed over OTLP when enabled. Phase 3 of #49, closes #168 |
 | ctld config ownership (FreeBSD) | Unreleased | dumpstore renders `/etc/ctl.conf` whole from a template: one portal group per listen address (several targets on 0.0.0.0:3260 now work and survive restarts), working auth-none and discovery, IPv6 portals. One-time *Initialize ctld* (`POST /api/v1/iscsi/init`) backs up the old file and imports existing targets; reload verified via `ctladm portlist` + listeners, rolled back on failure. Closes #186 |
+| Inert playbook values      | Unreleased | Playbook values go to a root-only (`0600`) temp vars file passed as `--extra-vars @file`, not argv, with the root mapping tagged `!unsafe`, so Ansible never evaluates `{{ … }}` / `{% … %}` in a password, SSH key comment or other field (previously code execution as root) and no password shows up in `ps`. Verified on ansible-core 2.16, 2.20, 2.21. Closes #214 |
 
 ---
 
@@ -85,6 +86,7 @@
 | Bug                                                                                         | Priority | Issue                                                   | Notes                                                                                                   |
 |---------------------------------------------------------------------------------------------|----------|---------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
 | Let's Encrypt certificates cannot be renewed from dumpstore | Medium | [#190](https://github.com/langerma/dumpstore/issues/190) | ACME settings not persisted; TLS-ALPN-01 needs port 443; no timer; cert loaded once |
+| Linux iSCSI CHAP secret visible in `ps` while a target is created | Medium | [#218](https://github.com/langerma/dumpstore/issues/218) | `targetcli … set auth password=<secret>` takes the secret as an argument; all other playbook values left argv with #214 |
 | Same-host proxy: `trusted_proxies: ["127.0.0.1/32"]` trusts every local user's `X-Remote-User` | Medium | [#212](https://github.com/langerma/dumpstore/issues/212) | Any local process can impersonate the admin; fixed by socket-scoped trust in #212. Until then: proxy on another host, or no shared shell access |
 
 ---

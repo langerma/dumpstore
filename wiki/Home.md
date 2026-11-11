@@ -61,6 +61,8 @@ The installer prompts for the admin password, and the service listens on `http:/
 
 dumpstore has built-in session-based authentication (argon2id). If no password is configured the service binds to `127.0.0.1` only. It runs as root (required for ZFS) — see [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for TLS and the recommended deployment topology.
 
+Values handed to the Ansible playbooks (passwords included) travel in a root-only temporary file, not on the command line, and are marked `!unsafe` so Ansible never evaluates them as templates (#214).
+
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](https://github.com/langerma/dumpstore/blob/main/CONTRIBUTING.md) for the workflow, conventions, and docs update requirements. This project follows a [Code of Conduct](https://github.com/langerma/dumpstore/blob/main/CODE_OF_CONDUCT.md).

@@ -71,3 +71,22 @@ A quick `grep -n '<id>' static/index.html` and `grep -n 'function <cb>' static/a
 2. Screenshot the element with headless Chrome — `puppeteer-core` from `dev/screenshots/node_modules` (log in via `/login`, `page.$(sel).screenshot()`), then read the PNG.
 3. In flex containers, wrap mixed text + inline markup in one `<span>` so it stays a single flex item.
 4. "Not checked in a browser" in a summary is a TODO, not a status — do the check instead.
+
+## 8. The doc list is a gate before every commit, not something to remember
+
+**Mistake:** Repeated across PRs, most recently #214 (PR #241). I updated the docs the plan named (CHANGELOG, AGENTS.md, wiki/Architecture.md, SECURITY.md) and skipped README.md, docs/index.html, FEATURES.md and wiki/Home.md. CI's `check-docs` caught two of them, and my first move was to try the `skip-docs-check` label instead of writing the docs. FEATURES.md and wiki/Home.md weren't caught at all. Lesson 2 already listed these files. It didn't help, because a plan's "Docs" section silently replaced it.
+
+**Rule:** Before *every* commit that touches code (`main.go`, `internal/`, `static/`, `playbooks/`, `install.sh`, `Makefile`):
+
+1. Go through the full list, whatever a plan says. For each file, either edit it or say in the summary why it has nothing to say:
+   - `CHANGELOG.md`
+   - `README.md`
+   - `docs/index.html`
+   - `FEATURES.md` (Implemented row; open issues in Known Issues or Planned; closed issues out)
+   - `wiki/Home.md`
+   - the relevant `wiki/*.md` page
+   - `SECURITY.md` for security changes
+   - `AGENTS.md` if a rule or the file map changed
+2. Run `make ci` before committing and again before pushing; `ci-docs` is CI's docs check, run against the working tree. Don't push until every row says `pass`.
+3. Never add `skip-docs-check` yourself. If a change truly has nothing for README/docs, ask the user.
+4. A plan's "Docs" section is a minimum. It never replaces this list.
