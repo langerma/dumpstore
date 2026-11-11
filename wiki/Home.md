@@ -6,6 +6,8 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 
 dumpstore **manages** ZFS and sharing (SMB, NFS, iSCSI, wsdd, and the local users and permissions they need) and owns the config of every service it manages. Everything else — identity, monitoring, UPS, notifications — it only **integrates** with.
 
+> **AI disclosure:** dumpstore is developed with heavy use of AI coding assistants, mainly [Claude Code](https://claude.com/claude-code). Most commits are AI-assisted — they carry a `Co-Authored-By: Claude` trailer. Every change is merged by the maintainer and has to pass CI (build, unit tests, CodeQL, OpenAPI lint); the VM integration suite runs nightly and on labelled PRs. AI-written code can still contain subtle mistakes, and dumpstore runs as root and rewrites system configuration: read the code, try it on a non-critical machine first, and report problems through the issue tracker or [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md). Provided as is — see [LICENSE](https://github.com/langerma/dumpstore/blob/main/LICENSE).
+
 ## Features
 
 **Pools & disks**
