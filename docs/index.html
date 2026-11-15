@@ -519,7 +519,7 @@
           <span class="pool-name">I/O statistics</span>
           <span class="health-badge badge-blue">live</span>
         </div>
-        <p>Read/write IOPS and bandwidth per pool — pushed via <strong>Server-Sent Events</strong> every 10 s. Falls back to REST polling.</p>
+        <p>Read/write IOPS and bandwidth per pool — pushed via <strong>Server-Sent Events</strong> every 10 s. Falls back to REST polling as soon as the stream drops; the header badge shows <em>live</em> or <em>polling</em>.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
@@ -575,7 +575,7 @@
           <span class="pool-name">snapshot send/receive</span>
           <span class="health-badge badge-green">zfs send</span>
         </div>
-        <p>Replicate a snapshot to another local pool or to a remote host over SSH. Dispatched as a background job — the dialog returns immediately and the transfer is tracked in the Jobs tab with live status, runtime, output tails, and a cancel button. Optional incremental send picks a prior snapshot of the same dataset (<code>-i</code>); <code>--raw</code> preserves encryption. SSH keys must be pre-configured for the dumpstore service account; remote sends use <code>BatchMode=yes</code> so missing keys fail fast instead of hanging.</p>
+        <p>Replicate a snapshot to another local pool or to a remote host over SSH. Dispatched as a background job — the op-log confirms the started job right away and the transfer is tracked in the Jobs tab with live status, runtime, output tails, and a cancel button. Optional incremental send picks a prior snapshot of the same dataset (<code>-i</code>); <code>--raw</code> preserves encryption. SSH keys must be pre-configured for the dumpstore service account; remote sends use <code>BatchMode=yes</code> so missing keys fail fast instead of hanging.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">

@@ -1,5 +1,5 @@
-import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, fmtDate, fmtAge, startOp, toast, reZFSName, reSnapLabel, v1 } from './utils.js';
+import { state, storeSet, subscribe } from './store.js';
+import { api, delegate, esc, fmtAge, fmtBytes, fmtDate, refetch, reSnapLabel, reZFSName, startOp, toast, v1 } from './utils.js';
 
 // ── Render: Snapshots ─────────────────────────────────────────────────────────
 let snapFilter = '';
@@ -149,6 +149,18 @@ delegate(snapshotsWrap, {
   },
 }, 'change');
 
+// The batch selection must only hold snapshots that still exist. The list
+// changes through row deletes, batch deletes (also partly failed ones) and SSE
+// updates from other clients; pruning on every change keeps "Delete selected"
+// from sending names that are gone (#232). Registered at module load, so it
+// runs before app.js's render subscription.
+subscribe(['snapshots'], () => {
+  const live = new Set((state.snapshots || []).map(s => s.name));
+  for (const name of state.selectedSnaps) {
+    if (!live.has(name)) state.selectedSnaps.delete(name);
+  }
+});
+
 const deleteSnapDialog = document.getElementById('deleteSnapDialog');
 document.getElementById('deleteSnapCancelBtn').addEventListener('click', () => deleteSnapDialog.close());
 
@@ -232,8 +244,8 @@ document.getElementById('newSnapForm').addEventListener('submit', async e => {
   try {
     const result = await op.api('POST', v1`/snapshots`, { dataset, snapname, recursive });
     op.done(`Snapshot: ${dataset}@${snapname}`, result.tasks, null);
-    const snaps = await api('GET', v1`/snapshots`);
-    storeSet('snapshots', snaps || []);
+    const snaps = await refetch(api('GET', v1`/snapshots`));
+    if (snaps !== undefined) storeSet('snapshots', snaps || []);
   } catch (e) {
     op.done('Snapshot creation failed', e.tasks, e.message);
   }
@@ -268,8 +280,8 @@ document.getElementById('cloneSnapForm').addEventListener('submit', async e => {
   try {
     const result = await op.api('POST', v1`/snapshots/${snapshot}/clone`, { target });
     op.done(`Cloned: ${snapshot} → ${target}`, result.tasks, null);
-    const datasets = await api('GET', v1`/datasets`);
-    storeSet('datasets', datasets || []);
+    const datasets = await refetch(api('GET', v1`/datasets`));
+    if (datasets !== undefined) storeSet('datasets', datasets || []);
   } catch (err) {
     op.done('Clone failed', err.tasks, err.message);
   }
@@ -413,13 +425,14 @@ document.getElementById('sendSnapForm').addEventListener('submit', async e => {
     return;
   }
   sendSnapDialog.close();
+  const op = startOp(`Sending ${snapshot}…`);
   try {
     const body = { target, raw };
     if (incremental_from) body.incremental_from = incremental_from;
     if (remote) body.remote = remote;
-    await api('POST', v1`/snapshots/${snapshot}/send`, body);
-    toast('Replication started — see Jobs tab', 'ok');
+    const job = await op.api('POST', v1`/snapshots/${snapshot}/send`, body);
+    op.done(`Send started as job ${job.job_id.substring(0, 8)} — see the Jobs tab`, null, null);
   } catch (err) {
-    toast(`Send failed to start: ${err.message}`, 'err');
+    op.done(`Sending ${snapshot} failed to start`, err.tasks, err.message);
   }
 });

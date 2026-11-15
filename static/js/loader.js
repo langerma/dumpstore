@@ -218,13 +218,17 @@ export function startSSE() {
   }
 
   es.onerror = () => {
-    // Only fall back to polling when the browser has given up (CLOSED).
-    // A transient CONNECTING state means the browser is already retrying.
+    // Any error means the stream is not delivering: poll until onopen fires
+    // again (it stops polling and sets the badge back to "live"). While the
+    // server is down the browser keeps retrying with readyState CONNECTING,
+    // so waiting for CLOSED left the badge on "live" through a whole outage
+    // (#232); loadAll keeps the last good data when a poll fails.
+    startPolling();
     if (es.readyState === EventSource.CLOSED) {
+      // The browser has given up: probe now (an expired session 401s →
+      // redirect to /login) and reconnect ourselves.
       _es = null;
-      // Immediately probe: if the session expired this will 401 → redirect to /login.
       loadAll();
-      startPolling();
       if (!_sseRetryTimer) {
         _sseRetryTimer = setTimeout(() => { _sseRetryTimer = null; startSSE(); }, 5_000);
       }

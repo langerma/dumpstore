@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, toast, v1 } from './utils.js';
+import { api, delegate, esc, startOp, toast, v1 } from './utils.js';
 
 const STATUS_BADGES = {
   success:     'badge-green',
@@ -118,18 +118,20 @@ replForm.addEventListener('submit', async e => {
     recursive: document.getElementById('repl-recursive').checked,
     enabled: document.getElementById('repl-enabled').checked,
   };
+  // The dialog stays open under the op-log until the save succeeds, so a
+  // rejected form can be corrected without retyping it.
+  const op = startOp(id ? 'Updating replication task…' : 'Creating replication task…');
   try {
     if (id) {
-      await api('PATCH', v1`/replication/tasks/${id}`, body);
-      toast('Task updated', 'ok');
+      await op.api('PATCH', v1`/replication/tasks/${id}`, body);
     } else {
-      await api('POST', v1`/replication/tasks`, body);
-      toast('Task created', 'ok');
+      await op.api('POST', v1`/replication/tasks`, body);
     }
     replDialog.close();
+    op.done(id ? `Task updated: ${body.name}` : `Task created: ${body.name}`, null, null);
     await refreshReplications();
   } catch (err) {
-    toast(`Save failed: ${err.message}`, 'err');
+    op.done('Saving the replication task failed', err.tasks, err.message);
   }
 });
 
@@ -140,12 +142,13 @@ document.getElementById('replDeleteCancelBtn').addEventListener('click', () => r
 document.getElementById('replDeleteConfirmBtn').addEventListener('click', async () => {
   const id = _deleteId;
   replDeleteDialog.close();
+  const op = startOp('Deleting replication task…');
   try {
-    await api('DELETE', v1`/replication/tasks/${id}`);
-    toast('Task deleted', 'ok');
+    await op.api('DELETE', v1`/replication/tasks/${id}`);
+    op.done('Replication task deleted', null, null);
     await refreshReplications();
   } catch (err) {
-    toast(`Delete failed: ${err.message}`, 'err');
+    op.done('Deleting the replication task failed', err.tasks, err.message);
   }
 });
 
@@ -198,11 +201,12 @@ async function openHistoryDialog(id) {
 
 // ── Run now ──────────────────────────────────────────────────────────────────
 async function runReplication(id) {
+  const op = startOp('Starting replication run…');
   try {
-    const out = await api('POST', v1`/replication/tasks/${id}/run`);
-    toast(`Started job ${out.job_id.substring(0, 8)}…`, 'ok');
+    const out = await op.api('POST', v1`/replication/tasks/${id}/run`);
+    op.done(`Started job ${out.job_id.substring(0, 8)} — see the Jobs tab`, null, null);
   } catch (err) {
-    toast(`Run failed: ${err.message}`, 'err');
+    op.done('Starting the replication run failed', err.tasks, err.message);
   }
 }
 

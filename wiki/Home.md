@@ -41,7 +41,7 @@ dumpstore **manages** ZFS and sharing (SMB, NFS, iSCSI, wsdd, and the local user
 
 **Operations**
 - Session login with argon2id, reverse-proxy delegation (`X-Remote-User`), TLS with self-signed, existing, or ACME certificates
-- Live UI updates over Server-Sent Events; every write streams its own progress to the tab that started it, and its result survives a dropped connection (operation IDs)
+- Live UI updates over Server-Sent Events, with REST polling as soon as the stream drops (the header badge shows *live* or *polling*); every write streams its own progress to the tab that started it, and its result survives a dropped connection (operation IDs)
 - Prometheus `/metrics` and optional OpenTelemetry export (traces, logs, metrics)
 - Per-request `req_id` log correlation and an audit line for every mutating operation
 

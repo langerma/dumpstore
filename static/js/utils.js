@@ -314,6 +314,21 @@ function appendOpLogStep(step) {
   stepsEl.appendChild(div);
 }
 
+// ── Refetch after a write ─────────────────────────────────────────────────────
+// The data refresh that follows a successful write. The write's outcome is
+// already decided, so a failing refresh must not reach the write's catch and
+// report it as failed (#232). It warns and resolves to undefined; SSE or the
+// next poll brings the data. Wrap the refresh call: refetch(api(<GET request>)).
+export async function refetch(promise) {
+  try {
+    return await promise;
+  } catch (e) {
+    console.warn('[refetch]', e);
+    toast(`Saved, but refreshing the view failed: ${e.message}`, 'err');
+    return undefined;
+  }
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
 export function toast(msg, type = 'ok') {

@@ -182,6 +182,20 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Frontend defects from the code audit** (#232):
+  - **Snapshot batch delete** no longer sends snapshots that are gone. The selection is pruned on every snapshot-list change: row deletes, partly failed batches, and SSE updates from other clients. Before, every later batch delete failed until a reload.
+  - **Every write shows the op-log.** Replication create/update/delete/run, job remove/cancel, snapshot send and rewrite start used toast-only feedback; they now run in an op-log session (operation ID, result recovery after a dropped connection). A rejected replication form stays open for correction.
+  - **A failing refresh after a successful write** no longer reports the write as failed (new `refetch()` helper).
+  - **The header badge no longer says *live* during an outage.** Any SSE error now switches to REST polling and the *polling* badge until the stream reconnects. Before, the browser's own reconnect attempts kept the badge on *live* and polling never started.
+  - **TLS expiry** shows "expires within a day" or "expired N days ago" instead of "(undefined days)".
+  - **Smaller fixes:**
+    - The username badge is no longer double-escaped (`&` showed as `&amp;`).
+    - After a username change the redirect to the login page also happens when the op-log is closed with Esc.
+    - Auto-snapshot takeover/release op-logs say whether they succeeded.
+  - **Markup and CSS:**
+    - Listeners for re-rendered buttons (auto-snapshot banner, SMB home shares, ACL dialog, ACME renew, pool-import radios) moved to delegation.
+    - The ACL type badge, the job output `<pre>` (scrollable, max 16rem) and the scrub-schedule note have CSS rules.
+    - Removed: the no-op `data-table` class, the unused `#scrubCronRows`, `.prop-inherited` and `.type-snapshot`.
 - **Enabling SMB home shares broke the Users & Groups tab** (#231, regression from #181). The homes dialog stored `result.config`, but since the typed handlers `PUT /api/v1/smb/homes` returns the settings flat (`{enabled, path, …, tasks}`). `state.smbHomes` became `undefined`, so the successful write showed "Failed to enable home shares: Cannot read properties of undefined (reading 'enabled')" and the section kept saying "disabled" until a reload. The dialog now stores the result without `tasks`, which is the shape `GET /api/v1/smb/homes` returns. Reproduced and verified in headless Chrome against the Linux VM. A new unit test, `TestFrontendResponseFields`, checks every field the frontend reads from an API response against the published response schema, so this class of bug fails `go test`; it found no other case.
 - **Documentation drift from the code audit** (#237).
   - **SECURITY.md:** argon2id instead of "bcrypt (cost 12)"; the rate limit counts only failed logins; built-in TLS (`--tls`) listed as a mitigation instead of "a future release may add"; `POST /api/v1/iscsi/targets` (`chap_password`) added to the secret-carrying endpoints; the same-host proxy caveat (#212).
