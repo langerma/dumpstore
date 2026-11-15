@@ -182,6 +182,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Enabling SMB home shares broke the Users & Groups tab** (#231, regression from #181). The homes dialog stored `result.config`, but since the typed handlers `PUT /api/v1/smb/homes` returns the settings flat (`{enabled, path, …, tasks}`). `state.smbHomes` became `undefined`, so the successful write showed "Failed to enable home shares: Cannot read properties of undefined (reading 'enabled')" and the section kept saying "disabled" until a reload. The dialog now stores the result without `tasks`, which is the shape `GET /api/v1/smb/homes` returns. Reproduced and verified in headless Chrome against the Linux VM. A new unit test, `TestFrontendResponseFields`, checks every field the frontend reads from an API response against the published response schema, so this class of bug fails `go test`; it found no other case.
 - **Documentation drift from the code audit** (#237).
   - **SECURITY.md:** argon2id instead of "bcrypt (cost 12)"; the rate limit counts only failed logins; built-in TLS (`--tls`) listed as a mitigation instead of "a future release may add"; `POST /api/v1/iscsi/targets` (`chap_password`) added to the secret-carrying endpoints; the same-host proxy caveat (#212).
   - **API reference:**
