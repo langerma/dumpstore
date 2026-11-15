@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtDate, toast, v1 } from './utils.js';
+import { delegate, esc, fmtDate, startOp, toast, v1 } from './utils.js';
 
 const STATUS_BADGES = {
   pending:     'badge-blue',
@@ -101,11 +101,13 @@ delegate(document.getElementById('jobs-wrap'), {
 });
 
 async function removeJob(id) {
+  const op = startOp('Removing job…');
   try {
-    await api('DELETE', v1`/jobs/${id}`);
+    await op.api('DELETE', v1`/jobs/${id}`);
+    op.done(`Job ${id.substring(0, 8)} removed`, null, null);
     storeSet('jobs', (state.jobs || []).filter(j => j.id !== id));
   } catch (err) {
-    toast(`Remove failed: ${err.message}`, 'err');
+    op.done('Failed to remove job', err.tasks, err.message);
   }
 }
 
@@ -116,11 +118,12 @@ document.getElementById('cancelJobBackBtn').addEventListener('click', () => canc
 document.getElementById('cancelJobConfirmBtn').addEventListener('click', async () => {
   const id = _cancelId;
   cancelDialog.close();
+  const op = startOp('Cancelling job…');
   try {
-    await api('POST', v1`/jobs/${id}/cancel`);
-    toast('Cancellation signalled', 'ok');
+    await op.api('POST', v1`/jobs/${id}/cancel`);
+    op.done(`Cancellation signalled to job ${id.substring(0, 8)}`, null, null);
   } catch (err) {
-    toast(`Cancel failed: ${err.message}`, 'err');
+    op.done('Failed to cancel job', err.tasks, err.message);
   }
 });
 
@@ -144,7 +147,7 @@ function openJobDetailDialog(id) {
   document.getElementById('jobDetailTitle').textContent = `${job.type} — ${job.status}`;
   const body = document.getElementById('jobDetailBody');
   const meta = `
-    <table class="data-table" style="margin-bottom:0.75rem">
+    <table style="margin-bottom:0.75rem">
       <tbody>
         <tr><td class="muted">ID</td><td class="mono">${esc(job.id)}</td></tr>
         <tr><td class="muted">Status</td><td>${esc(job.status)}</td></tr>

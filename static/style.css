@@ -414,7 +414,10 @@ tr.row-muted td { color: var(--text-muted); opacity: 0.6; }
 .type-pool        { background: #1e2e1e; color: #7dffb3; }
 .type-filesystem  { background: #1a2d4f; color: #7cb9ff; }
 .type-volume      { background: #2a1a4f; color: #c07cff; }
-.type-snapshot    { background: #1a2e1a; color: #7cff9a; }
+/* ACL type badge in the ACL dialog: type-${acl_type} */
+.type-posix       { background: #1a2d4f; color: #7cb9ff; }
+.type-nfsv4       { background: #2a1a4f; color: #c07cff; }
+.type-off         { background: var(--surface2); color: var(--text-muted); }
 .net-up           { background: #0d3d2e; color: var(--green); }
 .net-down         { background: #3d1010; color: var(--red); }
 .sw-missing       { background: #3d1010; color: var(--red); }
@@ -1006,4 +1009,29 @@ tbody tr.selected td { background: var(--accent-dim); }
 .ds-row, .pool-header-row { cursor: pointer; }
 
 /* Inherited property values */
-.prop-inherited { color: var(--text-muted); font-style: italic; }
+
+/* Pool card: scrub schedule note next to the scrub buttons */
+.scrub-schedule-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.scrub-schedule-badge.muted { border-style: dashed; }
+
+/* Job detail dialog: captured stdout/stderr tail (up to 64 KiB each) */
+.oplog-output {
+  font-family: var(--font);
+  font-size: 11px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}

@@ -486,19 +486,13 @@ async function openImportPoolDialog() {
         <thead><tr><th></th><th>Pool</th><th>State</th><th>ID</th></tr></thead>
         <tbody>${pools.map(p => `
           <tr>
-            <td><input type="radio" name="importPoolPick" value="${esc(p.name)}"></td>
+            <td><input type="radio" name="importPoolPick" value="${esc(p.name)}" data-action="pick"></td>
             <td class="mono">${esc(p.name)}</td>
             <td><span class="health-badge health-${esc(p.state)}">${esc(p.state)}</span></td>
             <td class="muted mono">${esc(p.id)}</td>
           </tr>${p.status ? `<tr><td></td><td colspan="3" class="muted">${esc(p.status)}</td></tr>` : ''}`).join('')}
         </tbody>
       </table>`;
-    list.querySelectorAll('input[name=importPoolPick]').forEach(rb => {
-      rb.addEventListener('change', () => {
-        _importPoolSelected = rb.value;
-        document.getElementById('importPoolConfirmBtn').disabled = false;
-      });
-    });
   } catch (err) {
     list.innerHTML = `<div class="loading">Scan failed: ${esc(err.message)}</div>`;
   }
@@ -520,6 +514,12 @@ async function confirmImportPool() {
   }
 }
 
+delegate(document.getElementById('importPoolList'), {
+  pick: (_, rb) => {
+    _importPoolSelected = rb.value;
+    document.getElementById('importPoolConfirmBtn').disabled = false;
+  },
+}, 'change');
 document.getElementById('importPoolBtn').addEventListener('click', openImportPoolDialog);
 document.getElementById('importPoolConfirmBtn').addEventListener('click', confirmImportPool);
 document.getElementById('importPoolCancelBtn').addEventListener('click', () => document.getElementById('importPoolDialog').close());
@@ -690,7 +690,6 @@ function openScrubScheduleDialog(pool) {
   const allDefault = Object.keys(state.scrubSchedules).length === 0;
   document.getElementById('scrubSchedulePool').textContent = pool;
 
-  document.getElementById('scrubCronRows').style.display = 'none'; // unused
   document.getElementById('scrubPeriodicRow').style.display = periodic ? '' : 'none';
   document.getElementById('scrubZfsutilsRow').style.display = periodic ? 'none' : '';
 

@@ -52,7 +52,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 **Operations**
 - Session login with argon2id and per-IP limiting of failed logins (`429` for API clients), reverse-proxy delegation (`X-Remote-User`), TLS with self-signed, existing, or ACME certificates
-- Live UI updates over Server-Sent Events; every write streams its own progress to the tab that started it, and its result survives a dropped connection (operation IDs)
+- Live UI updates over Server-Sent Events, with REST polling as soon as the stream drops (the header badge shows *live* or *polling*); every write streams its own progress to the tab that started it, and its result survives a dropped connection (operation IDs)
 - Prometheus `/metrics` and optional OpenTelemetry export (traces, logs, metrics) — one OTEL meter backs both, so OTLP carries the same metrics as `/metrics`
 - Per-request `req_id` log correlation and an audit line for every mutating operation
 - Versioned HTTP API under `/api/v1` (names percent-encoded in paths) with an OpenAPI 3.1 description generated from the server's route registry: named request and response schemas and documented error statuses for every route (`GET /api/v1/openapi.json`, committed as [`api/openapi.json`](api/openapi.json))

@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, opLogDialog, startOp, toast, reZFSName, v1 } from './utils.js';
+import { api, delegate, esc, fmtBytes, opLogDialog, refetch, startOp, toast, reZFSName, v1 } from './utils.js';
 
 // Dataset-scoped dialogs: delete, rename, rewrite, per-user quotas, ACL,
 // chown, NFS, SMB, iSCSI. Moved out of datasets.js so both the table and the
@@ -61,9 +61,9 @@ deleteDatasetBtn.addEventListener('click', async () => {
   try {
     const result = await op.api('DELETE', v1`/datasets/${name}?recursive=${recursive}`);
     op.done(`Deleted dataset: ${name}`, result.tasks, null);
-    const datasets = await api('GET', v1`/datasets`);
     state.collapsedDatasets.delete(name);
-    storeSet('datasets', datasets || []);
+    const datasets = await refetch(api('GET', v1`/datasets`));
+    if (datasets !== undefined) storeSet('datasets', datasets || []);
   } catch (e) {
     op.done(`Failed to delete ${name}`, e.tasks, e.message, e.conflicts);
   }
@@ -102,8 +102,8 @@ document.getElementById('renameDatasetForm').addEventListener('submit', async e 
   try {
     const result = await op.api('POST', v1`/datasets/${name}/rename`, { new_name: newName });
     op.done(`Renamed: ${name} → ${newName}`, result.tasks, null);
-    const datasets = await api('GET', v1`/datasets`);
-    storeSet('datasets', datasets || []);
+    const datasets = await refetch(api('GET', v1`/datasets`));
+    if (datasets !== undefined) storeSet('datasets', datasets || []);
   } catch (err) {
     op.done('Rename failed', err.tasks, err.message, err.conflicts);
   }
@@ -127,15 +127,16 @@ export function openRewriteDialog(name) {
 document.getElementById('rewriteStartBtn').addEventListener('click', async () => {
   const name = _rewriteDataset;
   rewriteDialog.close();
+  const op = startOp(`Starting rewrite of ${name}…`);
   try {
-    const data = await api('POST', v1`/datasets/${name}/rewrite`, {
+    const data = await op.api('POST', v1`/datasets/${name}/rewrite`, {
       recursive: document.getElementById('rewrite-recursive').checked,
       skip_snapshot_shared: document.getElementById('rewrite-skip-snap').checked,
       skip_clone_shared: document.getElementById('rewrite-skip-clone').checked,
     });
-    toast(`Rewrite job ${data.job_id} started on ${name} — see Jobs tab`, 'ok');
+    op.done(`Rewrite job ${data.job_id} started on ${name} — see the Jobs tab`, null, null);
   } catch (e) {
-    toast(`Rewrite failed to start: ${e.message}`, 'err');
+    op.done(`Rewrite of ${name} failed to start`, e.tasks, e.message);
   }
 });
 
@@ -265,26 +266,21 @@ function renderACLDialog() {
 
   const typeBadgeACL = t => `<span class="type-badge type-${esc(t)}">${esc(t)}</span>`;
   const disableBtn = d.acl_type !== 'off'
-    ? `<button class="btn-danger btn-small" id="aclDisable">Disable ACLs</button>`
+    ? `<button class="btn-danger btn-small" data-action="disable-acl">Disable ACLs</button>`
     : '';
   document.getElementById('aclDialogMeta').innerHTML =
     `<p class="acl-meta">Mountpoint: <code>${esc(d.mountpoint || '—')}</code> &nbsp; Type: ${typeBadgeACL(d.acl_type || 'off')} ${disableBtn}</p>`;
-  if (disableBtn) {
-    document.getElementById('aclDisable').addEventListener('click', () => disableACLs(d.dataset));
-  }
 
   if (d.acl_type === 'off') {
     document.getElementById('aclDialogEntries').innerHTML = `
       <div class="acl-off">
         <p class="muted">ACLs are not enabled on this dataset.</p>
         <div class="row-actions">
-          <button class="btn-primary" id="aclEnablePosix">Enable POSIX ACLs</button>
-          <button class="btn-secondary" id="aclEnableNfs4">Enable NFSv4 ACLs</button>
+          <button class="btn-primary" data-action="enable-acl" data-type="posix">Enable POSIX ACLs</button>
+          <button class="btn-secondary" data-action="enable-acl" data-type="nfsv4">Enable NFSv4 ACLs</button>
         </div>
       </div>`;
     document.getElementById('aclDialogAddForm').innerHTML = '';
-    document.getElementById('aclEnablePosix').addEventListener('click', () => enableACLs(d.dataset, 'posix'));
-    document.getElementById('aclEnableNfs4').addEventListener('click', () => enableACLs(d.dataset, 'nfsv4'));
     return;
   }
 
@@ -349,9 +345,27 @@ function renderNFSv4ACLEntries(d) {
     </table>`;
 }
 
+delegate(document.getElementById('aclDialogMeta'), {
+  'disable-acl': () => disableACLs(state.aclData.dataset),
+});
 delegate(document.getElementById('aclDialogEntries'), {
   'remove-entry': ({ entry }) => removeACLEntry(entry, false),
+  'enable-acl': ({ type }) => enableACLs(state.aclData.dataset, type),
 });
+// The add forms are re-rendered with the dialog; their listeners live on the
+// stable container (#232).
+const aclAddForm = document.getElementById('aclDialogAddForm');
+delegate(aclAddForm, {
+  'add-posix': () => addPOSIXEntryFromForm(),
+  'add-nfs4': () => addNFSv4EntryFromForm(),
+});
+delegate(aclAddForm, {
+  'acl-tag': (_, sel) => {
+    const t = sel.value;
+    document.getElementById('aclQualifierLabel').style.display = (t === 'user' || t === 'group') ? '' : 'none';
+    document.getElementById('aclQualifier').setAttribute('list', t === 'group' ? 'aclGroupList' : 'aclUserList');
+  },
+}, 'change');
 
 function renderPOSIXAddForm(_d) {
   const userList = state.users.map(u => `<option value="${esc(u.username)}">`).join('');
@@ -364,7 +378,7 @@ function renderPOSIXAddForm(_d) {
       <datalist id="aclGroupList">${groupList}</datalist>
       <div class="form-grid">
         <label>Tag
-          <select id="aclTag">
+          <select id="aclTag" data-action="acl-tag">
             <option value="user">user</option>
             <option value="group">group</option>
             <option value="mask">mask</option>
@@ -383,41 +397,27 @@ function renderPOSIXAddForm(_d) {
         <label class="checkbox-label"><input type="checkbox" id="aclRecursive"> recursive</label>
       </div>
       <div class="dialog-actions" style="margin-top:0.5rem;padding-top:0">
-        <button type="button" class="btn-primary" id="aclAddBtn">Add Entry</button>
+        <button type="button" class="btn-primary" data-action="add-posix">Add Entry</button>
       </div>
     </fieldset>`;
+}
 
-  const tagSel = document.getElementById('aclTag');
-  const qualLabel = document.getElementById('aclQualifierLabel');
-  const qualInput = document.getElementById('aclQualifier');
-  tagSel.addEventListener('change', () => {
-    const t = tagSel.value;
-    const hasQualifier = t === 'user' || t === 'group';
-    qualLabel.style.display = hasQualifier ? '' : 'none';
-    if (t === 'group') {
-      qualInput.setAttribute('list', 'aclGroupList');
-    } else {
-      qualInput.setAttribute('list', 'aclUserList');
-    }
-  });
+async function addPOSIXEntryFromForm() {
+  const tag = document.getElementById('aclTag').value;
+  const qualifier = document.getElementById('aclQualifier').value.trim();
+  const r = document.getElementById('aclPermR').checked ? 'r' : '-';
+  const w = document.getElementById('aclPermW').checked ? 'w' : '-';
+  const x = document.getElementById('aclPermX').checked ? 'x' : '-';
+  const isDefault = document.getElementById('aclDefault').checked;
+  const recursive = document.getElementById('aclRecursive').checked;
 
-  document.getElementById('aclAddBtn').addEventListener('click', async () => {
-    const tag = tagSel.value;
-    const qualifier = qualInput.value.trim();
-    const r = document.getElementById('aclPermR').checked ? 'r' : '-';
-    const w = document.getElementById('aclPermW').checked ? 'w' : '-';
-    const x = document.getElementById('aclPermX').checked ? 'x' : '-';
-    const isDefault = document.getElementById('aclDefault').checked;
-    const recursive = document.getElementById('aclRecursive').checked;
+  let spec = tag;
+  if (tag === 'user' || tag === 'group') spec += ':' + qualifier;
+  else spec += ':';
+  spec += ':' + r + w + x;
+  if (isDefault) spec = 'default:' + spec;
 
-    let spec = tag;
-    if (tag === 'user' || tag === 'group') spec += ':' + qualifier;
-    else spec += ':';
-    spec += ':' + r + w + x;
-    if (isDefault) spec = 'default:' + spec;
-
-    await addACLEntry(spec, recursive);
-  });
+  await addACLEntry(spec, recursive);
 }
 
 function renderNFSv4AddForm(_d) {
@@ -460,38 +460,38 @@ function renderNFSv4AddForm(_d) {
         <label class="checkbox-label"><input type="checkbox" id="nfs4BigC"> write-ACL (C)</label>
       </div>
       <div class="dialog-actions" style="margin-top:0.5rem;padding-top:0">
-        <button type="button" class="btn-primary" id="aclNfs4AddBtn">Add Entry</button>
+        <button type="button" class="btn-primary" data-action="add-nfs4">Add Entry</button>
       </div>
     </fieldset>`;
+}
 
-  document.getElementById('aclNfs4AddBtn').addEventListener('click', async () => {
-    const type = document.getElementById('aclNfs4Type').value;
-    const principal = document.getElementById('aclNfs4Principal').value.trim();
-    if (!principal) { toast('Principal is required', 'err'); return; }
+async function addNFSv4EntryFromForm() {
+  const type = document.getElementById('aclNfs4Type').value;
+  const principal = document.getElementById('aclNfs4Principal').value.trim();
+  if (!principal) { toast('Principal is required', 'err'); return; }
 
-    const flags = [
-      document.getElementById('nfs4FlagF').checked ? 'f' : '',
-      document.getElementById('nfs4FlagD').checked ? 'd' : '',
-      document.getElementById('nfs4FlagI').checked ? 'i' : '',
-      document.getElementById('nfs4FlagN').checked ? 'n' : '',
-    ].join('');
+  const flags = [
+    document.getElementById('nfs4FlagF').checked ? 'f' : '',
+    document.getElementById('nfs4FlagD').checked ? 'd' : '',
+    document.getElementById('nfs4FlagI').checked ? 'i' : '',
+    document.getElementById('nfs4FlagN').checked ? 'n' : '',
+  ].join('');
 
-    const perms = [
-      document.getElementById('nfs4R').checked    ? 'r' : '',
-      document.getElementById('nfs4W').checked    ? 'w' : '',
-      document.getElementById('nfs4X').checked    ? 'x' : '',
-      document.getElementById('nfs4A').checked    ? 'a' : '',
-      document.getElementById('nfs4Del').checked  ? 'd' : '',
-      document.getElementById('nfs4DelC').checked ? 'D' : '',
-      document.getElementById('nfs4C').checked    ? 'c' : '',
-      document.getElementById('nfs4BigC').checked ? 'C' : '',
-    ].join('');
+  const perms = [
+    document.getElementById('nfs4R').checked    ? 'r' : '',
+    document.getElementById('nfs4W').checked    ? 'w' : '',
+    document.getElementById('nfs4X').checked    ? 'x' : '',
+    document.getElementById('nfs4A').checked    ? 'a' : '',
+    document.getElementById('nfs4Del').checked  ? 'd' : '',
+    document.getElementById('nfs4DelC').checked ? 'D' : '',
+    document.getElementById('nfs4C').checked    ? 'c' : '',
+    document.getElementById('nfs4BigC').checked ? 'C' : '',
+  ].join('');
 
-    if (!perms) { toast('Select at least one permission', 'err'); return; }
+  if (!perms) { toast('Select at least one permission', 'err'); return; }
 
-    const ace = `${type}:${flags}:${principal}:${perms}`;
-    await addACLEntry(ace, false);
-  });
+  const ace = `${type}:${flags}:${principal}:${perms}`;
+  await addACLEntry(ace, false);
 }
 
 export async function refreshACLStatus() {
@@ -507,8 +507,8 @@ async function addACLEntry(ace, recursive) {
     const res = await op.api('POST', v1`/datasets/${dataset}/acl/entries`,
       { ace, recursive });
     op.done(`ACL entry added — ${dataset}`, res.tasks, null);
-    state.aclData = await api('GET', v1`/datasets/${dataset}/acl`);
-    renderACLDialog();
+    const acl = await refetch(api('GET', v1`/datasets/${dataset}/acl`));
+    if (acl) { state.aclData = acl; renderACLDialog(); }
     refreshACLStatus();
   } catch (err) {
     op.done(`Failed to add ACL entry`, err.tasks, err.message);
@@ -521,8 +521,8 @@ async function removeACLEntry(entry, recursive) {
   try {
     const res = await op.api('DELETE', v1`/datasets/${dataset}/acl/entries?entry=${entry}&recursive=${!!recursive}`);
     op.done(`ACL entry removed — ${dataset}`, res.tasks, null);
-    state.aclData = await api('GET', v1`/datasets/${dataset}/acl`);
-    renderACLDialog();
+    const acl = await refetch(api('GET', v1`/datasets/${dataset}/acl`));
+    if (acl) { state.aclData = acl; renderACLDialog(); }
     refreshACLStatus();
   } catch (err) {
     op.done(`Failed to remove ACL entry`, err.tasks, err.message);
@@ -535,8 +535,8 @@ async function enableACLs(dataset, acltype) {
     const res = await op.api('PATCH', v1`/datasets/${dataset}`,
       { acltype });
     op.done(`Enabled ${acltype} ACLs — ${dataset}`, res.tasks, null);
-    state.aclData = await api('GET', v1`/datasets/${dataset}/acl`);
-    renderACLDialog();
+    const acl = await refetch(api('GET', v1`/datasets/${dataset}/acl`));
+    if (acl) { state.aclData = acl; renderACLDialog(); }
     refreshACLStatus();
   } catch (err) {
     op.done(`Failed to enable ACLs`, err.tasks, err.message);
@@ -553,8 +553,8 @@ document.getElementById('disableACLConfirmBtn').addEventListener('click', async 
     const res = await op.api('PATCH', v1`/datasets/${dataset}`,
       { acltype: 'off' });
     op.done(`Disabled ACLs — ${dataset}`, res.tasks, null);
-    state.aclData = await api('GET', v1`/datasets/${dataset}/acl`);
-    renderACLDialog();
+    const acl = await refetch(api('GET', v1`/datasets/${dataset}/acl`));
+    if (acl) { state.aclData = acl; renderACLDialog(); }
     refreshACLStatus();
   } catch (err) {
     op.done(`Failed to disable ACLs`, err.tasks, err.message);
@@ -727,9 +727,11 @@ document.getElementById('smb-sharename').addEventListener('input', e => {
   _smbUNCPreview(e.target.value, _smbDataset);
 });
 
+// After a write. A failed refresh keeps the current list (it used to be
+// replaced with [], so every share seemed gone) (#232).
 async function _refreshSMBShares() {
-  const shares = await api('GET', v1`/smb/shares`).catch(() => []);
-  storeSet('smbShares', shares || []);
+  const shares = await refetch(api('GET', v1`/smb/shares`));
+  if (shares !== undefined) storeSet('smbShares', shares || []);
 }
 
 document.getElementById('smbAddBtn').addEventListener('click', async () => {
@@ -772,9 +774,10 @@ document.getElementById('iscsiAuthMode').addEventListener('change', e => {
   document.getElementById('iscsiCHAPFields').style.display = e.target.value === 'chap' ? '' : 'none';
 });
 
+// After a write; see _refreshSMBShares (#232).
 async function _refreshISCSITargets() {
-  const targets = await api('GET', v1`/iscsi/targets`).catch(() => []);
-  storeSet('iscsiTargets', targets || []);
+  const targets = await refetch(api('GET', v1`/iscsi/targets`));
+  if (targets !== undefined) storeSet('iscsiTargets', targets || []);
 }
 
 export async function openISCSIDialog(dataset) {

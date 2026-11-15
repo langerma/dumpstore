@@ -9,7 +9,7 @@ import { renderServices } from './js/services.js';
 import { renderJobs } from './js/jobs.js';
 import { renderReplications } from './js/replication.js';
 import { renderAutoSnapStatus } from './js/autosnap.js';
-import { api, esc, toast, startOp, v1 } from './js/utils.js';
+import { api, delegate, esc, opLogDialog, toast, startOp, v1 } from './js/utils.js';
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
 subscribe(['sysinfo', 'version', 'schema'],                     renderSysInfo);
@@ -59,7 +59,7 @@ async function initAuthHeader() {
     const badge = document.getElementById('userBadge');
     const logoutBtn = document.getElementById('logoutBtn');
     if (data?.user) {
-      badge.textContent = esc(data.user);
+      badge.textContent = data.user; // textContent never needs esc()
       badge.style.display = '';
       logoutBtn.style.display = '';
     }
@@ -71,7 +71,7 @@ async function initAuthConfig() {
   try {
     const data = await api('GET', v1`/auth/config`);
     wrap.innerHTML = `
-      <table class="data-table" style="max-width:420px">
+      <table style="max-width:420px">
         <tbody>
           <tr><td class="muted" style="width:140px">Username</td><td>${esc(data.username)}</td></tr>
           <tr><td class="muted">Session TTL</td><td>${esc(data.session_ttl)}</td></tr>
@@ -123,13 +123,18 @@ document.getElementById('changeUsernameForm').addEventListener('submit', async e
   const op = startOp('Change Username');
   try {
     const result = await op.api('PUT', v1`/auth/username`, { username });
-    op.done('Change Username', result?.tasks);
-    // Server invalidated all sessions — redirect after user closes the op-log.
-    document.getElementById('opLogClose').addEventListener('click', () => { window.location.href = '/login'; }, { once: true });
-  } catch (err) { op.done('Change Username', err.tasks, err.message); }
+    op.done('Username changed — sign in again', result?.tasks);
+    // The server invalidated every session: go to the login page however the
+    // op-log is closed (button or Esc), not only via its Close button (#232).
+    opLogDialog.addEventListener('close', () => { window.location.href = '/login'; }, { once: true });
+  } catch (err) { op.done('Changing the username failed', err.tasks, err.message); }
 });
 
 // ── TLS / HTTPS ───────────────────────────────────────────────────────────────
+delegate(document.getElementById('tls-status-wrap'), {
+  'acme-renew': () => tlsAcmeRenew(),
+});
+
 async function loadTLSStatus() {
   const wrap = document.getElementById('tls-status-wrap');
   try {
@@ -139,13 +144,18 @@ async function loadTLSStatus() {
       return;
     }
     const expiry   = new Date(d.expires_at);
-    const days     = d.days_remaining;
+    // days_remaining is omitted when 0 (less than a day left) and negative
+    // once expired (#232).
+    const days     = d.days_remaining ?? 0;
+    const daysText = days < 0 ? `expired ${-days} day${days === -1 ? '' : 's'} ago`
+      : days === 0 ? 'expires within a day'
+      : `${days} day${days === 1 ? '' : 's'}`;
     const daysHtml = days < 30
-      ? `<span style="color:var(--yellow)">${days} days</span>`
-      : `${days} days`;
+      ? `<span style="color:var(--yellow)">${daysText}</span>`
+      : daysText;
     const sans = (d.sans || []).map(s => esc(s)).join(', ') || '—';
     wrap.innerHTML = `
-      <table class="data-table" style="max-width:540px">
+      <table style="max-width:540px">
         <tbody>
           <tr><td class="muted" style="width:140px">Status</td><td><span class="health-badge health-ONLINE">HTTPS active</span></td></tr>
           <tr><td class="muted">CN</td><td>${esc(d.cn || '—')}</td></tr>
@@ -156,8 +166,7 @@ async function loadTLSStatus() {
           <tr><td class="muted">Cert path</td><td><code>${esc(d.cert_path)}</code></td></tr>
         </tbody>
       </table>
-      ${d.acme_domain ? `<button class="btn-secondary" style="margin-top:0.75rem" id="tlsAcmeRenewBtn">Renew (ACME)</button>` : ''}`;
-    document.getElementById('tlsAcmeRenewBtn')?.addEventListener('click', tlsAcmeRenew);
+      ${d.acme_domain ? `<button class="btn-secondary" style="margin-top:0.75rem" data-action="acme-renew">Renew (ACME)</button>` : ''}`;
   } catch { wrap.innerHTML = '<p class="muted">Could not load TLS status.</p>'; }
 }
 

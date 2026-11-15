@@ -1,5 +1,5 @@
 import { state, storeSet, storeBatch } from './store.js';
-import { api, delegate, esc, startOp, toast, v1 } from './utils.js';
+import { api, delegate, esc, refetch, startOp, toast, v1 } from './utils.js';
 
 // ── Protected account denylists (must match handlers.go) ─────────────────────
 const PROTECTED_USERS  = new Set(['nobody', 'nfsnobody']);
@@ -126,15 +126,18 @@ document.getElementById('newUserForm').addEventListener('submit', async e => {
   try {
     const result = await op.api('POST', v1`/users`, { username, shell, uid, group, groups, password, create_group: createGroup, smb_user });
     op.done(`User created: ${username}`, result.tasks, null);
-    const [users, smbData] = await Promise.all([
+    const fresh = await refetch(Promise.all([
       api('GET', v1`/users`),
       api('GET', v1`/smb/users`).catch(() => null),
-    ]);
-    storeBatch(() => {
-      storeSet('users', users || []);
-      storeSet('sambaAvailable', smbData?.available ?? false);
-      storeSet('sambaUsers', smbData?.users || []);
-    });
+    ]));
+    if (fresh) {
+      const [users, smbData] = fresh;
+      storeBatch(() => {
+        storeSet('users', users || []);
+        storeSet('sambaAvailable', smbData?.available ?? false);
+        storeSet('sambaUsers', smbData?.users || []);
+      });
+    }
   } catch (err) {
     op.done('User creation failed', err.tasks, err.message);
   }
@@ -170,8 +173,8 @@ deleteUserConfirmBtn.addEventListener('click', async () => {
   try {
     const result = await op.api('DELETE', v1`/users/${username}`);
     op.done(`Deleted user: ${username}`, result.tasks, null);
-    const users = await api('GET', v1`/users`);
-    storeSet('users', users || []);
+    const users = await refetch(api('GET', v1`/users`));
+    if (users !== undefined) storeSet('users', users || []);
   } catch (e) {
     op.done(`Failed to delete user: ${username}`, e.tasks, e.message);
   }
@@ -194,8 +197,8 @@ document.getElementById('newGroupForm').addEventListener('submit', async e => {
   try {
     const result = await op.api('POST', v1`/groups`, { groupname, gid });
     op.done(`Group created: ${groupname}`, result.tasks, null);
-    const groups = await api('GET', v1`/groups`);
-    storeSet('groups', groups || []);
+    const groups = await refetch(api('GET', v1`/groups`));
+    if (groups !== undefined) storeSet('groups', groups || []);
   } catch (e) {
     op.done('Group creation failed', e.tasks, e.message);
   }
@@ -231,8 +234,8 @@ deleteGroupConfirmBtn.addEventListener('click', async () => {
   try {
     const result = await op.api('DELETE', v1`/groups/${groupname}`);
     op.done(`Deleted group: ${groupname}`, result.tasks, null);
-    const groups = await api('GET', v1`/groups`);
-    storeSet('groups', groups || []);
+    const groups = await refetch(api('GET', v1`/groups`));
+    if (groups !== undefined) storeSet('groups', groups || []);
   } catch (e) {
     op.done(`Failed to delete group: ${groupname}`, e.tasks, e.message);
   }
@@ -362,11 +365,14 @@ document.getElementById('editUserForm').addEventListener('submit', async e => {
     }
 
     op.done(`User updated: ${username}`, allTasks, null);
-    const [users, groups] = await Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]);
-    storeBatch(() => {
-      storeSet('users', users || []);
-      storeSet('groups', groups || []);
-    });
+    const fresh = await refetch(Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]));
+    if (fresh) {
+      const [users, groups] = fresh;
+      storeBatch(() => {
+        storeSet('users', users || []);
+        storeSet('groups', groups || []);
+      });
+    }
   } catch (err) {
     op.done(`Failed to update user: ${username}`, [...allTasks, ...(err.tasks || [])], err.message);
   }
@@ -400,11 +406,14 @@ document.getElementById('editGroupForm').addEventListener('submit', async e => {
   try {
     const result = await op.api('PUT', v1`/groups/${groupname}`, { new_name, gid, members });
     op.done(`Group updated: ${result.groupname}`, result.tasks, null);
-    const [users, groups] = await Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]);
-    storeBatch(() => {
-      storeSet('users', users || []);
-      storeSet('groups', groups || []);
-    });
+    const fresh = await refetch(Promise.all([api('GET', v1`/users`), api('GET', v1`/groups`)]));
+    if (fresh) {
+      const [users, groups] = fresh;
+      storeBatch(() => {
+        storeSet('users', users || []);
+        storeSet('groups', groups || []);
+      });
+    }
   } catch (err) {
     op.done(`Failed to update group: ${groupname}`, err.tasks, err.message);
   }
@@ -437,9 +446,8 @@ export function renderSMBHomes() {
     wrap.innerHTML = `
       <div style="display:flex;align-items:center;gap:1rem;padding:0.5rem 0">
         <span class="muted">Home shares are disabled.</span>
-        <button class="btn-primary btn-small" id="smbHomesEnableBtn">Enable</button>
+        <button class="btn-primary btn-small" data-action="homes-edit">Enable</button>
       </div>`;
-    document.getElementById('smbHomesEnableBtn').addEventListener('click', openSMBHomesDialog);
   } else {
     wrap.innerHTML = `
       <div class="table-wrap">
@@ -452,14 +460,17 @@ export function renderSMBHomes() {
               <td>${esc(cfg.read_only)}</td>
               <td class="mono">${esc(cfg.create_mask)}</td>
               <td class="mono">${esc(cfg.directory_mask)}</td>
-              <td><button class="btn-secondary btn-small smb-homes-edit-btn">Edit</button></td>
+              <td><button class="btn-secondary btn-small" data-action="homes-edit">Edit</button></td>
             </tr>
           </tbody>
         </table>
       </div>`;
-    wrap.querySelector('.smb-homes-edit-btn').addEventListener('click', openSMBHomesDialog);
   }
 }
+
+delegate(document.getElementById('smb-homes-wrap'), {
+  'homes-edit': () => openSMBHomesDialog(),
+});
 
 // ── SMB Home Shares dialog ───────────────────────────────────────────────────
 const smbHomesDialog = document.getElementById('smbHomesDialog');

@@ -12,7 +12,7 @@ export function renderServices() {
   }
 
   wrap.innerHTML = `
-    <table class="data-table">
+    <table>
       <thead>
         <tr>
           <th>Service</th>

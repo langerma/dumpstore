@@ -1,5 +1,5 @@
 import { state, storeSet } from './store.js';
-import { api, delegate, esc, fmtBytes, startOp, toast, reZFSName, v1 } from './utils.js';
+import { api, delegate, esc, fmtBytes, refetch, reZFSName, startOp, toast, v1 } from './utils.js';
 import { openDatasetDrawer } from './dataset-drawer.js';
 import {
   openDeleteDatasetDialog, openRenameDatasetDialog,
@@ -234,8 +234,8 @@ document.getElementById('newDatasetForm').addEventListener('submit', async e => 
   try {
     const result = await op.api('POST', v1`/datasets`, body);
     op.done(`Dataset created: ${body.name}`, result.tasks, null);
-    const datasets = await api('GET', v1`/datasets`);
-    storeSet('datasets', datasets || []);
+    const datasets = await refetch(api('GET', v1`/datasets`));
+    if (datasets !== undefined) storeSet('datasets', datasets || []);
   } catch (e) {
     op.done('Dataset creation failed', e.tasks, e.message);
   }
