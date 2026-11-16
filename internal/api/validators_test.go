@@ -544,3 +544,39 @@ func TestTLSPath(t *testing.T) {
 		}
 	}
 }
+
+// TestSMBConfValues pins the #217 handler validation for values rendered
+// into smb.conf.
+func TestSMBConfValues(t *testing.T) {
+	for _, tc := range []struct {
+		path  string
+		subst bool
+		ok    bool
+	}{
+		{"/tank/tm", false, true},
+		{"/tank/my share", false, true},
+		{"/tank/homes/%U", true, true},
+		{"/tank/homes/%U", false, false},
+		{"tank/tm", false, false},
+		{"/tank/tm/", false, false},
+		{"/tank/../etc", false, false},
+		{"/tank/tm\n   root preexec = x", false, false},
+		{"/tank/tm\r", false, false},
+		{`/tank/tm\`, false, false},
+		{"", false, false},
+	} {
+		if got := validSMBPath(tc.path, tc.subst); got != tc.ok {
+			t.Errorf("validSMBPath(%q, %v) = %v, want %v", tc.path, tc.subst, got, tc.ok)
+		}
+	}
+	for s, ok := range map[string]bool{"500G": true, "1T": true, "1024": true, "0": false, "500GB": false, "1G\n[x]": false, "": false} {
+		if got := reTMMaxSize.MatchString(s); got != ok {
+			t.Errorf("max_size %q = %v, want %v", s, got, ok)
+		}
+	}
+	for s, ok := range map[string]bool{"alice": true, "alice, @staff": true, "alice bob +grp &g": true, "alice\n[x]": false, "a;b": false, `DOM\user`: false, "": false} {
+		if got := reSMBValidUsers.MatchString(s); got != ok {
+			t.Errorf("valid_users %q = %v, want %v", s, got, ok)
+		}
+	}
+}

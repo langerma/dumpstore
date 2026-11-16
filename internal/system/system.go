@@ -3,12 +3,10 @@ package system
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -119,28 +117,6 @@ func ListSambaUsers() ([]string, error) {
 		}
 	}
 	return users, nil
-}
-
-// ListAuthorizedKeys reads ~/.ssh/authorized_keys for the given home directory.
-// Returns one entry per non-blank, non-comment line.
-// Returns an empty slice when the file does not exist.
-func ListAuthorizedKeys(home string) ([]string, error) {
-	data, err := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	if errors.Is(err, os.ErrNotExist) {
-		return []string{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var keys []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		keys = append(keys, line)
-	}
-	return keys, nil
 }
 
 // ListShells reads /etc/shells and returns all valid login shells.

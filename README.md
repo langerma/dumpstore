@@ -47,7 +47,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - Datasets still referenced by a share, iSCSI target, or replication task can't be destroyed, renamed, or re-mounted — the UI lists what blocks it
 
 **Users & permissions**
-- Local users (including SSH keys and Samba password sync) and groups
+- Local users (including SSH keys and Samba password sync) and groups; key files in users' homes are edited safely as root (symlinked or hard-linked files are refused)
 - POSIX and NFSv4 ACLs (NFSv4 on FreeBSD), dataset owner/group
 
 **Operations**

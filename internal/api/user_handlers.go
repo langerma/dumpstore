@@ -2,12 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"dumpstore/internal/ansible"
+	"dumpstore/internal/operations"
 	"dumpstore/internal/system"
 )
 
@@ -280,9 +281,9 @@ func (h *Handler) listSSHKeys(_ context.Context, in userParam) (SSHKeyList, erro
 	if err != nil {
 		return SSHKeyList{}, err
 	}
-	lines, err := system.ListAuthorizedKeys(target.Home)
+	lines, err := system.ListAuthorizedKeys(target.Home, target.UID)
 	if err != nil {
-		return SSHKeyList{}, err
+		return SSHKeyList{}, sshKeyFileError(err)
 	}
 	keys := make([]system.AuthorizedKey, 0, len(lines))
 	for _, l := range lines {
@@ -323,17 +324,21 @@ func (h *Handler) addSSHKey(ctx context.Context, in struct {
 		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user"))
 	}
 
-	out, err := h.runOp(ctx, "user_ssh_key_add.yml", map[string]string{
-		"username": name,
-		"gid":      fmt.Sprintf("%d", target.GID),
-		"home":     target.Home,
-		"key":      req.Key,
-	})
+	// Written in Go, not by a root playbook in the user's home: see
+	// internal/system/authorizedkeys.go (#215, #216).
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	changed, err := system.AddAuthorizedKey(target.Home, target.UID, target.GID, req.Key)
 	auditLog(ctx, "sshkey.add", name, err)
-	if err != nil {
-		return TaskResult{}, playbookError(err, out)
+	msg := "key added"
+	if !changed {
+		msg = "key already present"
 	}
-	return TaskResult{Tasks: out.Steps()}, nil
+	steps, err := h.keyFileStep(ctx, "Add key to authorized_keys", changed, msg, err)
+	if err != nil {
+		return TaskResult{}, err
+	}
+	return TaskResult{Tasks: steps}, nil
 }
 
 // removeSSHKey handles DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}
@@ -360,24 +365,20 @@ func (h *Handler) removeSSHKey(ctx context.Context, in struct {
 	if target.UID < system.UIDMin() {
 		return TaskResult{}, errStatus(http.StatusForbidden, fmt.Errorf("refusing to modify system user"))
 	}
-	lines, err := system.ListAuthorizedKeys(target.Home)
+	h.userMu.Lock()
+	defer h.userMu.Unlock()
+	removed, err := system.RemoveAuthorizedKeys(target.Home, target.UID, target.GID, func(l string) bool {
+		return system.ParseAuthorizedKey(l).Fingerprint == in.Fingerprint
+	})
+	if err == nil && removed == 0 {
+		return TaskResult{}, errStatus(http.StatusNotFound, fmt.Errorf("no SSH key with fingerprint %s", in.Fingerprint))
+	}
+	auditLog(ctx, "sshkey.remove", name, err)
+	steps, err := h.keyFileStep(ctx, "Remove key from authorized_keys", true, fmt.Sprintf("%d line(s) removed", removed), err)
 	if err != nil {
 		return TaskResult{}, err
 	}
-	i := slices.IndexFunc(lines, func(l string) bool { return system.ParseAuthorizedKey(l).Fingerprint == in.Fingerprint })
-	if i < 0 {
-		return TaskResult{}, errStatus(http.StatusNotFound, fmt.Errorf("no SSH key with fingerprint %s", in.Fingerprint))
-	}
-
-	out, err := h.runOp(ctx, "user_ssh_key_remove.yml", map[string]string{
-		"home": target.Home,
-		"key":  lines[i],
-	})
-	auditLog(ctx, "sshkey.remove", name, err)
-	if err != nil {
-		return TaskResult{}, playbookError(err, out)
-	}
-	return TaskResult{Tasks: out.Steps()}, nil
+	return TaskResult{Tasks: steps}, nil
 }
 
 // CreateGroupRequest is the POST /api/v1/groups body.
@@ -545,4 +546,36 @@ func (h *Handler) publishUserGroup() {
 	if groups, err := system.ListGroups(); err == nil {
 		h.broker.Publish("group.query", groups)
 	}
+}
+
+// keyFileStep records the single op-log step of an authorized_keys write
+// under the request's operation (#184), like runOp/runLocal do for their
+// steps, and maps the outcome to the API result: an unsafe ~/.ssh or key
+// file (#215, #216) is a 409 the admin can act on, anything else a 500.
+func (h *Handler) keyFileStep(ctx context.Context, name string, changed bool, msg string, err error) ([]ansible.TaskStep, error) {
+	step := ansible.TaskStep{Name: name, Status: "ok", Msg: msg}
+	if changed {
+		step.Status = "changed"
+	}
+	if err != nil {
+		step.Status, step.Msg = "failed", err.Error()
+	}
+	h.operations.Step(operations.IDFromContext(ctx), step)
+	steps := []ansible.TaskStep{step}
+	if errors.Is(err, system.ErrUnsafeKeyFile) {
+		return steps, &httpError{code: http.StatusConflict, body: apiError{Error: err.Error(), Tasks: steps}}
+	}
+	if err != nil {
+		return steps, opError(err, steps)
+	}
+	return steps, nil
+}
+
+// sshKeyFileError maps a key-file read error to the API: 409 for an unsafe
+// ~/.ssh or key file, otherwise unchanged (500).
+func sshKeyFileError(err error) error {
+	if errors.Is(err, system.ErrUnsafeKeyFile) {
+		return errStatus(http.StatusConflict, err)
+	}
+	return err
 }

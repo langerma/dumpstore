@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path"
 	"regexp"
 	"runtime"
 	"strings"
+	"unicode"
 	"sync"
 	"time"
 
@@ -43,6 +45,13 @@ var (
 
 	// reSMBShare matches a valid SMB share name (max 80 chars).
 	reSMBShare = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,80}$`)
+
+	// reTMMaxSize matches a Time Machine size limit, e.g. 500G (#217).
+	reTMMaxSize = regexp.MustCompile(`^[1-9][0-9]{0,17}[KMGTP]?$`)
+
+	// reSMBValidUsers matches a Samba "valid users" list: user and group
+	// names (group prefixes @, +, &), separated by commas and/or spaces (#217).
+	reSMBValidUsers = regexp.MustCompile(`^[@+&]*[A-Za-z0-9._-]+(?:[ ,]+[@+&]*[A-Za-z0-9._-]+)*$`)
 
 	// reZFSSize matches a valid ZFS size value: a positive integer with an
 	// optional K/M/G/T/P/E suffix (case-insensitive), optionally followed by B.
@@ -87,6 +96,18 @@ func validUnixName(s string) bool { return reUnixName.MatchString(s) }
 
 // validSMBShare returns true if s is a valid SMB share name.
 func validSMBShare(s string) bool { return reSMBShare.MatchString(s) }
+
+// validSMBPath reports whether p may be written as an smb.conf share path
+// (#217): absolute and clean, with no control character (a newline would
+// start a new parameter) and no backslash (a trailing one continues the line).
+// allowSubst permits Samba's %-substitutions (the [homes] path uses %U).
+func validSMBPath(p string, allowSubst bool) bool {
+	if !strings.HasPrefix(p, "/") || path.Clean(p) != p ||
+		strings.ContainsFunc(p, unicode.IsControl) || strings.Contains(p, `\`) {
+		return false
+	}
+	return allowSubst || !strings.Contains(p, "%")
+}
 
 // validShellPath returns true if s is a safe absolute path.
 func validShellPath(s string) bool { return reShellPath.MatchString(s) }

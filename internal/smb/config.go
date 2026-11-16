@@ -7,10 +7,12 @@ package smb
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"dumpstore/internal/platform"
 )
@@ -101,8 +103,51 @@ func ParseSMBConfig(goos string) (SMBConfig, error) {
 	return parseFromBytes(data)
 }
 
+// reservedSections are smb.conf section names with built-in meaning; a
+// share of that name would be parsed back as the special section.
+var reservedSections = map[string]bool{"global": true, "homes": true, "printers": true, "print$": true}
+
+// IsReservedSection reports whether name (case-insensitive) is a reserved
+// smb.conf section name.
+func IsReservedSection(name string) bool { return reservedSections[strings.ToLower(name)] }
+
+// Validate refuses a config whose values could break out of their line in
+// the rendered smb.conf (#217): a control character (newline, CR, …) would
+// start a new parameter or section, and a backslash at the end of a value
+// continues it onto the next line. Share names must not be reserved
+// sections. Handlers validate each field with a clear 400 first; this is the
+// last line of defence before the owned file is written.
+func (c *SMBConfig) Validate() error {
+	check := func(field, v string) error {
+		if strings.ContainsFunc(v, unicode.IsControl) || strings.Contains(v, `\`) {
+			return fmt.Errorf("smb.conf %s %q contains a control character or backslash", field, v)
+		}
+		return nil
+	}
+	errs := []error{
+		check("workgroup", c.Global.Workgroup),
+		check("server string", c.Global.ServerString),
+	}
+	if h := c.Homes; h != nil {
+		errs = append(errs, check("[homes] path", h.Path), check("[homes] browseable", h.Browseable),
+			check("[homes] read only", h.ReadOnly), check("[homes] create mask", h.CreateMask),
+			check("[homes] directory mask", h.DirectoryMask))
+	}
+	for _, tm := range c.TimeMachine {
+		if IsReservedSection(tm.Name) || strings.ContainsAny(tm.Name, "[]") {
+			errs = append(errs, fmt.Errorf("Time Machine share name %q is not allowed", tm.Name))
+		}
+		errs = append(errs, check("share name", tm.Name), check("["+tm.Name+"] path", tm.Path),
+			check("["+tm.Name+"] max size", tm.MaxSize), check("["+tm.Name+"] valid users", tm.ValidUsers))
+	}
+	return errors.Join(errs...)
+}
+
 // RenderToFile renders the full smb.conf from the embedded template and writes it to dst.
 func (c *SMBConfig) RenderToFile(dst, goos string) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
 	tmpl, err := template.New("smb.conf").Funcs(template.FuncMap{
 		"usershareDir": func() string { return UsershareDir(goos) },
 	}).Parse(confTemplate)
