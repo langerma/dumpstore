@@ -1336,7 +1336,7 @@ Delete a user **and their home directory** (`userdel` with remove and force). `4
 
 ### GET /api/v1/users/{name}/ssh-keys
 
-Reads `<home>/.ssh/authorized_keys` and returns one entry per non-blank, non-`#` line, with its OpenSSH SHA256 fingerprint (identical to `ssh-keygen -lf`). A leading options field (`from="…",no-pty …`) is skipped when parsing. Lines that can't be parsed have empty `type`/`fingerprint` and can't be removed through the API. If the file is missing, `keys` is `[]`. `404` if the user doesn't exist.
+Reads `<home>/.ssh/authorized_keys` and returns one entry per non-blank, non-`#` line, with its OpenSSH SHA256 fingerprint (identical to `ssh-keygen -lf`). A leading options field (`from="…",no-pty …`) is skipped when parsing. Lines that can't be parsed have empty `type`/`fingerprint` and can't be removed through the API. If the file is missing, `keys` is `[]`. `404` if the user doesn't exist. `409` if `~/.ssh` or `authorized_keys` is a symlink, a hard link, not a regular file or directory, or not owned by the user (see the note under POST).
 
 ```json
 { "keys": [ { "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop", "type": "ssh-ed25519", "fingerprint": "SHA256:a1ZSPmADOkmNRQozRPfkpT+3L/FxfP+/OF+7UHWjENQ", "comment": "alice@laptop" } ] }
@@ -1344,13 +1344,15 @@ Reads `<home>/.ssh/authorized_keys` and returns one entry per non-blank, non-`#`
 
 ### POST /api/v1/users/{name}/ssh-keys
 
-Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `authorized_keys` (`0600`) if they are missing, owned by the user and their primary group. The key is appended only if that exact line isn't already present.
+Add an authorized key. Creates `~/.ssh` (`0700`) and `authorized_keys` (`0600`) if they are missing, owned by the user and their primary group. The key is appended only if that exact line isn't already present.
+
+The file is written in Go, confined to the user's home (`os.Root`), and replaced atomically (temp file + rename); it is never written through an existing name. Because the user controls their home while dumpstore runs as root, `~/.ssh` must be a directory owned by the user and `authorized_keys` a regular file owned by the user with a single link; a symlink (to anywhere), a hard link or another owner gets `409` and nothing is touched (#215, #216).
 
 ```json
 { "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… alice@laptop" }
 ```
 
-`key` is trimmed and must be a single line starting with `ssh-`, `ecdsa-sha2-` or `sk-` (`400` otherwise). `404` if the user doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`.
+`key` is trimmed and must be a single line starting with `ssh-`, `ecdsa-sha2-` or `sk-` (`400` otherwise). `404` if the user doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`, `409` for an unsafe `~/.ssh` or key file (above).
 
 ```json
 { "tasks": [ … ] }
@@ -1358,9 +1360,9 @@ Add an authorized key (`user_ssh_key_add.yml`). Creates `~/.ssh` (`0700`) and `a
 
 ### DELETE /api/v1/users/{name}/ssh-keys/{fingerprint}
 
-Remove the authorized key with that fingerprint (`user_ssh_key_remove.yml`). The fingerprint is the one returned by the list; percent-encode it (it can contain `/` and `+`), e.g. `DELETE /api/v1/users/alice/ssh-keys/SHA256%3Aa1ZSPmADOkmNRQozRPfkpT%2B3L%2FFxfP%2B%2FOF%2B7UHWjENQ`. No body.
+Remove the authorized key with that fingerprint, with the same safety rules as POST (comments and other lines are kept verbatim). The fingerprint is the one returned by the list; percent-encode it (it can contain `/` and `+`), e.g. `DELETE /api/v1/users/alice/ssh-keys/SHA256%3Aa1ZSPmADOkmNRQozRPfkpT%2B3L%2FFxfP%2B%2FOF%2B7UHWjENQ`. No body.
 
-`400` if the fingerprint doesn't start with `SHA256:`, `404` if the user or the key doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`.
+`400` if the fingerprint doesn't start with `SHA256:`, `404` if the user or the key doesn't exist, `403` if UID < `UID_MIN` or the user is `nobody`/`nfsnobody`, `409` for an unsafe `~/.ssh` or key file.
 
 ```json
 { "tasks": [ … ] }
@@ -1666,7 +1668,7 @@ Enable or update the `[homes]` section. Returns Ansible task steps.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `path` | one of `path`/`dataset` | Path of the home directories; `%U` is replaced by the username |
+| `path` | one of `path`/`dataset` | Path of the home directories; `%U` is replaced by the username. Must be absolute and clean, with no control characters or backslashes (`400`) |
 | `dataset` | one of `path`/`dataset` | Dataset whose mountpoint + `/%U` becomes the path (used when `path` is empty) |
 | `browseable` | no | `"yes"` or `"no"` (default `"no"`) — whether the share is visible in browse lists |
 | `read_only` | no | `"yes"` or `"no"` (default `"no"`) |
@@ -1736,9 +1738,11 @@ Create or update the Time Machine share named by the path parameter. Returns Ans
 | Field | Required | Description |
 |-------|----------|-------------|
 | `dataset` | one of `path`/`dataset` | Dataset whose mountpoint becomes the path (used when `path` is empty) |
-| `path` | one of `path`/`dataset` | Filesystem path for the share |
-| `max_size` | no | Maximum size quota for Time Machine backups |
-| `valid_users` | no | Space-separated list of allowed users |
+| `path` | one of `path`/`dataset` | Filesystem path for the share: absolute and clean, no control characters, backslashes or `%` (`400`) |
+| `max_size` | no | Maximum size for Time Machine backups: a number with an optional `K`/`M`/`G`/`T`/`P` suffix, e.g. `500G` (`400` otherwise) |
+| `valid_users` | no | Allowed users and groups (`@group`, `+group`, `&group`), separated by commas or spaces (`400` otherwise) |
+
+The share name must not be a reserved section (`global`, `homes`, `printers`, `print$`; `400`). Every value is also re-checked before `smb.conf` is written: a newline would otherwise start a new parameter or section in the file dumpstore owns (#217).
 
 ### DELETE /api/v1/smb/timemachine/{name}
 

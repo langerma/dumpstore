@@ -506,6 +506,9 @@ func (h *Handler) setSMBHomes(ctx context.Context, in struct {
 	if req.Path == "" {
 		return SetSMBHomesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"))
 	}
+	if !validSMBPath(req.Path, true) {
+		return SetSMBHomesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("path must be an absolute, clean path without control characters or backslashes"))
+	}
 
 	// Apply defaults
 	if req.Browseable == "" {
@@ -634,6 +637,15 @@ func (h *Handler) createTimeMachineShare(ctx context.Context, in struct {
 	if !validSMBShare(req.Sharename) {
 		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("invalid share name"))
 	}
+	if smb.IsReservedSection(req.Sharename) {
+		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("%q is a reserved smb.conf section name", req.Sharename))
+	}
+	if req.MaxSize != "" && !reTMMaxSize.MatchString(req.MaxSize) {
+		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("max_size must be a number with an optional K/M/G/T/P suffix, e.g. 500G"))
+	}
+	if req.ValidUsers != "" && !reSMBValidUsers.MatchString(req.ValidUsers) {
+		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("valid_users must be user or group names (@group, +group, &group) separated by commas or spaces"))
+	}
 
 	// Held from mountpoint lookup through apply so the dataset can't be
 	// destroyed or moved in between (#183).
@@ -656,6 +668,9 @@ func (h *Handler) createTimeMachineShare(ctx context.Context, in struct {
 	}
 	if req.Path == "" {
 		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("path is required (or provide dataset)"))
+	}
+	if !validSMBPath(req.Path, false) {
+		return TimeMachineSharesResult{}, errStatus(http.StatusBadRequest, fmt.Errorf("path must be an absolute, clean path without control characters, backslashes or %%"))
 	}
 
 	h.smbMu.Lock()

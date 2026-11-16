@@ -220,6 +220,8 @@ Do not change this split without a good reason — the ops side keeps single-sho
 
 - Handlers validate every value with allow-list regexes and validators (`internal/api/handlers.go`) before it reaches an argv or a playbook.
 - **Playbook values are data, never templates** (#214). The runner writes extra vars to a 0600 temp file whose root mapping is tagged `!unsafe` and passes `--extra-vars @file`, so Ansible never evaluates `{{ … }}` in a value and no value appears on the command line. Never add a code path that hands a playbook a template or puts values back on argv (`-e key=value`, inline JSON). Keep the tag on the root mapping: on ansible-core ≥ 2.19 a per-value `!unsafe "true"` becomes a boolean.
+- **Files inside users' home directories are written in Go, never by a root playbook** (#215, #216). The user controls their home, so a root `file`/`lineinfile`/`copy` there follows whatever symlink or hard link they planted. Use `internal/system/authorizedkeys.go` as the pattern: confine access with `os.Root`, check owner, type and link count on the opened descriptor, and replace the file atomically (fresh `O_EXCL` temp file, `chown`/`chmod` on its descriptor, `rename`).
+- **Values rendered into an owned config file are validated twice** (#217): per field in the handler (`400`), and in the renderer before writing (`SMBConfig.Validate()`: no control characters or backslashes, no reserved section names), so a newline can never add a parameter or section.
 - The `static/` directory is served with `http.FileServer` — do not put secrets there.
 - The service runs as root (required for ZFS). Do not expose it on a public interface without authentication in front of it.
 
@@ -267,6 +269,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/api/metrics.go` | Go runtime + build-info observable callback; `/metrics` serves the handler injected via `SetMetricsHandler` |
 | `metrics_test.go` | Golden test pinning the `/metrics` exposition (names, types, labels, buckets, HELP) (#168) |
 | `internal/system/system.go` | `ListUsers`, `ListGroups`, `UIDMin` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` |
+| `internal/system/authorizedkeys.go` | `ListAuthorizedKeys`, `AddAuthorizedKey`, `RemoveAuthorizedKeys` — `~/.ssh/authorized_keys` handled safely as root: `os.Root`-confined, owner/link checks, atomic rename (#215, #216) |
 | `internal/auth/` | Config file, login page, sessions, argon2id passwords, rate limiting, trusted-proxy identity, auth middleware |
 | `internal/jobs/manager.go` | Background job manager (`Run`/`RunPipeline`, process groups, persisted records, `jobs.update` SSE) |
 | `internal/replication/` | Scheduled send/recv tasks: holds, incremental base selection, target pruning, task store |

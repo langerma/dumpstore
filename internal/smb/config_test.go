@@ -157,3 +157,49 @@ func TestIsManaged(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateRejectsLineInjection pins #217: no value may carry a control
+// character or backslash into the rendered smb.conf, and Time Machine shares
+// may not use reserved section names. A refused config writes nothing.
+func TestValidateRejectsLineInjection(t *testing.T) {
+	good := func() SMBConfig {
+		return SMBConfig{
+			Global: SMBGlobal{Workgroup: "WORKGROUP", ServerString: "Samba Server"},
+			Homes:  &SMBHomesConfig{Path: "/tank/homes/%U", Browseable: "no", ReadOnly: "no", CreateMask: "0644", DirectoryMask: "0755"},
+			TimeMachine: []TimeMachineShare{
+				{Name: "tm", Path: "/tank/tm", MaxSize: "500G", ValidUsers: "alice, @staff"},
+			},
+		}
+	}
+	if err := func() *SMBConfig { c := good(); return &c }().Validate(); err != nil {
+		t.Fatalf("valid config rejected: %v", err)
+	}
+	cases := map[string]func(*SMBConfig){
+		"tm path newline":     func(c *SMBConfig) { c.TimeMachine[0].Path = "/tank/tm\n   root preexec = /bin/true" },
+		"tm path CR":          func(c *SMBConfig) { c.TimeMachine[0].Path = "/tank/tm\r[pwn]" },
+		"tm path backslash":   func(c *SMBConfig) { c.TimeMachine[0].Path = `/tank/tm\` },
+		"tm max size newline": func(c *SMBConfig) { c.TimeMachine[0].MaxSize = "1G\n[pwn]" },
+		"tm valid users tab":  func(c *SMBConfig) { c.TimeMachine[0].ValidUsers = "alice\tbob" },
+		"tm name reserved":    func(c *SMBConfig) { c.TimeMachine[0].Name = "Homes" },
+		"tm name bracket":     func(c *SMBConfig) { c.TimeMachine[0].Name = "tm]x" },
+		"homes path newline":  func(c *SMBConfig) { c.Homes.Path = "/tank/homes/%U\n[pwn]" },
+		"homes mask newline":  func(c *SMBConfig) { c.Homes.CreateMask = "0644\npath = /" },
+		"workgroup newline":   func(c *SMBConfig) { c.Global.Workgroup = "WG\n[pwn]" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := good()
+			mutate(&c)
+			if err := c.Validate(); err == nil {
+				t.Fatal("accepted")
+			}
+			dst := filepath.Join(t.TempDir(), "smb.conf")
+			if err := c.RenderToFile(dst, "linux"); err == nil {
+				t.Fatal("RenderToFile accepted")
+			}
+			if _, err := os.Stat(dst); !os.IsNotExist(err) {
+				t.Errorf("RenderToFile wrote %s despite refusing", dst)
+			}
+		})
+	}
+}

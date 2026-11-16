@@ -54,6 +54,14 @@ Configuration writes run `ansible-playbook` as root. Their values (passwords inc
 
 Known exception: on Linux, creating an iSCSI target with CHAP runs `targetcli … set auth password=<secret>`, which puts the CHAP secret on that command's argv while it runs (#218).
 
+## Files inside users' home directories
+
+dumpstore runs as root but edits each user's `~/.ssh/authorized_keys`, which lives in a directory the user controls. These writes are done in Go, confined to the home directory, and the file is replaced atomically (temp file + rename), never written through an existing name. A `~/.ssh` or `authorized_keys` that is a symlink, a hard link, not a regular file or directory, or not owned by the user is refused (`409`), so a local user can't redirect a root write or read to another file (#215, #216).
+
+## Rendered config values
+
+Every value written into the dumpstore-owned `smb.conf` is validated twice: per field in the API handler (`400`), and again for control characters and backslashes before the file is rendered, so a newline can't add parameters or sections such as `root preexec` (#217).
+
 ---
 
 ## Reverse proxy delegation

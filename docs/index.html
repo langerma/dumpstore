@@ -596,7 +596,7 @@
           <span class="pool-name">user management</span>
           <span class="health-badge badge-blue">users</span>
         </div>
-        <p>Create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users. System accounts (uid &lt; 1000) hidden by default — toggle to reveal.</p>
+        <p>Create, edit (shell, password, groups, home directory, SSH authorized keys, Samba password sync), and delete local users. System accounts (uid &lt; 1000) hidden by default — toggle to reveal. <code>authorized_keys</code> is edited in Go, confined to the user's home and replaced atomically; a symlinked or hard-linked key file is refused rather than followed as root.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
