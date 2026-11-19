@@ -83,6 +83,22 @@ func TestMatches(t *testing.T) {
 		{"0 0 1 * 0", "2026-06-01 00:00 UTC", true},  // Monday, but the 1st — dom matches
 		{"0 0 1 * 0", "2026-05-22 00:00 UTC", false}, // neither matches
 		{"0 0 * * 7", "2026-05-24 00:00 UTC", true},  // 7→0 alias for Sunday
+		// Range 0-7 covers every day of the week (0=Sunday, 7=Sunday alias).
+		{"0 0 * * 0-7", "2026-05-24 00:00 UTC", true}, // Sun
+		{"0 0 * * 0-7", "2026-05-25 00:00 UTC", true}, // Mon
+		{"0 0 * * 0-7", "2026-05-26 00:00 UTC", true}, // Tue
+		{"0 0 * * 0-7", "2026-05-27 00:00 UTC", true}, // Wed
+		{"0 0 * * 0-7", "2026-05-28 00:00 UTC", true}, // Thu
+		{"0 0 * * 0-7", "2026-05-29 00:00 UTC", true}, // Fri
+		{"0 0 * * 0-7", "2026-05-30 00:00 UTC", true}, // Sat
+		// Bare 7 expands to both Sunday and Saturday.
+		{"0 0 * * 7", "2026-05-24 00:00 UTC", true},  // Sunday
+		{"0 0 * * 7", "2026-05-30 00:00 UTC", true},  // Saturday
+		// Mixed: 1-5,7 expands to Mon-Fri + Sun(0) + Sat(6) = every day.
+		{"0 0 * * 1-5,7", "2026-05-24 00:00 UTC", true}, // Sun
+		{"0 0 * * 1-5,7", "2026-05-25 00:00 UTC", true}, // Mon
+		{"0 0 * * 1-5,7", "2026-05-29 00:00 UTC", true}, // Fri
+		{"0 0 * * 1-5,7", "2026-05-30 00:00 UTC", true}, // Sat
 	}
 	for _, c := range cases {
 		s := must(c.spec)

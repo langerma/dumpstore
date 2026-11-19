@@ -92,8 +92,10 @@ func Parse(spec string) (Schedule, error) {
 		return Schedule{}, fmt.Errorf("month: %w", err)
 	}
 
-	// dow accepts 7 as an alias for 0; normalise before storing.
-	dowSpec := strings.ReplaceAll(fields[4], "7", "0")
+	// dow accepts 7 as an alias for 0. Expand standalone 7 into 0,6 so that
+	// ranges like 0-7 correctly cover every day of the week (Vixie cron
+	// behaviour). A bare "7" alone becomes "0,6" (both Sunday and Saturday).
+	dowSpec := expandDowSeven(fields[4])
 	if err := parseField(dowSpec, 0, 6, s.dow[:]); err != nil {
 		return Schedule{}, fmt.Errorf("day-of-week: %w", err)
 	}
@@ -101,6 +103,34 @@ func Parse(spec string) (Schedule, error) {
 	s.domStar = fields[2] == "*"
 	s.dowStar = fields[4] == "*"
 	return s, nil
+}
+
+// expandDowSeven handles the cron convention that dow value 7 is an alias for 0
+// (Sunday). It normalises the dow spec so that parseField (which rejects values
+// > 6) accepts it:
+//   - bare "7" → "0,6" (Sunday + Saturday, matching Vixie cron)
+//   - range ending in 7 (e.g. "0-7", "1-7") → cap hi at 6
+//   - ranges starting with 7 (e.g. "7-1") are left untouched (invalid ranges
+//     are caught by parseField's lo>hi check)
+func expandDowSeven(spec string) string {
+	parts := strings.Split(spec, ",")
+	for i, part := range parts {
+		if part == "7" {
+			parts[i] = "0,6"
+			continue
+		}
+		if strings.Contains(part, "-") && !strings.Contains(part, "/") {
+			bits := strings.SplitN(part, "-", 2)
+			if len(bits) == 2 {
+				hi, err := strconv.Atoi(bits[1])
+				if err == nil && hi == 7 {
+					bits[1] = "6"
+					parts[i] = bits[0] + "-" + bits[1]
+				}
+			}
+		}
+	}
+	return strings.Join(parts, ",")
 }
 
 // parseField fills out (a slice large enough to index up to max) with true
