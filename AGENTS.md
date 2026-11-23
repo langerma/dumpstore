@@ -272,7 +272,7 @@ Do not change this split without a good reason — the ops side keeps single-sho
 | `internal/system/authorizedkeys.go` | `ListAuthorizedKeys`, `AddAuthorizedKey`, `RemoveAuthorizedKeys` — `~/.ssh/authorized_keys` handled safely as root: `os.Root`-confined, owner/link checks, atomic rename (#215, #216) |
 | `internal/auth/` | Config file, login page, sessions, argon2id passwords, rate limiting, trusted-proxy identity, auth middleware |
 | `internal/jobs/manager.go` | Background job manager (`Run`/`RunPipeline`, process groups, persisted records, `jobs.update` SSE) |
-| `internal/replication/` | Scheduled send/recv tasks: holds, incremental base selection, target pruning, task store |
+| `internal/replication/` | Scheduled send/recv tasks: holds, incremental base selection, task store; prunes target and source after each successful run, on the source only the task's own snapshots (`dumpstore-repl-<task id>-YYYY-MM-DD_HH-MM-SS`, #221) |
 | `internal/autosnap/`, `internal/scheduler/` | Native `com.sun:auto-snapshot*` execution and daemon takeover; 5-field cron parser and ticker |
 | `internal/smb/` | Owned `smb.conf` and wsdd options: parse, render from templates (`smb.conf.tmpl`, `wsdd.default.tmpl`), usershare file reader |
 | `internal/schema/`, `internal/platform/` | Dataset property metadata (writes `playbooks/vars/zfs_allowed_values.yml` at startup); OS-specific config/state paths |

@@ -210,7 +210,7 @@ func (r *Runner) execute(ctx context.Context, t Task) (_ string, _ string, err e
 	}()
 
 	now := time.Now().UTC()
-	snap := snapName(now)
+	snap := snapName(now, t.ID)
 	srcSnap := t.Source + "@" + snap
 
 	if err := createSnapshot(t.Source, snap, t.Recursive); err != nil {
@@ -299,6 +299,16 @@ func (r *Runner) afterJob(ctx context.Context, taskID, srcSnap string, t Task, j
 				slog.WarnContext(ctx, "replication: prune failed", "task", t.ID, "err", err)
 			} else if len(destroyed) > 0 {
 				slog.InfoContext(ctx, "replication: pruned destination snapshots",
+					"task", t.ID, "count", len(destroyed))
+			}
+			// Source side too (#221): without it every run leaves a snapshot
+			// that keeps deleted data referenced until the pool fills.
+			destroyed, err := pruneSource(t.Source, t.ID, t.Recursive, t.RetentionCount, srcSnap)
+			if err != nil {
+				slog.WarnContext(ctx, "replication: source prune incomplete", "task", t.ID, "err", err)
+			}
+			if len(destroyed) > 0 {
+				slog.InfoContext(ctx, "replication: pruned source snapshots",
 					"task", t.ID, "count", len(destroyed))
 			}
 		}

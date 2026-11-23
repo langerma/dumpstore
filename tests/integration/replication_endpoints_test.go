@@ -126,3 +126,76 @@ func TestReplicationTask(t *testing.T) {
 	}
 	apiStatus(t, http.StatusNotFound, "DELETE", v1("/replication/tasks/%s", created.ID), nil)
 }
+
+// TestReplicationSourcePruning covers #221: every run leaves a snapshot on
+// the source, so the source is pruned to retention_count after each
+// successful run, like the target. Only the task's own snapshots go
+// (labels start with dumpstore-repl-<task ID>-); an old-format snapshot and a manual one on the
+// same source survive, and later runs stay incremental.
+func TestReplicationSourcePruning(t *testing.T) {
+	src := testPool + "/itest-prune-src"
+	dst := testPool + "/itest-prune-dst"
+	destroyDatasetInVM(dst)
+	t.Cleanup(func() { deleteITestReplTasks(t); destroyDatasetInVM(dst) })
+	deleteITestReplTasks(t)
+	createDataset(t, src)
+	legacy := src + "@dumpstore-repl-20200101T000000Z"
+	manual := src + "@itest-manual"
+	vmExec(t, "zfs snapshot "+legacy+" && zfs snapshot "+manual)
+
+	task := decode[replTask](t, apiStatus(t, http.StatusCreated, "POST", "/api/v1/replication/tasks", map[string]any{
+		"name": "itest-prune", "source": src, "target": dst, "schedule": "0 3 * * *", "retention_count": 2,
+	}))
+	type runRecord struct {
+		JobID string `json:"job_id"`
+	}
+	var last string
+	for i := 1; i <= 3; i++ {
+		run := decode[struct {
+			JobID    string `json:"job_id"`
+			Snapshot string `json:"snapshot"`
+		}](t, apiStatus(t, http.StatusAccepted, "POST", v1("/replication/tasks/%s/run", task.ID), nil))
+		if !strings.HasPrefix(run.Snapshot, src+"@dumpstore-repl-"+task.ID+"-") {
+			t.Fatalf("run %d snapshot %s does not carry the task ID", i, run.Snapshot)
+		}
+		j := waitJob(t, run.JobID, 2*time.Minute)
+		if j.Status != "success" {
+			t.Fatalf("run %d: job %s (%s)", i, j.Status, j.Stderr)
+		}
+		if incr := strings.Contains(" "+strings.Join(j.Args, " ")+" ", " -i "); incr != (i > 1) {
+			t.Errorf("run %d: incremental=%v, want %v (args %v)", i, incr, i > 1, j.Args)
+		}
+		// Pruning happens in the post-job watcher, before the run record.
+		waitFor(t, "run record", 30*time.Second, func() bool {
+			hist := decode[[]runRecord](t, apiOK(t, "GET", v1("/replication/tasks/%s/history", task.ID), nil))
+			return len(hist) > 0 && hist[len(hist)-1].JobID == run.JobID
+		})
+		last = run.Snapshot
+		// Wait so the next run gets a new second-resolution label.
+		time.Sleep(1100 * time.Millisecond)
+	}
+
+	names := func(dataset string) []string {
+		out := strings.Fields(vmExec(t, "zfs list -H -t snapshot -o name -s creation -d 1 "+dataset))
+		return out
+	}
+	var own []string
+	srcSnaps := names(src)
+	for _, s := range srcSnaps {
+		if strings.HasPrefix(s, src+"@dumpstore-repl-"+task.ID+"-") {
+			own = append(own, s)
+		}
+	}
+	if len(own) != 2 || own[1] != last {
+		t.Errorf("source keeps %v, want 2 of the task's snapshots ending with %s", own, last)
+	}
+	for _, keep := range []string{legacy, manual} {
+		if !strings.Contains(" "+strings.Join(srcSnaps, " ")+" ", " "+keep+" ") {
+			t.Errorf("%s was pruned; only the task's own snapshots may be", keep)
+		}
+	}
+	if got := names(dst); len(got) != 2 {
+		t.Errorf("target keeps %v, want 2", got)
+	}
+	vmExec(t, "zfs destroy "+legacy+" && zfs destroy "+manual)
+}

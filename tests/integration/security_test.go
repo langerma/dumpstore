@@ -34,7 +34,9 @@ func TestSSHKeyFileSafety(t *testing.T) {
 	vmExec(t, "printf 'root-only-SECRET\\n' > "+victim+" && chmod 600 "+victim+" && mkdir -m 700 "+victimDir)
 	// Mode, owner, group and content of the decoys. Not the link count: the
 	// hard-link case raises it itself.
-	victimState := func() string { return vmExec(t, "ls -ln "+victim+" | awk '{print $1,$3,$4}'; cat "+victim+"; ls -A "+victimDir) }
+	victimState := func() string {
+		return vmExec(t, "ls -ln "+victim+" | awk '{print $1,$3,$4}'; cat "+victim+"; ls -A "+victimDir)
+	}
 	before := victimState()
 
 	keysURL := v1("/users/%s/ssh-keys", name)

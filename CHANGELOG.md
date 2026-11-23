@@ -189,6 +189,11 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Replication prunes the source too** (#221).
+  - **What was wrong:** every run created `<source>@dumpstore-repl-<UTC>`, but only the destination was pruned. An hourly task left about 8,760 snapshots a year on the source (and on every child of a recursive task), keeping deleted data referenced until the pool filled up.
+  - **Fix:** after a successful run the source is pruned to `retention_count` as well. The snapshot just sent, the next incremental base, is never removed, and a stored `retention_count` of 0 is treated as 1. Snapshots that can't be destroyed (held or cloned) are skipped and logged.
+  - **Snapshot names now carry the task ID and a readable timestamp:** `dumpstore-repl-<task id>-YYYY-MM-DD_HH-MM-SS` (UTC), readable like TrueNAS's `auto-YYYY-MM-DD_HH-MM` and grouped per task when sorted by name. Source pruning removes only the task's own snapshots, so other tasks replicating the same source, and a recursive parent task whose snapshots also land on child datasets, keep their incremental bases. Two tasks firing in the same second no longer collide on one name. Incremental selection still compares labels, so existing tasks continue incrementally across the rename.
+  - **Upgrade note:** snapshots from before this change (`dumpstore-repl-<UTC>`, without a task ID) are not pruned automatically. Remove an existing pile once from the Snapshots tab (batch delete releases the replication holds), keeping each task's newest one until its next successful run.
 - **Cron day fields follow Vixie cron** (#225). Affects replication schedules and auto-snapshot buckets.
   - **Day-of-week `7`:** the parser replaced every `7` character with `0`, so `0-7` (every day) ran on Sundays only, and `1-7`, `5-7` and `1-7/2` were rejected. The field is now parsed over `0`–`7` with `7` folded into Sunday, so ranges, lists and steps that reach `7` keep their Sunday.
   - **The AND/OR rule:** a day field counted as unrestricted only when it was exactly `*`, so `0 0 */2 * 1` fired on every odd day *or* every Monday. As in Vixie cron, a field starting with `*` now selects the AND rule (Mondays that are odd days). Literal `*` schedules behave as before.

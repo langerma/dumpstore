@@ -2,6 +2,7 @@ package replication
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -9,10 +10,20 @@ import (
 	"time"
 )
 
-// snapName returns the source snapshot name a run should create.
-func snapName(now time.Time) string {
-	return SnapshotPrefix + now.UTC().Format("20060102T150405Z")
+// snapName returns the source snapshot label a run of task taskID should
+// create: dumpstore-repl-<task ID>-<UTC YYYY-MM-DD_HH-MM-SS>, readable like
+// TrueNAS's auto-YYYY-MM-DD_HH-MM and grouped per task when sorted by name.
+// The task ID makes the snapshot attributable, so pruneSource deletes only
+// its own task's snapshots (#221): several tasks may replicate the same
+// source, and a recursive task's `zfs snapshot -r` also lands on child
+// datasets that other tasks replicate. It also keeps two tasks firing in the
+// same second from colliding on one name.
+func snapName(now time.Time, taskID string) string {
+	return ownPrefix(taskID) + now.UTC().Format("2006-01-02_15-04-05")
 }
+
+// ownPrefix is the label prefix of every snapshot task taskID creates.
+func ownPrefix(taskID string) string { return SnapshotPrefix + taskID + "-" }
 
 // createSnapshot runs `zfs snapshot [-r] dataset@label`. The atomic recursive
 // form lets us snapshot a parent + children in one operation when Recursive
@@ -173,6 +184,52 @@ func pruneTarget(target, remote string, retain int) ([]string, error) {
 	return destroyed, nil
 }
 
+// pruneSource destroys the oldest of task taskID's own snapshots on the local
+// source (labels starting with dumpstore-repl-<taskID>-, see snapName) so that at most retain of
+// them remain (#221). keep — the snapshot the run just sent, the incremental
+// base for the next run — is never destroyed, and retain is at least 1.
+// Snapshots of other tasks and old-format labels without a task ID are left
+// alone. Recursive tasks destroy with -r, matching their `zfs snapshot -r`.
+// A snapshot that can't be destroyed (held by a run still in flight, cloned)
+// is skipped; the errors are joined and the rest are still pruned. Must only
+// be called after a successful run, when keep is the newest own snapshot.
+func pruneSource(source, taskID string, recursive bool, retain int, keep string) ([]string, error) {
+	all, err := listSourceSnaps(source)
+	if err != nil {
+		return nil, err
+	}
+	prefix := source + "@" + ownPrefix(taskID)
+	var own []string
+	for _, s := range all {
+		if strings.HasPrefix(s, prefix) {
+			own = append(own, s)
+		}
+	}
+	retain = max(retain, 1)
+	if len(own) <= retain {
+		return nil, nil
+	}
+	var (
+		destroyed []string
+		errs      []error
+	)
+	for _, snap := range own[:len(own)-retain] { // oldest first
+		if snap == keep {
+			continue
+		}
+		args := []string{"destroy"}
+		if recursive {
+			args = append(args, "-r")
+		}
+		if err := runCmd("zfs", append(args, snap)...); err != nil {
+			errs = append(errs, fmt.Errorf("destroy %s: %w", snap, err))
+			continue
+		}
+		destroyed = append(destroyed, snap)
+	}
+	return destroyed, errors.Join(errs...)
+}
+
 func destroyRemoteOrLocal(snap, remote string) error {
 	if remote != "" {
 		return runCmd("ssh", "-o", "BatchMode=yes", remote, "zfs", "destroy", snap)
@@ -180,8 +237,15 @@ func destroyRemoteOrLocal(snap, remote string) error {
 	return runCmd("zfs", "destroy", snap)
 }
 
-// runCmd runs a command and returns an error containing stderr on failure.
-func runCmd(name string, args ...string) error {
+// runCmd and runOut run zfs/ssh for the package. They are variables so unit
+// tests can record commands and return canned listings instead.
+var (
+	runCmd = execCmd
+	runOut = execOut
+)
+
+// execCmd runs a command and returns an error containing stderr on failure.
+func execCmd(name string, args ...string) error {
 	var stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
 	cmd.Stderr = &stderr
@@ -191,8 +255,8 @@ func runCmd(name string, args ...string) error {
 	return nil
 }
 
-// runOut runs a command and returns stdout on success.
-func runOut(name string, args ...string) ([]byte, error) {
+// execOut runs a command and returns stdout on success.
+func execOut(name string, args ...string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = &stdout
