@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [v0.3.0] — 2026-11-23
+
 ### Added
 
 - **Forge SDK check in CI** (#181, Phase 4). A new `forge-sdk` job proves the published spec is SDK-ready.
