@@ -754,7 +754,7 @@ Removes a terminal job from the manager and deletes its on-disk record. Returns 
 
 ## Scheduled replication
 
-Cron-scheduled replication tasks. Each fire creates a `dumpstore-repl-<UTC>` snapshot on the source, holds it for the duration of the transfer, picks the most recent common `dumpstore-repl-*` snapshot for an incremental send, dispatches the pipeline through the jobs runner, releases the hold, and prunes destination replication snapshots beyond the retention count.
+Cron-scheduled replication tasks. Each fire creates a `dumpstore-repl-<task id>-YYYY-MM-DD_HH-MM-SS` snapshot (UTC) on the source, holds it for the duration of the transfer, picks the most recent common `dumpstore-repl-*` snapshot for an incremental send, dispatches the pipeline through the jobs runner, and releases the hold. After a successful run, replication snapshots beyond `retention_count` are pruned on the destination and on the source. Source pruning only removes the task's own snapshots (label starting with `dumpstore-repl-<task id>-`), never the one just sent, so other tasks replicating the same source, or a recursive parent task, are never affected. Snapshots from before task IDs were added to the label (`dumpstore-repl-<UTC>`) are not pruned automatically; remove them from the Snapshots tab, which releases their holds (#221).
 
 ### GET /api/v1/replication/tasks
 
@@ -800,7 +800,7 @@ Returns the recent `RunRecord` list (capped at 20):
 [
   {
     "job_id": "8f3c…",
-    "snapshot": "tank/data@dumpstore-repl-20260524T030000Z",
+    "snapshot": "tank/data@dumpstore-repl-3f9c2a1b7d4e5f60-2026-05-24_03-00-00",
     "started_at": "2026-05-24T03:00:00Z",
     "finished_at": "2026-05-24T03:11:42Z",
     "status": "success"

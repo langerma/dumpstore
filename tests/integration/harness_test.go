@@ -285,11 +285,12 @@ type spaceRow struct {
 }
 
 type job struct {
-	ID     string `json:"id"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
-	Stderr string `json:"stderr"`
-	Error  string `json:"error"`
+	ID     string   `json:"id"`
+	Type   string   `json:"type"`
+	Args   []string `json:"args"`
+	Status string   `json:"status"`
+	Stderr string   `json:"stderr"`
+	Error  string   `json:"error"`
 }
 
 func listDatasets(t *testing.T) []dataset {
