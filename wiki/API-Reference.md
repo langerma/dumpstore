@@ -778,7 +778,7 @@ Create a task. `enabled` and `retention_count` default to `true` and `7` respect
 }
 ```
 
-`schedule` is a standard 5-field cron expression (minute, hour, day-of-month, month, day-of-week) with 1-minute resolution and no catch-up on missed firings. `remote` is optional; when empty the task replicates between local pools.
+`schedule` is a standard 5-field cron expression (minute, hour, day-of-month, month, day-of-week) with 1-minute resolution and no catch-up on missed firings. Each field takes `*`, `N`, `N-M`, `*/S`, `N-M/S` and comma lists; names (`MON`) and `@hourly`-style aliases are not supported. Day-of-week is `0`–`7`, where both `0` and `7` mean Sunday (`1-7` is Monday through Sunday). As in Vixie cron, when day-of-month and day-of-week are both restricted either one suffices (`0 0 1 * 1` fires on the 1st *and* on every Monday); when either starts with `*`, both must match (`0 0 */2 * 1` fires on Mondays that are odd days). `remote` is optional; when empty the task replicates between local pools.
 
 ### PATCH /api/v1/replication/tasks/{id}
 

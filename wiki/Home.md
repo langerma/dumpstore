@@ -24,7 +24,7 @@ dumpstore **manages** ZFS and sharing (SMB, NFS, iSCSI, wsdd, and the local user
 
 **Replication & jobs**
 - One-shot `zfs send | zfs recv` to a local pool or over SSH, incremental and `--raw`
-- Cron-scheduled replication with holds, incremental selection, and retention pruning
+- Cron-scheduled replication (standard 5-field syntax with Vixie cron day semantics) with holds, incremental selection, and retention pruning
 - Long-running work runs as cancellable background jobs that survive restarts
 
 **Sharing**

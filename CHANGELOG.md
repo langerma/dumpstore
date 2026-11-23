@@ -189,6 +189,9 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- **Cron day fields follow Vixie cron** (#225). Affects replication schedules and auto-snapshot buckets.
+  - **Day-of-week `7`:** the parser replaced every `7` character with `0`, so `0-7` (every day) ran on Sundays only, and `1-7`, `5-7` and `1-7/2` were rejected. The field is now parsed over `0`–`7` with `7` folded into Sunday, so ranges, lists and steps that reach `7` keep their Sunday.
+  - **The AND/OR rule:** a day field counted as unrestricted only when it was exactly `*`, so `0 0 */2 * 1` fired on every odd day *or* every Monday. As in Vixie cron, a field starting with `*` now selects the AND rule (Mondays that are odd days). Literal `*` schedules behave as before.
 - **Frontend defects from the code audit** (#232):
   - **Snapshot batch delete** no longer sends snapshots that are gone. The selection is pruned on every snapshot-list change: row deletes, partly failed batches, and SSE updates from other clients. Before, every later batch delete failed until a reload.
   - **Every write shows the op-log.** Replication create/update/delete/run, job remove/cancel, snapshot send and rewrite start used toast-only feedback; they now run in an op-log session (operation ID, result recovery after a dropped connection). A rejected replication form stays open for correction.

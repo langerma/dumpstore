@@ -18,17 +18,18 @@ import (
 // Schedule is a parsed cron expression of the form `minute hour dom month dow`.
 // dow uses 0 = Sunday, 6 = Saturday. dow=7 is accepted as an alias for Sunday.
 //
-// When both dom and dow are restricted (neither is `*`), Matches returns true
-// if either field matches the given time — this is the standard Vixie cron
-// behaviour and what TrueNAS users will expect.
+// When both dom and dow are restricted (neither starts with `*`), Matches
+// returns true if either field matches the given time; when either starts
+// with `*` (including steps like `*/2`), both must match. This is the
+// standard Vixie cron behaviour.
 type Schedule struct {
 	minute   [60]bool
 	hour     [24]bool
 	dom      [32]bool // index 1..31 used
 	month    [13]bool // index 1..12 used
 	dow      [7]bool  // index 0..6 used (0 = Sunday)
-	domStar  bool     // true when dom field was "*"
-	dowStar  bool     // true when dow field was "*"
+	domStar  bool     // true when the dom field starts with "*" (Vixie cron)
+	dowStar  bool     // true when the dow field starts with "*" (Vixie cron)
 	original string
 }
 
@@ -44,17 +45,13 @@ func (s Schedule) Matches(t time.Time) bool {
 	}
 	domOK := s.dom[t.Day()]
 	dowOK := s.dow[int(t.Weekday())]
-	switch {
-	case s.domStar && s.dowStar:
-		return true
-	case s.domStar:
-		return dowOK
-	case s.dowStar:
-		return domOK
-	default:
-		// Vixie semantics: either matches.
-		return domOK || dowOK
+	// Vixie cron: when either day field starts with "*", both must match;
+	// only when both are restricted does either one suffice. A bare "*" sets
+	// every value, so it never narrows the AND; "*/2" does (#225).
+	if s.domStar || s.dowStar {
+		return domOK && dowOK
 	}
+	return domOK || dowOK
 }
 
 // Parse parses a 5-field cron expression.
@@ -92,14 +89,21 @@ func Parse(spec string) (Schedule, error) {
 		return Schedule{}, fmt.Errorf("month: %w", err)
 	}
 
-	// dow accepts 7 as an alias for 0; normalise before storing.
-	dowSpec := strings.ReplaceAll(fields[4], "7", "0")
-	if err := parseField(dowSpec, 0, 6, s.dow[:]); err != nil {
+	// Day-of-week is parsed over 0..7 and 7 then folded into 0, as Vixie
+	// cron does: 7 is Sunday, so ranges, lists and steps that reach 7
+	// (1-7, 5-7, 1-7/2) keep their Sunday. Rewriting the text instead turned
+	// every "7" into "0", so 0-7 became 0-0 (#225).
+	var dow [8]bool
+	if err := parseField(fields[4], 0, 7, dow[:]); err != nil {
 		return Schedule{}, fmt.Errorf("day-of-week: %w", err)
 	}
+	copy(s.dow[:], dow[:7])
+	s.dow[0] = s.dow[0] || dow[7]
 
-	s.domStar = fields[2] == "*"
-	s.dowStar = fields[4] == "*"
+	// Vixie cron treats a day field as unrestricted when it starts with "*",
+	// so "*/2" also selects the AND rule in Matches, not only a bare "*" (#225).
+	s.domStar = strings.HasPrefix(fields[2], "*")
+	s.dowStar = strings.HasPrefix(fields[4], "*")
 	return s, nil
 }
 

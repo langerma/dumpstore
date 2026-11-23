@@ -582,7 +582,7 @@
           <span class="pool-name">scheduled replication</span>
           <span class="health-badge badge-green">cron</span>
         </div>
-        <p>Cron-scheduled replication tasks (5-field syntax, 1-minute resolution) for any dataset → dataset path, local or remote. Each fire snapshots the source as <code>dumpstore-repl-&lt;UTC&gt;</code>, places a hold for the duration of the transfer, picks the most recent common <code>dumpstore-repl-*</code> for an incremental send, dispatches the pipeline via the jobs runner, releases the hold, and prunes destination replication snapshots to a configurable retention count. A separate Replication tab lists tasks; runs surface in the Jobs tab tagged <code>replication.run</code> (target pruning runs as part of it); a "Run now" button fires off-schedule.</p>
+        <p>Cron-scheduled replication tasks (standard 5-field syntax with Vixie cron day semantics — <code>0</code> and <code>7</code> are Sunday — 1-minute resolution) for any dataset → dataset path, local or remote. Each fire snapshots the source as <code>dumpstore-repl-&lt;UTC&gt;</code>, places a hold for the duration of the transfer, picks the most recent common <code>dumpstore-repl-*</code> for an incremental send, dispatches the pipeline via the jobs runner, releases the hold, and prunes destination replication snapshots to a configurable retention count. A separate Replication tab lists tasks; runs surface in the Jobs tab tagged <code>replication.run</code> (target pruning runs as part of it); a "Run now" button fires off-schedule.</p>
       </div>
       <div class="pool-card">
         <div class="pool-card-header">
